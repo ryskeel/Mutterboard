@@ -8,6 +8,8 @@ import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo.ACTION_PASTE
+import android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT
 import android.view.accessibility.AccessibilityWindowInfo
 
 class DictationAccessibilityService : AccessibilityService() {
@@ -42,9 +44,10 @@ class DictationAccessibilityService : AccessibilityService() {
 
     fun pasteText(text: String) {
         mainHandler.post {
+            val focused = rootInActiveWindow?.findFocus(FOCUS_INPUT) ?: return@post
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("dictated", text))
-            performGlobalAction(GLOBAL_ACTION_PASTE)
+            focused.performAction(ACTION_PASTE)
         }
     }
 }
