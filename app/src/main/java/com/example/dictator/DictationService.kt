@@ -11,20 +11,25 @@ import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import java.io.File
 
 class DictationService : Service() {
+
+    private enum class State { IDLE, ACTIVE, STOPPING }
 
     private lateinit var sensorManager: SensorManager
     private lateinit var shakeDetector: ShakeDetector
     private lateinit var overlayManager: OverlayManager
     private var groqClient: GroqWhisperClient? = null
 
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var mediaRecorder: MediaRecorder? = null
     private var currentAudioFile: File? = null
-    private var isRecording = false
+    private var state = State.IDLE
 
     override fun onCreate() {
         super.onCreate()
@@ -44,13 +49,16 @@ class DictationService : Service() {
     }
 
     private fun onShake() {
-        if (isRecording) stopRecordingAndTranscribe() else startRecording()
+        when (state) {
+            State.IDLE -> startRecording()
+            State.ACTIVE -> stopRecordingAndTranscribe()
+            State.STOPPING -> Unit
+        }
     }
 
     private fun startRecording() {
         if (groqClient == null) return
         val keyboardHeight = DictationAccessibilityService.instance?.getKeyboardHeight() ?: 0
-        overlayManager.show(keyboardHeight)
 
         val outputFile = File(cacheDir, "rec_${System.currentTimeMillis()}.m4a")
         currentAudioFile = outputFile
@@ -75,36 +83,42 @@ class DictationService : Service() {
                 start()
             }
             mediaRecorder = recorder
-            isRecording = true
+            state = State.ACTIVE
+
+            mainHandler.postDelayed({
+                if (state == State.ACTIVE) overlayManager.show(keyboardHeight)
+            }, START_BUFFER_MS)
         } catch (e: Exception) {
             recorder.release()
-            overlayManager.hide()
             outputFile.delete()
             currentAudioFile = null
+            state = State.IDLE
         }
     }
 
     private fun stopRecordingAndTranscribe() {
+        state = State.STOPPING
         overlayManager.hide()
 
-        val recorder = mediaRecorder
-        mediaRecorder = null
-        isRecording = false
+        mainHandler.postDelayed({
+            val recorder = mediaRecorder
+            mediaRecorder = null
+            try { recorder?.stop() } catch (_: Exception) {}
+            recorder?.release()
 
-        try {
-            recorder?.stop()
-        } catch (_: Exception) {}
-        recorder?.release()
+            val audioFile = currentAudioFile
+            currentAudioFile = null
+            state = State.IDLE
 
-        val audioFile = currentAudioFile ?: return
-        currentAudioFile = null
-
-        groqClient?.transcribe(audioFile) { text ->
-            audioFile.delete()
-            if (!text.isNullOrEmpty()) {
-                DictationAccessibilityService.instance?.pasteText(text)
+            if (audioFile != null) {
+                groqClient?.transcribe(audioFile) { text ->
+                    audioFile.delete()
+                    if (!text.isNullOrEmpty()) {
+                        DictationAccessibilityService.instance?.pasteText(text)
+                    }
+                }
             }
-        }
+        }, STOP_BUFFER_MS)
     }
 
     private fun registerShakeDetector() {
@@ -124,7 +138,15 @@ class DictationService : Service() {
 
     override fun onDestroy() {
         sensorManager.unregisterListener(shakeDetector)
-        if (isRecording) stopRecordingAndTranscribe()
+        mainHandler.removeCallbacksAndMessages(null)
+        mediaRecorder?.let {
+            try { it.stop() } catch (_: Exception) {}
+            it.release()
+        }
+        mediaRecorder = null
+        currentAudioFile?.delete()
+        currentAudioFile = null
+        state = State.IDLE
         overlayManager.hide()
         super.onDestroy()
     }
@@ -168,6 +190,8 @@ class DictationService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val ACTION_REFRESH_KEY = "com.example.dictator.REFRESH_KEY"
         private const val ACTION_TRIGGER = "com.example.dictator.TRIGGER"
+        private const val START_BUFFER_MS = 350L
+        private const val STOP_BUFFER_MS = 800L
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, DictationService::class.java))
