@@ -191,7 +191,7 @@ class DictationService : Service() {
         private const val ACTION_REFRESH_KEY = "com.example.dictator.REFRESH_KEY"
         private const val ACTION_TRIGGER = "com.example.dictator.TRIGGER"
         private const val START_BUFFER_MS = 350L
-        private const val STOP_BUFFER_MS = 800L
+        private const val STOP_BUFFER_MS = 1800L
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, DictationService::class.java))
