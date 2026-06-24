@@ -18,7 +18,7 @@ class GroqWhisperClient(private val apiKey: String) {
             .addFormDataPart(
                 "file",
                 audioFile.name,
-                audioFile.asRequestBody("audio/mp4".toMediaType())
+                audioFile.asRequestBody("audio/wav".toMediaType())
             )
             .addFormDataPart("response_format", "json")
             .build()

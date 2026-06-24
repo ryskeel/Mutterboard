@@ -9,13 +9,17 @@ import android.content.Context
 import android.content.Intent
 import android.hardware.Sensor
 import android.hardware.SensorManager
+import android.media.AudioFormat
+import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import java.io.File
+import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class DictationService : Service() {
 
@@ -27,8 +31,10 @@ class DictationService : Service() {
     private var groqClient: GroqWhisperClient? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var mediaRecorder: MediaRecorder? = null
-    private var currentAudioFile: File? = null
+    private var audioRecord: AudioRecord? = null
+    private var captureThread: Thread? = null
+    private var pcmFile: File? = null
+    @Volatile private var isCapturing = false
     private var state = State.IDLE
 
     override fun onCreate() {
@@ -56,69 +62,119 @@ class DictationService : Service() {
         }
     }
 
+    @SuppressWarnings("MissingPermission")
     private fun startRecording() {
         if (groqClient == null) return
         val keyboardHeight = DictationAccessibilityService.instance?.getKeyboardHeight() ?: 0
 
-        val outputFile = File(cacheDir, "rec_${System.currentTimeMillis()}.m4a")
-        currentAudioFile = outputFile
+        val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
+        if (minBuffer <= 0) return
+        val bufferSize = minBuffer * 2
 
-        @Suppress("DEPRECATION")
-        val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            MediaRecorder(this)
-        } else {
-            MediaRecorder()
-        }
-
-        try {
-            recorder.apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioSamplingRate(16000)
-                setAudioChannels(1)
-                setAudioEncodingBitRate(64000)
-                setOutputFile(outputFile.absolutePath)
-                prepare()
-                start()
-            }
-            mediaRecorder = recorder
-            state = State.ACTIVE
-
-            mainHandler.postDelayed({
-                if (state == State.ACTIVE) overlayManager.show(keyboardHeight)
-            }, START_BUFFER_MS)
+        val record = try {
+            AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                SAMPLE_RATE,
+                CHANNEL_CONFIG,
+                AUDIO_FORMAT,
+                bufferSize
+            )
         } catch (e: Exception) {
-            recorder.release()
-            outputFile.delete()
-            currentAudioFile = null
-            state = State.IDLE
+            return
         }
+
+        if (record.state != AudioRecord.STATE_INITIALIZED) {
+            record.release()
+            return
+        }
+
+        val outputFile = File(cacheDir, "rec_${System.currentTimeMillis()}.pcm")
+        pcmFile = outputFile
+        audioRecord = record
+
+        record.startRecording()
+        isCapturing = true
+        state = State.ACTIVE
+
+        captureThread = Thread {
+            val buffer = ByteArray(bufferSize)
+            FileOutputStream(outputFile).use { out ->
+                while (isCapturing) {
+                    val read = record.read(buffer, 0, buffer.size)
+                    if (read > 0) out.write(buffer, 0, read)
+                }
+            }
+        }.apply { start() }
+
+        mainHandler.postDelayed({
+            if (state == State.ACTIVE) overlayManager.show(keyboardHeight)
+        }, START_BUFFER_MS)
     }
 
     private fun stopRecordingAndTranscribe() {
+        if (state != State.ACTIVE) return
         state = State.STOPPING
         overlayManager.hide()
 
         mainHandler.postDelayed({
-            val recorder = mediaRecorder
-            mediaRecorder = null
-            try { recorder?.stop() } catch (_: Exception) {}
-            recorder?.release()
+            isCapturing = false
+            captureThread?.join(1000)
+            captureThread = null
 
-            val audioFile = currentAudioFile
-            currentAudioFile = null
+            val record = audioRecord
+            audioRecord = null
+            try { record?.stop() } catch (_: Exception) {}
+            record?.release()
+
+            val pcm = pcmFile
+            pcmFile = null
             state = State.IDLE
 
-            if (audioFile != null) {
-                groqClient?.transcribe(audioFile) { text ->
-                    audioFile.delete()
-                    if (!text.isNullOrEmpty()) {
-                        DictationAccessibilityService.instance?.pasteText(text)
-                    }
+            if (pcm == null || !pcm.exists() || pcm.length() == 0L) {
+                pcm?.delete()
+                return@postDelayed
+            }
+
+            val wav = pcmToWav(pcm)
+            pcm.delete()
+
+            groqClient?.transcribe(wav) { text ->
+                wav.delete()
+                if (!text.isNullOrEmpty()) {
+                    DictationAccessibilityService.instance?.pasteText(text)
                 }
             }
         }, STOP_BUFFER_MS)
+    }
+
+    private fun pcmToWav(pcm: File): File {
+        val wav = File(cacheDir, pcm.nameWithoutExtension + ".wav")
+        val pcmSize = pcm.length().toInt()
+        val header = wavHeader(pcmSize, SAMPLE_RATE, channels = 1, bitsPerSample = 16)
+        FileOutputStream(wav).use { out ->
+            out.write(header)
+            pcm.inputStream().use { it.copyTo(out) }
+        }
+        return wav
+    }
+
+    private fun wavHeader(pcmSize: Int, sampleRate: Int, channels: Int, bitsPerSample: Int): ByteArray {
+        val byteRate = sampleRate * channels * bitsPerSample / 8
+        return ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put("RIFF".toByteArray())
+            putInt(36 + pcmSize)
+            put("WAVE".toByteArray())
+            put("fmt ".toByteArray())
+            putInt(16)
+            putShort(1)
+            putShort(channels.toShort())
+            putInt(sampleRate)
+            putInt(byteRate)
+            putShort((channels * bitsPerSample / 8).toShort())
+            putShort(bitsPerSample.toShort())
+            put("data".toByteArray())
+            putInt(pcmSize)
+        }.array()
     }
 
     private fun registerShakeDetector() {
@@ -139,13 +195,16 @@ class DictationService : Service() {
     override fun onDestroy() {
         sensorManager.unregisterListener(shakeDetector)
         mainHandler.removeCallbacksAndMessages(null)
-        mediaRecorder?.let {
+        isCapturing = false
+        captureThread?.join(500)
+        captureThread = null
+        audioRecord?.let {
             try { it.stop() } catch (_: Exception) {}
             it.release()
         }
-        mediaRecorder = null
-        currentAudioFile?.delete()
-        currentAudioFile = null
+        audioRecord = null
+        pcmFile?.delete()
+        pcmFile = null
         state = State.IDLE
         overlayManager.hide()
         super.onDestroy()
@@ -190,8 +249,11 @@ class DictationService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val ACTION_REFRESH_KEY = "com.example.dictator.REFRESH_KEY"
         private const val ACTION_TRIGGER = "com.example.dictator.TRIGGER"
-        private const val START_BUFFER_MS = 350L
-        private const val STOP_BUFFER_MS = 1800L
+        private const val START_BUFFER_MS = 250L
+        private const val STOP_BUFFER_MS = 400L
+        private const val SAMPLE_RATE = 16000
+        private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
+        private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, DictationService::class.java))
