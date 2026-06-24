@@ -15,6 +15,8 @@ class GroqWhisperClient(private val apiKey: String) {
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("model", "whisper-large-v3-turbo")
+            .addFormDataPart("language", "en")
+            .addFormDataPart("temperature", "0")
             .addFormDataPart(
                 "file",
                 audioFile.name,
