@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
@@ -39,8 +40,7 @@ class MainActivity : ComponentActivity() {
             DictatorTheme {
                 SetupScreen(
                     onRequestMic = { requestMicPermission() },
-                    onOpenImeSettings = { openImeSettings() },
-                    onPickIme = { pickIme() }
+                    onOpenImeSettings = { openImeSettings() }
                 )
             }
         }
@@ -53,18 +53,12 @@ class MainActivity : ComponentActivity() {
     private fun openImeSettings() {
         startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
     }
-
-    private fun pickIme() {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.showInputMethodPicker()
-    }
 }
 
 @Composable
 private fun SetupScreen(
     onRequestMic: () -> Unit,
-    onOpenImeSettings: () -> Unit,
-    onPickIme: () -> Unit
+    onOpenImeSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -77,7 +71,7 @@ private fun SetupScreen(
     var apiKey by remember {
         mutableStateOf(prefs.getString(DictatorInputMethodService.KEY_API_KEY, "") ?: "")
     }
-    var showKey by remember { mutableStateOf(false) }
+    var showKeyDialog by remember { mutableStateOf(false) }
     var hasMic by remember { mutableStateOf(false) }
     var imeEnabled by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
@@ -105,13 +99,7 @@ private fun SetupScreen(
                 .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically)
         ) {
-            Text("Dictator", fontSize = 32.sp, fontWeight = FontWeight.Bold)
-            Text(
-                "Voice keyboard. Switch to it inside any app and it starts listening " +
-                        "automatically. Tap the mic to stop, transcribe, paste, and " +
-                        "switch back to your previous keyboard.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text("Dictator keyboard", fontSize = 32.sp, fontWeight = FontWeight.Bold)
 
             HorizontalDivider()
 
@@ -124,51 +112,115 @@ private fun SetupScreen(
             )
             StepRow(
                 step = "2",
-                label = "Enable Dictator in Languages & input",
+                label = "Enable keyboard",
                 done = imeEnabled,
                 actionLabel = "Open settings",
                 onAction = onOpenImeSettings
             )
             StepRow(
                 step = "3",
-                label = "Open keyboard picker (use any time you want to switch to it)",
-                done = false,
-                showDone = false,
-                actionLabel = "Show picker",
-                onAction = onPickIme
+                label = "Groq API key",
+                done = apiKey.isNotBlank(),
+                doneLabel = "Saved",
+                actionLabel = if (apiKey.isBlank()) "Add" else "Edit",
+                onAction = { showKeyDialog = true }
             )
 
             HorizontalDivider()
 
-            OutlinedTextField(
-                value = apiKey,
-                onValueChange = { apiKey = it },
-                label = { Text("Groq API key") },
-                singleLine = true,
-                visualTransformation = if (showKey) VisualTransformation.None
-                else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                trailingIcon = {
-                    TextButton(onClick = { showKey = !showKey }) {
-                        Text(if (showKey) "Hide" else "Show")
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Button(
-                onClick = {
-                    prefs.edit()
-                        .putString(DictatorInputMethodService.KEY_API_KEY, apiKey.trim())
-                        .apply()
-                },
-                enabled = apiKey.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Save API key")
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Updates",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text("Get the latest release", fontWeight = FontWeight.Medium)
+                }
+                Spacer(Modifier.width(16.dp))
+                OutlinedButton(onClick = {
+                    context.startActivity(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://github.com/ryskeel/Dictator/releases/latest")
+                        )
+                    )
+                }) {
+                    Text("Open GitHub")
+                }
             }
         }
     }
+
+    if (showKeyDialog) {
+        ApiKeyDialog(
+            initialKey = apiKey,
+            onDismiss = { showKeyDialog = false },
+            onSave = { newKey ->
+                apiKey = newKey.trim()
+                prefs.edit()
+                    .putString(DictatorInputMethodService.KEY_API_KEY, apiKey)
+                    .apply()
+                showKeyDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun ApiKeyDialog(
+    initialKey: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var draft by remember { mutableStateOf(initialKey) }
+    var showKey by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Groq API key") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    visualTransformation = if (showKey) VisualTransformation.None
+                    else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        TextButton(onClick = { showKey = !showKey }) {
+                            Text(if (showKey) "Hide" else "Show")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TextButton(
+                    onClick = {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("https://console.groq.com/keys"))
+                        )
+                    },
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("Need a key? Get one from Groq")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(draft) },
+                enabled = draft.isNotBlank()
+            ) { Text("Done") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable
@@ -176,27 +228,25 @@ private fun StepRow(
     step: String,
     label: String,
     done: Boolean,
-    showDone: Boolean = true,
     actionLabel: String,
-    onAction: () -> Unit
+    onAction: () -> Unit,
+    doneLabel: String = "Granted"
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text("Step $step", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(label, fontWeight = FontWeight.Medium)
-            if (showDone) {
-                Text(
-                    if (done) "Granted" else "Required",
-                    fontSize = 12.sp,
-                    color = if (done) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.error
-                )
-            }
+            Text(
+                if (done) doneLabel else "Required",
+                fontSize = 12.sp,
+                color = if (done) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.error
+            )
         }
+        Spacer(Modifier.width(16.dp))
         OutlinedButton(onClick = onAction) { Text(actionLabel) }
     }
 }

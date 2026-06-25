@@ -1,14 +1,15 @@
-name: Build APK
+name: Release
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,23 +20,23 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Cache debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
-      - name: Delete existing latest release
-        run: gh release delete latest --cleanup-tag --yes || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish latest release
+      - name: Create GitHub release
         run: |
-          gh release create latest \
-            --title "Latest build ($(date -u '+%Y-%m-%d %H:%M UTC'))" \
-            --notes "Built from [\`${{ github.sha }}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})" \
-            --prerelease \
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Dictator $GITHUB_REF_NAME" \
+            --notes "Built from [\`${GITHUB_SHA:0:7}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})" \
             app/build/outputs/apk/debug/app-debug.apk
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
