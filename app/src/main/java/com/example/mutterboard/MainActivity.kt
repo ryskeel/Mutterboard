@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.HapticFeedbackConstants
 import android.view.inputmethod.InputMethodManager
 import androidx.core.content.FileProvider
 import androidx.activity.ComponentActivity
@@ -29,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -272,6 +274,7 @@ private fun ApiKeyDialog(
     onSave: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val haptic = rememberTapHaptic()
     var draft by remember { mutableStateOf(initialKey) }
     var showKey by remember { mutableStateOf(false) }
 
@@ -308,14 +311,21 @@ private fun ApiKeyDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(draft) },
+                onClick = { haptic(); onSave(draft) },
                 enabled = draft.isNotBlank()
             ) { Text("Done") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = { haptic(); onDismiss() }) { Text("Cancel") }
         }
     )
+}
+
+/** Returns a callback that fires a light tap vibration, matching keyboard haptics. */
+@Composable
+private fun rememberTapHaptic(): () -> Unit {
+    val view = LocalView.current
+    return { view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) }
 }
 
 @Composable
@@ -366,6 +376,7 @@ private fun StepRow(
     showActionWhenDone: Boolean,
     onAction: () -> Unit
 ) {
+    val haptic = rememberTapHaptic()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -384,10 +395,10 @@ private fun StepRow(
         }
         if (!done) {
             Spacer(Modifier.width(12.dp))
-            FilledTonalButton(onClick = onAction) { Text(actionLabel) }
+            Button(onClick = { haptic(); onAction() }) { Text(actionLabel) }
         } else if (showActionWhenDone) {
             Spacer(Modifier.width(12.dp))
-            TextButton(onClick = onAction) { Text(actionLabel) }
+            OutlinedButton(onClick = { haptic(); onAction() }) { Text(actionLabel) }
         }
     }
 }
@@ -463,6 +474,7 @@ private fun UpdatesCard(
         }
     }
 
+    val haptic = rememberTapHaptic()
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -485,7 +497,7 @@ private fun UpdatesCard(
                     val linkLabel = if (available != null) "Get it on GitHub" else "View on GitHub"
                     val linkUrl = available?.htmlUrl ?: releasesUrl
                     TextButton(
-                        onClick = { onOpen(linkUrl) },
+                        onClick = { haptic(); onOpen(linkUrl) },
                         contentPadding = PaddingValues(vertical = 4.dp)
                     ) {
                         Text(linkLabel)
@@ -503,13 +515,13 @@ private fun UpdatesCard(
                         strokeWidth = 2.dp
                     )
                 downloadState is DownloadState.Ready ->
-                    FilledTonalButton(onClick = { onInstall(downloadState.file) }) { Text("Install") }
+                    Button(onClick = { haptic(); onInstall(downloadState.file) }) { Text("Install") }
                 status is UpdateStatus.Checking ->
                     CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                 available != null ->
-                    FilledTonalButton(onClick = { onUpdate(available) }) { Text("Update") }
+                    Button(onClick = { haptic(); onUpdate(available) }) { Text("Update") }
                 else ->
-                    OutlinedButton(onClick = onCheck) { Text("Check now") }
+                    OutlinedButton(onClick = { haptic(); onCheck() }) { Text("Check now") }
             }
         }
     }

@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.util.TypedValue
+import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -61,8 +62,14 @@ class MutterboardInputMethodService : InputMethodService() {
         cancelButton = view.findViewById(R.id.cancel_button)
         waveform = view.findViewById(R.id.waveform)
 
-        micButton?.setOnClickListener { onMicTapped() }
-        cancelButton?.setOnClickListener { onCancelTapped() }
+        micButton?.setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            onMicTapped()
+        }
+        cancelButton?.setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            onCancelTapped()
+        }
 
         applyNavigationBarStyling(themedContext)
 
