@@ -1,4 +1,4 @@
-package com.example.dictator
+package com.example.mutterboard
 
 import android.annotation.SuppressLint
 import android.media.AudioFormat
@@ -160,7 +160,7 @@ class WavRecorder(private val cacheDir: File) {
     }
 
     companion object {
-        private const val TAG = "Dictator"
+        private const val TAG = "Mutterboard"
         private const val TRAILING_SILENCE_MS = 500
         private const val SAMPLE_RATE = 16000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO

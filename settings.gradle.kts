@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Dictator"
+rootProject.name = "Mutterboard"
 include(":app")

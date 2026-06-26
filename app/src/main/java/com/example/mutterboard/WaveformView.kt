@@ -1,4 +1,4 @@
-package com.example.dictator
+package com.example.mutterboard
 
 import android.content.Context
 import android.graphics.Canvas

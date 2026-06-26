@@ -20,7 +20,7 @@
         android:visibility="gone"
         android:text="" />
 
-    <com.example.dictator.WaveformView
+    <com.example.mutterboard.WaveformView
         android:id="@+id/waveform"
         android:layout_width="match_parent"
         android:layout_height="88dp"

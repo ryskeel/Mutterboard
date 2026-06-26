@@ -1,4 +1,4 @@
-package com.example.dictator
+package com.example.mutterboard
 
 import android.Manifest
 import android.content.Context
@@ -18,7 +18,7 @@ import androidx.core.view.WindowCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.DynamicColors
 
-class DictatorInputMethodService : InputMethodService() {
+class MutterboardInputMethodService : InputMethodService() {
 
     private enum class State { IDLE, RECORDING, TRANSCRIBING, ERROR, NO_PERMISSION, NO_API_KEY }
 
@@ -53,7 +53,7 @@ class DictatorInputMethodService : InputMethodService() {
 
     override fun onCreateInputView(): View {
         Log.d(TAG, "onCreateInputView")
-        val themedContext = DynamicColors.wrapContextIfAvailable(this, R.style.Theme_Dictator)
+        val themedContext = DynamicColors.wrapContextIfAvailable(this, R.style.Theme_Mutterboard)
         val inflater = LayoutInflater.from(themedContext)
         val view = inflater.inflate(R.layout.keyboard_view, null)
         statusText = view.findViewById(R.id.status_text)
@@ -276,8 +276,8 @@ class DictatorInputMethodService : InputMethodService() {
     }
 
     companion object {
-        private const val TAG = "DictatorIME"
-        const val PREFS = "dictator_prefs"
+        private const val TAG = "MutterboardIME"
+        const val PREFS = "mutterboard_prefs"
         const val KEY_API_KEY = "groq_api_key"
         private const val STOP_BUFFER_MS = 800L
         private const val WAVEFORM_INTERVAL_MS = 50L

@@ -1,4 +1,4 @@
-package com.example.dictator
+package com.example.mutterboard
 
 import org.junit.Test
 

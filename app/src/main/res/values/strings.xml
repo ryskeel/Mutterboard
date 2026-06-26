@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Dictator</string>
-    <string name="ime_label">Dictator Voice Keyboard</string>
+    <string name="app_name">Mutterboard</string>
+    <string name="ime_label">Mutterboard Voice Keyboard</string>
     <string name="ime_subtype_label">English (US) — Voice</string>
 </resources>

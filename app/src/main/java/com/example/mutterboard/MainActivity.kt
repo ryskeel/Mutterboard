@@ -1,4 +1,4 @@
-package com.example.dictator
+package com.example.mutterboard
 
 import android.Manifest
 import android.content.ComponentName
@@ -25,7 +25,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.dictator.ui.theme.DictatorTheme
+import com.example.mutterboard.ui.theme.MutterboardTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            DictatorTheme {
+            MutterboardTheme {
                 SetupScreen(
                     onRequestMic = { requestMicPermission() },
                     onOpenImeSettings = { openImeSettings() }
@@ -63,13 +63,13 @@ private fun SetupScreen(
     val context = LocalContext.current
     val prefs = remember {
         context.getSharedPreferences(
-            DictatorInputMethodService.PREFS,
+            MutterboardInputMethodService.PREFS,
             Context.MODE_PRIVATE
         )
     }
 
     var apiKey by remember {
-        mutableStateOf(prefs.getString(DictatorInputMethodService.KEY_API_KEY, "") ?: "")
+        mutableStateOf(prefs.getString(MutterboardInputMethodService.KEY_API_KEY, "") ?: "")
     }
     var showKeyDialog by remember { mutableStateOf(false) }
     var hasMic by remember { mutableStateOf(false) }
@@ -99,7 +99,7 @@ private fun SetupScreen(
                 .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically)
         ) {
-            Text("Dictator keyboard", fontSize = 32.sp, fontWeight = FontWeight.Bold)
+            Text("Mutterboard", fontSize = 32.sp, fontWeight = FontWeight.Bold)
 
             HorizontalDivider()
 
@@ -145,7 +145,7 @@ private fun SetupScreen(
                     context.startActivity(
                         Intent(
                             Intent.ACTION_VIEW,
-                            Uri.parse("https://github.com/ryskeel/Dictator/releases/latest")
+                            Uri.parse("https://github.com/ryskeel/Mutterboard/releases/latest")
                         )
                     )
                 }) {
@@ -162,7 +162,7 @@ private fun SetupScreen(
             onSave = { newKey ->
                 apiKey = newKey.trim()
                 prefs.edit()
-                    .putString(DictatorInputMethodService.KEY_API_KEY, apiKey)
+                    .putString(MutterboardInputMethodService.KEY_API_KEY, apiKey)
                     .apply()
                 showKeyDialog = false
             }
@@ -253,6 +253,6 @@ private fun StepRow(
 
 private fun isImeEnabled(context: Context): Boolean {
     val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-    val target = ComponentName(context, DictatorInputMethodService::class.java)
+    val target = ComponentName(context, MutterboardInputMethodService::class.java)
     return imm.enabledInputMethodList.any { it.component == target }
 }

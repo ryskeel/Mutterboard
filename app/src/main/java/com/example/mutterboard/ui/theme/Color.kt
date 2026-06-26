@@ -1,4 +1,4 @@
-package com.example.dictator.ui.theme
+package com.example.mutterboard.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

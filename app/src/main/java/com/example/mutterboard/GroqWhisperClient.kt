@@ -1,4 +1,4 @@
-package com.example.dictator
+package com.example.mutterboard
 
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
