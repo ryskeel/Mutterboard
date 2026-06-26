@@ -12,6 +12,9 @@ local.properties
 # Keystore
 *.jks
 *.keystore
+# Shared debug-style signing key, intentionally committed so local + CI builds
+# are signed identically (not a Play release key).
+!app/mutterboard.keystore
 
 # Generated
 gen/

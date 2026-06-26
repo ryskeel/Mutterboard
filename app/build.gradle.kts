@@ -15,14 +15,31 @@ android {
         applicationId = "com.example.mutterboard"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        // Overridable from CI so a release derives its version from the git tag.
+        versionCode = (project.findProperty("appVersionCode") as String?)?.toInt() ?: 2
+        versionName = (project.findProperty("appVersionName") as String?) ?: "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        // Shared key committed to the repo so every build environment (local
+        // Android Studio + GitHub Actions) signs identically, allowing in-place
+        // updates across sources. This is a debug-style key, not a release key.
+        create("shared") {
+            storeFile = file("mutterboard.keystore")
+            storePassword = "mutterboard"
+            keyAlias = "mutterboard"
+            keyPassword = "mutterboard"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("shared")
+        }
         release {
+            signingConfig = signingConfigs.getByName("shared")
             optimization {
                 enable = false
             }

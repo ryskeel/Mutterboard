@@ -20,17 +20,18 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Cache debug keystore
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore-v1
-
       - name: Make gradlew executable
         run: chmod +x gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          CODE=$(( ${MAJOR:-0} * 10000 + ${MINOR:-0} * 100 + ${PATCH:-0} ))
+          echo "Building $VERSION (versionCode $CODE)"
+          ./gradlew assembleDebug \
+            -PappVersionName="$VERSION" \
+            -PappVersionCode="$CODE"
 
       - name: Create GitHub release
         run: |
