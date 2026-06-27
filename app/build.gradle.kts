@@ -3,6 +3,31 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Local builds derive their version from the latest git tag so a debug build
+// installed from Android Studio reports the same version as the newest release
+// (instead of a stale hardcoded 1.1). CI still overrides these via
+// -PappVersionName / -PappVersionCode from the pushed tag. Configuration-cache
+// safe via providers.exec; falls back to 1.0 outside a tagged git checkout.
+val gitVersionName: String = run {
+    val tag = try {
+        providers.exec {
+            commandLine("git", "describe", "--tags", "--abbrev=0")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.get().trim()
+    } catch (_: Exception) {
+        ""
+    }
+    tag.removePrefix("v").ifBlank { "1.0" }
+}
+
+fun versionNameToCode(name: String): Int {
+    val parts = name.split(".", "-").mapNotNull { it.toIntOrNull() }
+    val major = parts.getOrElse(0) { 0 }
+    val minor = parts.getOrElse(1) { 0 }
+    val patch = parts.getOrElse(2) { 0 }
+    return major * 10000 + minor * 100 + patch
+}
+
 android {
     namespace = "com.example.mutterboard"
     compileSdk {
@@ -15,10 +40,11 @@ android {
         applicationId = "com.example.mutterboard"
         minSdk = 24
         targetSdk = 36
-        // Overridable from CI so a release derives its version from the git tag.
-        // Overridable from CI so a release derives its version from the git tag.
-        versionCode = (project.findProperty("appVersionCode") as String?)?.toInt() ?: 2
-        versionName = (project.findProperty("appVersionName") as String?) ?: "1.1"
+        // Overridable from CI so a release derives its version from the git tag;
+        // locally, falls back to the latest tag (see gitVersionName above).
+        versionName = (project.findProperty("appVersionName") as String?) ?: gitVersionName
+        versionCode = (project.findProperty("appVersionCode") as String?)?.toInt()
+            ?: versionNameToCode(gitVersionName)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
