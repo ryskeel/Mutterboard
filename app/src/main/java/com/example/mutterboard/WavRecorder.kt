@@ -17,8 +17,12 @@ class WavRecorder(private val cacheDir: File) {
     private var captureThread: Thread? = null
     private var pcmFile: File? = null
     @Volatile private var peakAmplitude: Int = 0
+    @Volatile private var maxPeak: Int = 0
 
     fun currentPeak(): Int = peakAmplitude
+
+    /** Loudest sample seen during the last capture; ~0 means we recorded silence. */
+    fun maxObservedPeak(): Int = maxPeak
 
     @SuppressLint("MissingPermission")
     fun start(): Boolean {
@@ -54,6 +58,7 @@ class WavRecorder(private val cacheDir: File) {
         pcmFile = outputFile
         audioRecord = record
         peakAmplitude = 0
+        maxPeak = 0
 
         record.startRecording()
         capturing = true
@@ -77,6 +82,7 @@ class WavRecorder(private val cacheDir: File) {
                             i += 2
                         }
                         peakAmplitude = localPeak
+                        if (localPeak > maxPeak) maxPeak = localPeak
                     } else if (read < 0) {
                         Log.e(TAG, "AudioRecord.read error: $read")
                         break

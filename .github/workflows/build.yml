@@ -23,6 +23,9 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      - name: Fetch sherpa-onnx AAR
+        run: ./scripts/fetch-sherpa.sh
+
       - name: Build debug APK
         run: |
           VERSION="${GITHUB_REF_NAME#v}"

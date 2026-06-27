@@ -16,10 +16,17 @@ android {
         minSdk = 24
         targetSdk = 36
         // Overridable from CI so a release derives its version from the git tag.
+        // Overridable from CI so a release derives its version from the git tag.
         versionCode = (project.findProperty("appVersionCode") as String?)?.toInt() ?: 2
         versionName = (project.findProperty("appVersionName") as String?) ?: "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            // sherpa-onnx ships native libs for 4 ABIs; keep only the two we use
+            // (arm64 phones + x86_64 emulator) to avoid bloating the APK.
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     signingConfigs {
@@ -66,6 +73,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.okhttp)
     implementation(libs.material)
+    // On-device speech recognition (NVIDIA Parakeet via ONNX). The .aar bundles
+    // the Kotlin API + native libs; fetch it with scripts/fetch-sherpa.sh.
+    implementation(files("libs/sherpa-onnx-1.13.3.aar"))
+    // Extracts the .tar.bz2 model bundle downloaded at runtime (pure-Java bzip2+tar).
+    implementation("org.apache.commons:commons-compress:1.27.1")
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

@@ -17,7 +17,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -127,6 +130,28 @@ private fun SetupScreen(
     var downloadState by remember { mutableStateOf<DownloadState>(DownloadState.Idle) }
     val scope = rememberCoroutineScope()
 
+    val modelManager = remember { ParakeetModelManager(context) }
+    var engine by remember {
+        mutableStateOf(Engine.fromPref(prefs.getString(MutterboardInputMethodService.KEY_ENGINE, null)))
+    }
+    var modelReady by remember { mutableStateOf(modelManager.isReady()) }
+    var modelProgress by remember { mutableStateOf<ParakeetModelManager.Progress?>(null) }
+
+    fun selectEngine(newEngine: Engine) {
+        engine = newEngine
+        prefs.edit().putString(MutterboardInputMethodService.KEY_ENGINE, newEngine.prefValue).apply()
+    }
+
+    fun downloadModel() {
+        modelProgress = ParakeetModelManager.Progress.Downloading(0f)
+        modelManager.download { p ->
+            (context as? ComponentActivity)?.runOnUiThread {
+                modelProgress = p
+                if (p is ParakeetModelManager.Progress.Done) modelReady = true
+            }
+        }
+    }
+
     LaunchedEffect(refreshTick) {
         hasMic = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                 android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -172,13 +197,15 @@ private fun SetupScreen(
         onDispose { activity?.lifecycle?.removeObserver(observer) }
     }
 
-    val allDone = hasMic && imeEnabled && apiKey.isNotBlank()
+    val transcriberReady = if (engine == Engine.LOCAL) modelReady else apiKey.isNotBlank()
+    val allDone = hasMic && imeEnabled && transcriberReady
 
     Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(top = 24.dp, bottom = 24.dp)
         ) {
@@ -192,7 +219,7 @@ private fun SetupScreen(
 
             Spacer(Modifier.height(32.dp))
 
-            SectionHeader("Setup")
+            SectionHeader("Device setup")
             Spacer(Modifier.height(12.dp))
             Card(modifier = Modifier.fillMaxWidth()) {
                 StepRow(
@@ -212,21 +239,26 @@ private fun SetupScreen(
                     showActionWhenDone = false,
                     onAction = onOpenImeSettings
                 )
-                HorizontalDivider(modifier = Modifier.padding(start = 62.dp))
-                StepRow(
-                    label = "Groq API key",
-                    done = apiKey.isNotBlank(),
-                    doneText = "Saved",
-                    actionLabel = if (apiKey.isBlank()) "Add" else "Edit",
-                    showActionWhenDone = true,
-                    onAction = { showKeyDialog = true }
-                )
             }
 
             if (allDone) {
                 Spacer(Modifier.height(16.dp))
                 CompletionBanner()
             }
+
+            Spacer(Modifier.height(40.dp))
+
+            SectionHeader("Transcription")
+            Spacer(Modifier.height(12.dp))
+            TranscriptionCard(
+                engine = engine,
+                apiKey = apiKey,
+                modelReady = modelReady,
+                modelProgress = modelProgress,
+                onSelectEngine = { selectEngine(it) },
+                onEditKey = { showKeyDialog = true },
+                onDownloadModel = { downloadModel() }
+            )
 
             Spacer(Modifier.height(40.dp))
 
@@ -387,6 +419,128 @@ private fun StepRow(
         } else if (showActionWhenDone) {
             Spacer(Modifier.width(12.dp))
             OutlinedButton(onClick = { haptic(); onAction() }) { Text(actionLabel) }
+        }
+    }
+}
+
+@Composable
+private fun TranscriptionCard(
+    engine: Engine,
+    apiKey: String,
+    modelReady: Boolean,
+    modelProgress: ParakeetModelManager.Progress?,
+    onSelectEngine: (Engine) -> Unit,
+    onEditKey: () -> Unit,
+    onDownloadModel: () -> Unit
+) {
+    val haptic = rememberTapHaptic()
+    Card(modifier = Modifier.fillMaxWidth()) {
+        EngineOption(
+            label = "Cloud (Groq)",
+            subtitle = "Fast, needs API key + internet",
+            selected = engine == Engine.CLOUD,
+            onSelect = { haptic(); onSelectEngine(Engine.CLOUD) }
+        ) {
+            if (apiKey.isBlank()) {
+                Text(
+                    "API key required",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Spacer(Modifier.height(10.dp))
+                Button(onClick = { haptic(); onEditKey() }) { Text("Add API key") }
+            } else {
+                Text("Key saved", fontSize = 12.sp, color = GreenAccent)
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(onClick = { haptic(); onEditKey() }) { Text("Edit key") }
+            }
+        }
+        HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+        EngineOption(
+            label = "On-device (Parakeet)",
+            subtitle = "Private, offline, English only",
+            selected = engine == Engine.LOCAL,
+            onSelect = { haptic(); onSelectEngine(Engine.LOCAL) }
+        ) {
+            when {
+                modelReady -> {
+                    Text("Model ready", fontSize = 12.sp, color = GreenAccent)
+                }
+                modelProgress is ParakeetModelManager.Progress.Downloading -> {
+                    Text("Downloading model…", fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { modelProgress.fraction },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${(modelProgress.fraction * 100).toInt()}%  ·  ~630 MB",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                modelProgress is ParakeetModelManager.Progress.Extracting -> {
+                    Text("Extracting model…", fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                else -> {
+                    Text(
+                        "Download required",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    if (modelProgress is ParakeetModelManager.Progress.Failed) {
+                        Text(
+                            modelProgress.message,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Button(onClick = { haptic(); onDownloadModel() }) {
+                        Text("Download model (~630 MB)")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A radio-selectable engine row. When [selected], [content] is rendered beneath
+ * the subtitle — aligned under the label text and within the same tap group, so
+ * the option's requirement (API key / model download) reads as part of it.
+ */
+@Composable
+private fun EngineOption(
+    label: String,
+    subtitle: String,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        RadioButton(selected = selected, onClick = onSelect)
+        Spacer(Modifier.width(6.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, fontWeight = FontWeight.Medium)
+            Text(
+                subtitle,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (selected) {
+                Spacer(Modifier.height(4.dp))
+                content()
+            }
         }
     }
 }
