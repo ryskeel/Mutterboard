@@ -61,45 +61,14 @@ class WavRecorder(private val cacheDir: File) {
         maxPeak = 0
 
         record.startRecording()
-        // startRecording() can silently fail (e.g. the mic input is still busy
-        // right after switching into the IME) without throwing — it just leaves
-        // the recorder stopped and we'd capture pure silence. Verify and bail so
-        // the caller can retry instead of showing a dead waveform.
-        if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-            Log.e(TAG, "startRecording did not enter RECORDING (state=${record.recordingState})")
-            try { record.stop() } catch (_: Exception) {}
-            record.release()
-            audioRecord = null
-            pcmFile = null
-            outputFile.delete()
-            return false
-        }
         capturing = true
-        Log.d(TAG, "capture started (bufferSize=$bufferSize)")
 
-        val warmupBytes = SAMPLE_RATE * WARMUP_MS / 1000 * 2
         captureThread = Thread {
             val buffer = ByteArray(bufferSize)
-            var totalBytes = 0L
-            var discarded = 0L
-            var zeroReads = 0
-            var exitReason = "stopped"
             FileOutputStream(outputFile).use { out ->
                 while (capturing) {
                     val read = record.read(buffer, 0, buffer.size)
                     if (read > 0) {
-                        if (zeroReads > 0) {
-                            Log.w(TAG, "resumed after $zeroReads zero reads")
-                            zeroReads = 0
-                        }
-                        // Drop the first WARMUP_MS: the initial buffers carry a
-                        // startup transient (and AGC settling) that shows up as a
-                        // burst of noise before the user has spoken.
-                        if (discarded < warmupBytes) {
-                            discarded += read
-                            continue
-                        }
-                        totalBytes += read
                         out.write(buffer, 0, read)
                         var localPeak = 0
                         var i = 0
@@ -114,19 +83,12 @@ class WavRecorder(private val cacheDir: File) {
                         }
                         peakAmplitude = localPeak
                         if (localPeak > maxPeak) maxPeak = localPeak
-                    } else if (read == 0) {
-                        zeroReads++
-                        if (zeroReads == 1 || zeroReads % 50 == 0) {
-                            Log.w(TAG, "AudioRecord.read returned 0 (count=$zeroReads)")
-                        }
-                    } else {
+                    } else if (read < 0) {
                         Log.e(TAG, "AudioRecord.read error: $read")
-                        exitReason = "error $read"
                         break
                     }
                 }
             }
-            Log.d(TAG, "capture ended ($exitReason): ${totalBytes} bytes, ${totalBytes / 32} ms, maxPeak=$maxPeak")
         }.apply { start() }
         return true
     }
@@ -157,7 +119,6 @@ class WavRecorder(private val cacheDir: File) {
     }
 
     fun cancel() {
-        Log.d(TAG, "cancel()")
         capturing = false
         captureThread?.join(500)
         captureThread = null
@@ -207,7 +168,6 @@ class WavRecorder(private val cacheDir: File) {
     companion object {
         private const val TAG = "Mutterboard"
         private const val TRAILING_SILENCE_MS = 500
-        private const val WARMUP_MS = 300
         private const val SAMPLE_RATE = 16000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT

@@ -16,11 +16,9 @@ android {
         minSdk = 24
         targetSdk = 36
         // Overridable from CI so a release derives its version from the git tag.
-        // Bumped above the latest release (v1.4) so this test build sideloads as
-        // an upgrade on a phone that has the release installed. Not a real
-        // release — only tagged CI builds reach users.
-        versionCode = (project.findProperty("appVersionCode") as String?)?.toInt() ?: 10500
-        versionName = (project.findProperty("appVersionName") as String?) ?: "1.5-parakeet"
+        // Overridable from CI so a release derives its version from the git tag.
+        versionCode = (project.findProperty("appVersionCode") as String?)?.toInt() ?: 2
+        versionName = (project.findProperty("appVersionName") as String?) ?: "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
