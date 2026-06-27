@@ -42,7 +42,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.isSystemInDarkTheme
 import com.example.mutterboard.ui.theme.MutterboardTheme
+import com.example.mutterboard.ui.theme.OnSuccessDark
+import com.example.mutterboard.ui.theme.OnSuccessLight
+import com.example.mutterboard.ui.theme.SuccessDark
+import com.example.mutterboard.ui.theme.SuccessLight
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,8 +57,15 @@ import org.json.JSONObject
 import java.io.File
 
 private const val REPO = "ryskeel/Mutterboard"
-private val GreenAccent = Color(0xFF2E7D32)
 private val BrandFont = FontFamily(Font(R.font.audiowide_regular))
+
+// Theme-aware success accent (green = "ready/done"): lighter green on dark.
+private val successColor: Color
+    @Composable get() = if (isSystemInDarkTheme()) SuccessDark else SuccessLight
+
+// Content color (e.g. a checkmark) drawn on top of successColor.
+private val onSuccessColor: Color
+    @Composable get() = if (isSystemInDarkTheme()) OnSuccessDark else OnSuccessLight
 
 private data class ReleaseInfo(val tag: String, val htmlUrl: String, val apkUrl: String?)
 
@@ -372,7 +384,7 @@ private fun SectionHeader(text: String) {
 private fun StepBadge(done: Boolean) {
     val base = Modifier.size(24.dp).clip(CircleShape)
     val styled = if (done) {
-        base.background(GreenAccent)
+        base.background(successColor)
     } else {
         base.border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape)
     }
@@ -380,7 +392,7 @@ private fun StepBadge(done: Boolean) {
         Icon(
             imageVector = Icons.Rounded.Check,
             contentDescription = if (done) "Done" else "Not done",
-            tint = if (done) Color.White
+            tint = if (done) onSuccessColor
             else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
             modifier = Modifier.size(15.dp)
         )
@@ -410,7 +422,7 @@ private fun StepRow(
             Text(
                 if (done) doneText else "Required",
                 fontSize = 12.sp,
-                color = if (done) GreenAccent else MaterialTheme.colorScheme.error
+                color = if (done) successColor else MaterialTheme.colorScheme.error
             )
         }
         if (!done) {
@@ -450,7 +462,7 @@ private fun TranscriptionCard(
                 Spacer(Modifier.height(10.dp))
                 Button(onClick = { haptic(); onEditKey() }) { Text("Add API key") }
             } else {
-                Text("Key saved", fontSize = 12.sp, color = GreenAccent)
+                Text("Key saved", fontSize = 12.sp, color = successColor)
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(onClick = { haptic(); onEditKey() }) { Text("Edit key") }
             }
@@ -464,7 +476,7 @@ private fun TranscriptionCard(
         ) {
             when {
                 modelReady -> {
-                    Text("Model ready", fontSize = 12.sp, color = GreenAccent)
+                    Text("Model ready", fontSize = 12.sp, color = successColor)
                 }
                 modelProgress is ParakeetModelManager.Progress.Downloading -> {
                     Text("Downloading model…", fontSize = 12.sp)
@@ -550,10 +562,10 @@ private fun CompletionBanner() {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = GreenAccent.copy(alpha = 0.12f)
+        color = successColor.copy(alpha = 0.12f)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Setup complete", fontWeight = FontWeight.Bold, color = GreenAccent)
+            Text("Setup complete", fontWeight = FontWeight.Bold, color = successColor)
             Text(
                 "You're all good to start muttering.",
                 fontSize = 13.sp,
@@ -588,7 +600,7 @@ private fun UpdatesCard(
         }
         is DownloadState.Ready -> {
             title = "Update downloaded"
-            titleColor = GreenAccent
+            titleColor = successColor
             subtitle = "Tap Install to finish"
         }
         is DownloadState.Failed -> {
@@ -606,7 +618,7 @@ private fun UpdatesCard(
                 subtitle = "Version v${currentVersion.normalizedVersion()}"
             }
             is UpdateStatus.Available -> {
-                title = "Update available"; titleColor = GreenAccent
+                title = "Update available"; titleColor = successColor
                 subtitle = "v${currentVersion.normalizedVersion()} → v${status.release.tag.normalizedVersion()}"
             }
             is UpdateStatus.Failed -> {
@@ -627,7 +639,7 @@ private fun UpdatesCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     title,
-                    fontWeight = if (titleColor == GreenAccent) FontWeight.Bold else FontWeight.Medium,
+                    fontWeight = if (titleColor == successColor) FontWeight.Bold else FontWeight.Medium,
                     color = titleColor
                 )
                 Text(
