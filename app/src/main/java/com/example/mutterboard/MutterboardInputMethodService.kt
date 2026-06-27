@@ -21,7 +21,7 @@ import com.google.android.material.color.DynamicColors
 
 class MutterboardInputMethodService : InputMethodService() {
 
-    private enum class State { IDLE, RECORDING, TRANSCRIBING, ERROR, NO_PERMISSION, NO_API_KEY, NO_MODEL }
+    private enum class State { IDLE, RECORDING, TRANSCRIBING, ERROR, NO_PERMISSION, NO_API_KEY, NO_MODEL, NO_SPEECH }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var recorder: WavRecorder
@@ -122,7 +122,7 @@ class MutterboardInputMethodService : InputMethodService() {
         super.onStartInputView(editorInfo, restarting)
         Log.d(TAG, "onStartInputView restarting=$restarting state=$state")
         refreshTranscriber()
-        if (state == State.IDLE || state == State.ERROR) {
+        if (state == State.IDLE || state == State.ERROR || state == State.NO_SPEECH) {
             tryStartRecording()
         } else {
             renderState()
@@ -131,11 +131,17 @@ class MutterboardInputMethodService : InputMethodService() {
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
+        Log.d(TAG, "onFinishInputView finishing=$finishingInput state=$state")
         if (state == State.RECORDING) {
             recorder.cancel()
             stopWaveform()
             state = State.IDLE
         }
+    }
+
+    override fun onFinishInput() {
+        super.onFinishInput()
+        Log.d(TAG, "onFinishInput state=$state")
     }
 
     private fun tryStartRecording() {
@@ -153,8 +159,10 @@ class MutterboardInputMethodService : InputMethodService() {
             // The mic input is sometimes briefly busy when switching into the
             // IME, so the first start can fail. Retry once shortly before giving
             // up, rather than leaving the user with a dead recording UI.
+            Log.w(TAG, "first start failed, scheduling retry")
             mainHandler.postDelayed({
                 if (state != State.RECORDING && !beginRecording()) {
+                    Log.e(TAG, "retry start also failed")
                     state = State.ERROR
                     renderState()
                 }
@@ -172,9 +180,10 @@ class MutterboardInputMethodService : InputMethodService() {
     }
 
     private fun onMicTapped() {
+        Log.d(TAG, "onMicTapped state=$state")
         when (state) {
             State.RECORDING -> stopAndTranscribe()
-            State.IDLE, State.ERROR -> tryStartRecording()
+            State.IDLE, State.ERROR, State.NO_SPEECH -> tryStartRecording()
             State.NO_PERMISSION -> openSetupActivity()
             State.NO_API_KEY -> openSetupActivity()
             State.NO_MODEL -> openSetupActivity()
@@ -192,6 +201,7 @@ class MutterboardInputMethodService : InputMethodService() {
     }
 
     private fun stopAndTranscribe() {
+        Log.d(TAG, "stopAndTranscribe")
         stopWaveform()
         state = State.TRANSCRIBING
         renderState()
@@ -200,6 +210,16 @@ class MutterboardInputMethodService : InputMethodService() {
             val wav = recorder.stopAndWriteWav()
             if (wav == null) {
                 state = State.ERROR
+                renderState()
+                return@postDelayed
+            }
+            // If the whole take was essentially silent, no point running ASR —
+            // tell the user plainly instead of a generic error. (Commonly the
+            // mic delivered no audio, e.g. on an emulator with a flaky input.)
+            if (recorder.maxObservedPeak() < SILENCE_PEAK_THRESHOLD) {
+                Log.w(TAG, "captured audio was silent (maxPeak=${recorder.maxObservedPeak()})")
+                wav.delete()
+                state = State.NO_SPEECH
                 renderState()
                 return@postDelayed
             }
@@ -218,6 +238,7 @@ class MutterboardInputMethodService : InputMethodService() {
     }
 
     private fun onTranscriptionResult(text: String?) {
+        Log.d(TAG, "onTranscriptionResult len=${text?.length ?: -1}")
         if (text.isNullOrBlank()) {
             state = State.ERROR
             renderState()
@@ -309,6 +330,12 @@ class MutterboardInputMethodService : InputMethodService() {
                 mic.text = "Open app"
                 mic.contentDescription = "Open app to download the on-device model"
             }
+            State.NO_SPEECH -> {
+                status.text = "Didn't catch any audio"
+                status.visibility = View.VISIBLE
+                mic.text = "Retry"
+                mic.contentDescription = "Retry recording"
+            }
         }
     }
 
@@ -336,5 +363,9 @@ class MutterboardInputMethodService : InputMethodService() {
         private const val STOP_BUFFER_MS = 800L
         private const val WAVEFORM_INTERVAL_MS = 50L
         private const val START_RETRY_DELAY_MS = 250L
+        // 16-bit peak below this means the take was effectively silent (real
+        // speech peaks in the thousands+; the noise floor sits a few hundred);
+        // used to show "no audio" instead of a generic error.
+        private const val SILENCE_PEAK_THRESHOLD = 1000
     }
 }
