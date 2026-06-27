@@ -47,18 +47,68 @@ class LocalParakeetTranscriber(private val modelDir: File) : Transcriber {
             val text = runCatching {
                 val samples = readWavToFloat(audioFile)
                 val rec = ensureRecognizer()
-                val stream = rec.createStream()
-                stream.acceptWaveform(samples, 16000)
-                rec.decode(stream)
-                val result = rec.getResult(stream)
-                stream.release()
-                result.text.trim()
+                // Parakeet is non-streaming: it processes the whole utterance at
+                // once, so memory/compute grow with length. Split long audio into
+                // bounded chunks (cut at quiet points) to stay within RAM.
+                val bounds = chunkBoundaries(samples)
+                val parts = ArrayList<String>(bounds.size - 1)
+                for (k in 0 until bounds.size - 1) {
+                    val chunk = samples.copyOfRange(bounds[k], bounds[k + 1])
+                    val stream = rec.createStream()
+                    stream.acceptWaveform(chunk, SAMPLE_RATE)
+                    rec.decode(stream)
+                    val part = rec.getResult(stream).text.trim()
+                    stream.release()
+                    if (part.isNotEmpty()) parts.add(part)
+                }
+                parts.joinToString(" ").trim()
             }.getOrElse {
                 Log.e(TAG, "Local transcription failed", it)
                 null
             }
             onResult(text)
         }
+    }
+
+    /**
+     * Returns chunk boundary indices (inclusive start .. exclusive end pairs)
+     * splitting [samples] into windows no longer than [MAX_CHUNK]. Each cut is
+     * nudged to the lowest-energy point in a short search window before the
+     * target so we split during a pause rather than mid-word.
+     */
+    private fun chunkBoundaries(samples: FloatArray): IntArray {
+        val n = samples.size
+        if (n <= MAX_CHUNK) return intArrayOf(0, n)
+
+        val bounds = ArrayList<Int>()
+        bounds.add(0)
+        var start = 0
+        while (n - start > MAX_CHUNK) {
+            val target = start + MAX_CHUNK
+            val searchStart = (target - SEARCH_WINDOW).coerceAtLeast(start + MIN_CHUNK)
+            var cut = target
+            var minEnergy = Float.MAX_VALUE
+            var i = searchStart
+            while (i < target) {
+                var energy = 0f
+                var j = i
+                val end = (i + ENERGY_WINDOW).coerceAtMost(n)
+                while (j < end) {
+                    val a = samples[j]
+                    energy += if (a < 0) -a else a
+                    j++
+                }
+                if (energy < minEnergy) {
+                    minEnergy = energy
+                    cut = i
+                }
+                i += ENERGY_HOP
+            }
+            bounds.add(cut)
+            start = cut
+        }
+        bounds.add(n)
+        return bounds.toIntArray()
     }
 
     override fun close() {
@@ -96,6 +146,14 @@ class LocalParakeetTranscriber(private val modelDir: File) : Transcriber {
     companion object {
         private const val TAG = "MutterboardLocal"
         private const val WAV_HEADER_BYTES = 44L
+        private const val SAMPLE_RATE = 16000
+
+        // Chunking limits (in samples at 16 kHz) for long non-streaming audio.
+        private const val MAX_CHUNK = SAMPLE_RATE * 15      // 15 s hard cap per chunk
+        private const val MIN_CHUNK = SAMPLE_RATE * 5       // don't cut before 5 s
+        private const val SEARCH_WINDOW = SAMPLE_RATE * 2   // look back 2 s for a pause
+        private const val ENERGY_WINDOW = 400               // 25 ms energy frame
+        private const val ENERGY_HOP = 160                  // 10 ms hop
 
         val MODEL_FILES = listOf(
             "encoder.int8.onnx",
