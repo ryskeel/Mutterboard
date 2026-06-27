@@ -17,6 +17,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -127,6 +128,28 @@ private fun SetupScreen(
     var downloadState by remember { mutableStateOf<DownloadState>(DownloadState.Idle) }
     val scope = rememberCoroutineScope()
 
+    val modelManager = remember { ParakeetModelManager(context) }
+    var engine by remember {
+        mutableStateOf(Engine.fromPref(prefs.getString(MutterboardInputMethodService.KEY_ENGINE, null)))
+    }
+    var modelReady by remember { mutableStateOf(modelManager.isReady()) }
+    var modelProgress by remember { mutableStateOf<ParakeetModelManager.Progress?>(null) }
+
+    fun selectEngine(newEngine: Engine) {
+        engine = newEngine
+        prefs.edit().putString(MutterboardInputMethodService.KEY_ENGINE, newEngine.prefValue).apply()
+    }
+
+    fun downloadModel() {
+        modelProgress = ParakeetModelManager.Progress.Downloading(0f)
+        modelManager.download { p ->
+            (context as? ComponentActivity)?.runOnUiThread {
+                modelProgress = p
+                if (p is ParakeetModelManager.Progress.Done) modelReady = true
+            }
+        }
+    }
+
     LaunchedEffect(refreshTick) {
         hasMic = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                 android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -172,7 +195,8 @@ private fun SetupScreen(
         onDispose { activity?.lifecycle?.removeObserver(observer) }
     }
 
-    val allDone = hasMic && imeEnabled && apiKey.isNotBlank()
+    val transcriberReady = if (engine == Engine.LOCAL) modelReady else apiKey.isNotBlank()
+    val allDone = hasMic && imeEnabled && transcriberReady
 
     Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
         Column(
@@ -227,6 +251,18 @@ private fun SetupScreen(
                 Spacer(Modifier.height(16.dp))
                 CompletionBanner()
             }
+
+            Spacer(Modifier.height(40.dp))
+
+            SectionHeader("Transcription")
+            Spacer(Modifier.height(12.dp))
+            TranscriptionCard(
+                engine = engine,
+                modelReady = modelReady,
+                modelProgress = modelProgress,
+                onSelectEngine = { selectEngine(it) },
+                onDownloadModel = { downloadModel() }
+            )
 
             Spacer(Modifier.height(40.dp))
 
@@ -387,6 +423,111 @@ private fun StepRow(
         } else if (showActionWhenDone) {
             Spacer(Modifier.width(12.dp))
             OutlinedButton(onClick = { haptic(); onAction() }) { Text(actionLabel) }
+        }
+    }
+}
+
+@Composable
+private fun TranscriptionCard(
+    engine: Engine,
+    modelReady: Boolean,
+    modelProgress: ParakeetModelManager.Progress?,
+    onSelectEngine: (Engine) -> Unit,
+    onDownloadModel: () -> Unit
+) {
+    val haptic = rememberTapHaptic()
+    Card(modifier = Modifier.fillMaxWidth()) {
+        EngineRow(
+            label = "Cloud (Groq)",
+            subtitle = "Fast, needs API key + internet",
+            selected = engine == Engine.CLOUD,
+            onSelect = { haptic(); onSelectEngine(Engine.CLOUD) }
+        )
+        HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+        EngineRow(
+            label = "On-device (Parakeet)",
+            subtitle = "Private, offline, English only",
+            selected = engine == Engine.LOCAL,
+            onSelect = { haptic(); onSelectEngine(Engine.LOCAL) }
+        )
+
+        if (engine == Engine.LOCAL) {
+            HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                when {
+                    modelReady -> {
+                        Text("Model ready", fontWeight = FontWeight.Medium, color = GreenAccent)
+                        Text(
+                            "Parakeet TDT 0.6B is installed on this device.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    modelProgress is ParakeetModelManager.Progress.Downloading -> {
+                        Text("Downloading model…", fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { modelProgress.fraction },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "${(modelProgress.fraction * 100).toInt()}%  ·  ~630 MB",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    modelProgress is ParakeetModelManager.Progress.Extracting -> {
+                        Text("Extracting model…", fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                    else -> {
+                        Text(
+                            "Download required",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        if (modelProgress is ParakeetModelManager.Progress.Failed) {
+                            Text(
+                                modelProgress.message,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Button(onClick = { haptic(); onDownloadModel() }) {
+                            Text("Download model (~630 MB)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EngineRow(
+    label: String,
+    subtitle: String,
+    selected: Boolean,
+    onSelect: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onSelect)
+        Spacer(Modifier.width(6.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, fontWeight = FontWeight.Medium)
+            Text(
+                subtitle,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

@@ -7,11 +7,11 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 
-class GroqWhisperClient(private val apiKey: String) {
+class GroqWhisperClient(private val apiKey: String) : Transcriber {
 
     private val client = OkHttpClient()
 
-    fun transcribe(audioFile: File, onResult: (String?) -> Unit) {
+    override fun transcribe(audioFile: File, onResult: (String?) -> Unit) {
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("model", "whisper-large-v3-turbo")

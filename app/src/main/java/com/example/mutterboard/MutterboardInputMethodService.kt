@@ -21,11 +21,14 @@ import com.google.android.material.color.DynamicColors
 
 class MutterboardInputMethodService : InputMethodService() {
 
-    private enum class State { IDLE, RECORDING, TRANSCRIBING, ERROR, NO_PERMISSION, NO_API_KEY }
+    private enum class State { IDLE, RECORDING, TRANSCRIBING, ERROR, NO_PERMISSION, NO_API_KEY, NO_MODEL }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var recorder: WavRecorder
-    private var groqClient: GroqWhisperClient? = null
+    private var transcriber: Transcriber? = null
+    private var engine: Engine = Engine.CLOUD
+    private var cloudKey: String = ""
+    private var modelManager: ParakeetModelManager? = null
 
     private var keyboardView: View? = null
     private var statusText: TextView? = null
@@ -40,12 +43,35 @@ class MutterboardInputMethodService : InputMethodService() {
         super.onCreate()
         Log.d(TAG, "IME onCreate")
         recorder = WavRecorder(cacheDir)
-        refreshGroqClient()
+        refreshTranscriber()
     }
 
-    private fun refreshGroqClient() {
-        val key = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_API_KEY, "") ?: ""
-        groqClient = if (key.isNotEmpty()) GroqWhisperClient(key) else null
+    /**
+     * Rebuilds [transcriber] from the current engine preference, but only when
+     * something relevant changed — so the heavy local recognizer isn't torn down
+     * and reloaded every time the keyboard reappears.
+     */
+    private fun refreshTranscriber() {
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val newEngine = Engine.fromPref(prefs.getString(KEY_ENGINE, Engine.CLOUD.prefValue))
+        when (newEngine) {
+            Engine.CLOUD -> {
+                val key = prefs.getString(KEY_API_KEY, "") ?: ""
+                if (engine != Engine.CLOUD || transcriber !is GroqWhisperClient || key != cloudKey) {
+                    transcriber?.close()
+                    cloudKey = key
+                    transcriber = if (key.isNotEmpty()) GroqWhisperClient(key) else null
+                }
+            }
+            Engine.LOCAL -> {
+                val mm = modelManager ?: ParakeetModelManager(this).also { modelManager = it }
+                if (engine != Engine.LOCAL || transcriber !is LocalParakeetTranscriber) {
+                    transcriber?.close()
+                    transcriber = if (mm.isReady()) LocalParakeetTranscriber(mm.modelDir) else null
+                }
+            }
+        }
+        engine = newEngine
     }
 
     override fun onEvaluateInputViewShown(): Boolean = true
@@ -95,7 +121,7 @@ class MutterboardInputMethodService : InputMethodService() {
     override fun onStartInputView(editorInfo: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(editorInfo, restarting)
         Log.d(TAG, "onStartInputView restarting=$restarting state=$state")
-        refreshGroqClient()
+        refreshTranscriber()
         if (state == State.IDLE || state == State.ERROR) {
             tryStartRecording()
         } else {
@@ -118,8 +144,8 @@ class MutterboardInputMethodService : InputMethodService() {
             renderState()
             return
         }
-        if (groqClient == null) {
-            state = State.NO_API_KEY
+        if (transcriber == null) {
+            state = if (engine == Engine.LOCAL) State.NO_MODEL else State.NO_API_KEY
             renderState()
             return
         }
@@ -139,6 +165,7 @@ class MutterboardInputMethodService : InputMethodService() {
             State.IDLE, State.ERROR -> tryStartRecording()
             State.NO_PERMISSION -> openSetupActivity()
             State.NO_API_KEY -> openSetupActivity()
+            State.NO_MODEL -> openSetupActivity()
             State.TRANSCRIBING -> Unit
         }
     }
@@ -164,10 +191,10 @@ class MutterboardInputMethodService : InputMethodService() {
                 renderState()
                 return@postDelayed
             }
-            val client = groqClient
+            val client = transcriber
             if (client == null) {
                 wav.delete()
-                state = State.NO_API_KEY
+                state = if (engine == Engine.LOCAL) State.NO_MODEL else State.NO_API_KEY
                 renderState()
                 return@postDelayed
             }
@@ -264,6 +291,12 @@ class MutterboardInputMethodService : InputMethodService() {
                 mic.text = "Open app"
                 mic.contentDescription = "Open app to set API key"
             }
+            State.NO_MODEL -> {
+                status.text = "Download model in app"
+                status.visibility = View.VISIBLE
+                mic.text = "Open app"
+                mic.contentDescription = "Open app to download the on-device model"
+            }
         }
     }
 
@@ -278,6 +311,7 @@ class MutterboardInputMethodService : InputMethodService() {
 
     override fun onDestroy() {
         recorder.cancel()
+        transcriber?.close()
         mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
@@ -286,6 +320,7 @@ class MutterboardInputMethodService : InputMethodService() {
         private const val TAG = "MutterboardIME"
         const val PREFS = "mutterboard_prefs"
         const val KEY_API_KEY = "groq_api_key"
+        const val KEY_ENGINE = "engine"
         private const val STOP_BUFFER_MS = 800L
         private const val WAVEFORM_INTERVAL_MS = 50L
     }
