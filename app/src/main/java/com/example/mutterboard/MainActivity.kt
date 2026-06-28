@@ -162,6 +162,15 @@ private fun SetupScreen(
         prefs.edit().putString(MutterboardInputMethodService.KEY_ENGINE, newEngine.prefValue).apply()
     }
 
+    var refineEnabled by remember {
+        mutableStateOf(prefs.getBoolean(MutterboardInputMethodService.KEY_REFINE, false))
+    }
+
+    fun setRefine(enabled: Boolean) {
+        refineEnabled = enabled
+        prefs.edit().putBoolean(MutterboardInputMethodService.KEY_REFINE, enabled).apply()
+    }
+
     fun downloadModel() {
         modelProgress = ParakeetModelManager.Progress.Downloading(0f)
         modelManager.download { p ->
@@ -285,6 +294,8 @@ private fun SetupScreen(
                 apiKey = apiKey,
                 modelReady = modelReady,
                 modelProgress = modelProgress,
+                refineEnabled = refineEnabled,
+                onToggleRefine = { setRefine(it) },
                 onSelectEngine = { selectEngine(it) },
                 onAddKey = { showKeyDialog = true },
                 onRequestRemoveKey = { showRemoveKey = true },
@@ -567,6 +578,38 @@ private fun SavedKeyRow(onRequestEdit: () -> Unit, onRequestRemove: () -> Unit) 
     }
 }
 
+/**
+ * Cloud-only toggle for the post-transcription AI cleanup pass. Sits under the
+ * saved-key row because it's an enhancement to Cloud dictation, not a separate
+ * engine. Off by default; flipping it just writes the pref the IME reads.
+ */
+@Composable
+private fun RefineRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    val haptic = rememberTapHaptic()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { haptic(); onToggle(!enabled) }
+            .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Clean up with AI", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            Text(
+                "Removes filler words and fixes the odd misheard word. Adds a moment of delay.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Switch(
+            checked = enabled,
+            onCheckedChange = { haptic(); onToggle(it) }
+        )
+    }
+}
+
 @Composable
 private fun RemoveKeyDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
     val haptic = rememberTapHaptic()
@@ -667,6 +710,8 @@ private fun TranscriptionCard(
     apiKey: String,
     modelReady: Boolean,
     modelProgress: ParakeetModelManager.Progress?,
+    refineEnabled: Boolean,
+    onToggleRefine: (Boolean) -> Unit,
     onSelectEngine: (Engine) -> Unit,
     onAddKey: () -> Unit,
     onRequestRemoveKey: () -> Unit,
@@ -692,6 +737,8 @@ private fun TranscriptionCard(
                 Button(onClick = { haptic(); onAddKey() }) { Text("Add API key") }
             } else {
                 SavedKeyRow(onRequestEdit = onAddKey, onRequestRemove = onRequestRemoveKey)
+                Spacer(Modifier.height(4.dp))
+                RefineRow(enabled = refineEnabled, onToggle = onToggleRefine)
             }
         }
         HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
