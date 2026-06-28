@@ -1,14 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Header logo mark: white circular badge with the brand coral waveform bars
-     (same bars as the launcher foreground, scaled to fill the badge). Used left
-     of the "Mutterboard" wordmark on the settings screen. The circle fills the
-     bounds so the wordmark can sit snug beside it. -->
+<!-- Header logo mark: the brand coral waveform bars (same bars as the launcher
+     foreground) on a transparent background, so the mark sits directly on the
+     page. Used left of the "Mutterboard" wordmark on the settings screen. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
     android:height="48dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#FFFFFFFF" android:pathData="M3,54 A51,51 0 1 1 105,54 A51,51 0 1 1 3,54 Z" />
     <path android:fillColor="#80F4533E" android:pathData="M17.68,40.86 A5.41,5.41 0 0 1 28.50,40.86 L28.50,67.14 A5.41,5.41 0 0 1 17.68,67.14 Z" />
     <path android:fillColor="#BDF4533E" android:pathData="M33.14,26.96 A5.41,5.41 0 0 1 43.95,26.96 L43.95,81.04 A5.41,5.41 0 0 1 33.14,81.04 Z" />
     <path android:fillColor="#FFF4533E" android:pathData="M48.59,14.59 A5.41,5.41 0 0 1 59.41,14.59 L59.41,93.41 A5.41,5.41 0 0 1 48.59,93.41 Z" />

@@ -28,8 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Visibility
-import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,7 +44,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -324,6 +322,7 @@ private fun SetupScreen(
 
     if (showKeyDialog) {
         AddApiKeyDialog(
+            initial = apiKey,
             onDismiss = { showKeyDialog = false },
             onSave = { newKey ->
                 saveApiKey(newKey)
@@ -417,11 +416,12 @@ private fun EngineInfoDialog(onDismiss: () -> Unit) {
 @Composable
 private fun AddApiKeyDialog(
     onDismiss: () -> Unit,
-    onSave: (String) -> Unit
+    onSave: (String) -> Unit,
+    initial: String = ""
 ) {
     val context = LocalContext.current
     val haptic = rememberTapHaptic()
-    var draft by remember { mutableStateOf("") }
+    var draft by remember { mutableStateOf(initial) }
     var showKey by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -469,14 +469,13 @@ private fun AddApiKeyDialog(
 
 /**
  * Inline saved-key chip on the Cloud option, mirroring the on-device "model
- * ready" row: a peach pill showing the key masked as dots, an eye toggle to
- * reveal it in place, and a trailing delete icon. Removing is the only edit —
- * to change the key you remove it and add a fresh one.
+ * ready" row: a peach pill confirming the key is saved, with an edit icon (to
+ * change the key via the dialog) and a trailing delete icon. The raw key is
+ * never shown here — masking it added no value since it couldn't be copied.
  */
 @Composable
-private fun SavedKeyRow(apiKey: String, onRequestRemove: () -> Unit) {
+private fun SavedKeyRow(onRequestEdit: () -> Unit, onRequestRemove: () -> Unit) {
     val haptic = rememberTapHaptic()
-    var showKey by remember { mutableStateOf(false) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -485,30 +484,28 @@ private fun SavedKeyRow(apiKey: String, onRequestRemove: () -> Unit) {
             .background(Color(0xFFF8E6DA))
             .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
     ) {
-        Text(
-            text = "API key",
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        Icon(
+            imageVector = Icons.Rounded.Check,
+            contentDescription = null,
+            tint = Color.Black,
+            modifier = Modifier.size(16.dp)
         )
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(6.dp))
         Text(
-            text = if (showKey) apiKey else "•".repeat(apiKey.length.coerceAtMost(24)),
-            fontSize = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface,
+            text = "API key saved",
+            fontSize = 12.sp,
+            color = successColor,
             modifier = Modifier.weight(1f)
         )
         Spacer(Modifier.width(8.dp))
         IconButton(
-            onClick = { haptic(); showKey = !showKey },
+            onClick = { haptic(); onRequestEdit() },
             modifier = Modifier.size(32.dp)
         ) {
             Icon(
-                imageVector = if (showKey) Icons.Rounded.VisibilityOff
-                else Icons.Rounded.Visibility,
-                contentDescription = if (showKey) "Hide key" else "Show key",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                imageVector = Icons.Rounded.Edit,
+                contentDescription = "Edit key",
+                tint = Color.Black,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -519,7 +516,7 @@ private fun SavedKeyRow(apiKey: String, onRequestRemove: () -> Unit) {
             Icon(
                 imageVector = Icons.Rounded.DeleteOutline,
                 contentDescription = "Remove key",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = Color.Black,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -650,7 +647,7 @@ private fun TranscriptionCard(
             if (apiKey.isBlank()) {
                 Button(onClick = { haptic(); onAddKey() }) { Text("Add API key") }
             } else {
-                SavedKeyRow(apiKey = apiKey, onRequestRemove = onRequestRemoveKey)
+                SavedKeyRow(onRequestEdit = onAddKey, onRequestRemove = onRequestRemoveKey)
             }
         }
         HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
@@ -670,8 +667,15 @@ private fun TranscriptionCard(
                             .background(Color(0xFFF8E6DA))
                             .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
                     ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
                         Text(
-                            "Model downloaded and ready to use",
+                            "Model downloaded",
                             fontSize = 12.sp,
                             color = successColor,
                             modifier = Modifier.weight(1f)
@@ -684,7 +688,7 @@ private fun TranscriptionCard(
                             Icon(
                                 imageVector = Icons.Rounded.DeleteOutline,
                                 contentDescription = "Delete model",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = Color.Black,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
