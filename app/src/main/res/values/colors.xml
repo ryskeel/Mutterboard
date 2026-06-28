@@ -7,4 +7,13 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Keyboard (IME) brand fallback, used when the device has no dynamic
+         color to override it. Mirrors the settings screen's monochrome chrome
+         (see ui/theme/Color.kt) so the keyboard buttons and the equalizer match
+         the rest of the app. Dark equivalents live in values-night/colors.xml. -->
+    <color name="brand_kb_primary">#FF1A1A1A</color>
+    <color name="brand_kb_on_primary">#FFFFFFFF</color>
+    <color name="brand_kb_secondary_container">#FFE7E2DF</color>
+    <color name="brand_kb_on_secondary_container">#FF1A1A1A</color>
 </resources>

@@ -3,13 +3,26 @@ package com.example.mutterboard
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.Path
+import android.graphics.RectF
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.View
 import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.sin
 
+/**
+ * Listening indicator: a centered row of vertical bars that grow outward from
+ * the middle as the user speaks, echoing the app icon's coral waveform mark.
+ *
+ * Two things carry the icon's identity: the silhouette is tallest in the centre
+ * and tapers toward the edges, and each bar's opacity steps down from the centre
+ * outward to give a sense of depth. The bars are tinted with the theme's
+ * colorPrimary, so the indicator adapts to the phone's theming (including
+ * Material You dynamic color) rather than being hard-coded coral. Per-bar wiggle
+ * keeps it feeling like a live equalizer instead of one rigid shape.
+ */
 class WaveformView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -22,21 +35,11 @@ class WaveformView @JvmOverloads constructor(
         tv.data
     }
 
-    private val frontPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
+    private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
         color = primaryColor
-        strokeWidth = dp(2.5f)
-        strokeCap = Paint.Cap.ROUND
     }
-    private val backPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        color = primaryColor
-        alpha = 80
-        strokeWidth = dp(2.5f)
-        strokeCap = Paint.Cap.ROUND
-    }
-    private val frontPath = Path()
-    private val backPath = Path()
+    private val rect = RectF()
 
     private var smoothedLevel: Float = 0f
     private var targetLevel: Float = 0f
@@ -49,7 +52,7 @@ class WaveformView @JvmOverloads constructor(
     private val ticker = object : Runnable {
         override fun run() {
             smoothedLevel += (targetLevel - smoothedLevel) * 0.25f
-            phase += 0.18f
+            phase += 0.28f
             invalidate()
             postDelayed(this, FRAME_MS)
         }
@@ -71,33 +74,43 @@ class WaveformView @JvmOverloads constructor(
         if (w <= 0f || h <= 0f) return
 
         val cy = h / 2f
-        val baseline = 0.08f
-        val amp = (h / 2f - dp(4f)) * (baseline + smoothedLevel * 0.92f)
-        val freqFront = (2f * PI.toFloat()) * 1.4f / w
-        val freqBack = (2f * PI.toFloat()) * 2.1f / w
-        val step = dp(3f).coerceAtLeast(1f)
+        val barWidth = dp(7f)
+        val gap = dp(8f)
+        val pitch = barWidth + gap
+        val groupWidth = (BAR_COUNT - 1) * pitch + barWidth
+        val startX = (w - groupWidth) / 2f
+        val center = (BAR_COUNT - 1) / 2f
+        val maxHalf = (h / 2f - dp(3f)).coerceAtLeast(barWidth)
+        val radius = barWidth / 2f
 
-        frontPath.rewind()
-        backPath.rewind()
+        // Volume maps onto a baseline so silence still shows a gentle shimmer
+        // (clearly "listening") and speech drives the bars toward full height.
+        val level = IDLE_BASELINE + (1f - IDLE_BASELINE) * smoothedLevel
 
-        var x = 0f
-        var first = true
-        while (x <= w) {
-            val yFront = cy + amp * sin(freqFront * x + phase)
-            val yBack = cy + (amp * 0.7f) * sin(freqBack * x - phase * 1.3f + 0.7f)
-            if (first) {
-                frontPath.moveTo(x, yFront)
-                backPath.moveTo(x, yBack)
-                first = false
-            } else {
-                frontPath.lineTo(x, yFront)
-                backPath.lineTo(x, yBack)
-            }
-            x += step
+        for (i in 0 until BAR_COUNT) {
+            val distFromCenter = abs(i - center) / center  // 0 at centre, 1 at edges
+
+            // Icon-like silhouette: tallest in the middle, tapering to the edges.
+            val envelope = 0.34f + 0.66f * cos(distFromCenter * (PI.toFloat() / 2f))
+
+            // Per-bar wiggle so bars bounce at slightly different rates. The
+            // wiggle depth scales with the current level, so the bars are nearly
+            // still when silent and only come alive as the user speaks.
+            val wiggle = 0.5f + 0.5f * sin(phase + i * 0.7f)
+            val motion = IDLE_MOTION + (WIGGLE_DEPTH - IDLE_MOTION) * smoothedLevel
+            val liveness = (1f - motion) + motion * wiggle
+
+            val half = (maxHalf * envelope * level * liveness).coerceAtLeast(radius)
+
+            val left = startX + i * pitch
+            rect.set(left, cy - half, left + barWidth, cy + half)
+
+            // Depth via opacity: brightest in the centre, fading toward the edges.
+            barPaint.color = primaryColor
+            barPaint.alpha =
+                (EDGE_ALPHA + (CENTER_ALPHA - EDGE_ALPHA) * (1f - distFromCenter)).toInt()
+            canvas.drawRoundRect(rect, radius, radius, barPaint)
         }
-
-        canvas.drawPath(backPath, backPaint)
-        canvas.drawPath(frontPath, frontPaint)
     }
 
     private fun dp(value: Float): Float =
@@ -105,5 +118,13 @@ class WaveformView @JvmOverloads constructor(
 
     companion object {
         private const val FRAME_MS = 33L
+        private const val BAR_COUNT = 11
+        private const val IDLE_BASELINE = 0.14f
+        // Maximum per-bar wiggle (reached at full volume) and the tiny residual
+        // wiggle at silence — small enough to read as "calmly listening".
+        private const val WIGGLE_DEPTH = 0.5f
+        private const val IDLE_MOTION = 0.05f
+        private const val CENTER_ALPHA = 255f
+        private const val EDGE_ALPHA = 70f
     }
 }

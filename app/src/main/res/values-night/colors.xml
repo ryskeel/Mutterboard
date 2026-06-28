@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark equivalents of the keyboard brand fallback (see values/colors.xml).
+         Mirrors the settings screen's dark monochrome chrome from
+         ui/theme/Color.kt: light-neutral primary on dark, warm tonal container. -->
+    <color name="brand_kb_primary">#FFE6E6E6</color>
+    <color name="brand_kb_on_primary">#FF1A1A1A</color>
+    <color name="brand_kb_secondary_container">#FF5D4033</color>
+    <color name="brand_kb_on_secondary_container">#FFFFDBCF</color>
+</resources>

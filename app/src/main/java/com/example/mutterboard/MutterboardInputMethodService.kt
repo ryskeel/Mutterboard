@@ -19,6 +19,7 @@ import androidx.core.view.WindowCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.DynamicColors
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import kotlin.math.sqrt
 
 class MutterboardInputMethodService : InputMethodService() {
 
@@ -248,8 +249,12 @@ class MutterboardInputMethodService : InputMethodService() {
         val runnable = object : Runnable {
             override fun run() {
                 if (state != State.RECORDING) return
+                // Raw peak is linear, so normal speech barely moves the bars.
+                // Apply gain plus a sqrt (compressive) curve so quiet and normal
+                // speech register strongly while loud speech still has headroom.
                 val normalized = recorder.currentPeak() / 32767f
-                view.setLevel((normalized * 2.5f).coerceIn(0f, 1f))
+                val level = sqrt((normalized * WAVEFORM_GAIN).coerceIn(0f, 1f))
+                view.setLevel(level)
                 mainHandler.postDelayed(this, WAVEFORM_INTERVAL_MS)
             }
         }
@@ -345,5 +350,8 @@ class MutterboardInputMethodService : InputMethodService() {
         const val KEY_ENGINE = "engine"
         private const val STOP_BUFFER_MS = 800L
         private const val WAVEFORM_INTERVAL_MS = 50L
+        // Gain applied before the sqrt curve; ~0.25 normalized peak saturates
+        // the bars, so normal speaking volume drives them near full height.
+        private const val WAVEFORM_GAIN = 4f
     }
 }
