@@ -28,6 +28,7 @@ class MutterboardInputMethodService : InputMethodService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var recorder: WavRecorder
     private var transcriber: Transcriber? = null
+    private var refiner: GroqRefiner? = null
     private var engine: Engine = Engine.CLOUD
     private var cloudKey: String = ""
     private var modelManager: ParakeetModelManager? = null
@@ -60,13 +61,27 @@ class MutterboardInputMethodService : InputMethodService() {
         when (newEngine) {
             Engine.CLOUD -> {
                 val key = prefs.getString(KEY_API_KEY, "") ?: ""
-                if (engine != Engine.CLOUD || transcriber !is GroqWhisperClient || key != cloudKey) {
+                val keyChanged = key != cloudKey
+                if (engine != Engine.CLOUD || transcriber !is GroqWhisperClient || keyChanged) {
                     transcriber?.close()
-                    cloudKey = key
                     transcriber = if (key.isNotEmpty()) GroqWhisperClient(key) else null
                 }
+                // The refiner is a cloud-only extra: rebuild it only when toggled
+                // on with a key present, or when the key changed, so it isn't
+                // reallocated every time the keyboard reappears.
+                val wantRefine = prefs.getBoolean(KEY_REFINE, false)
+                if (!wantRefine || key.isEmpty()) {
+                    refiner?.close()
+                    refiner = null
+                } else if (refiner == null || keyChanged) {
+                    refiner?.close()
+                    refiner = GroqRefiner(key)
+                }
+                cloudKey = key
             }
             Engine.LOCAL -> {
+                refiner?.close()
+                refiner = null
                 val mm = modelManager ?: ParakeetModelManager(this).also { modelManager = it }
                 if (engine != Engine.LOCAL || transcriber !is LocalParakeetTranscriber) {
                     transcriber?.close()
@@ -160,6 +175,7 @@ class MutterboardInputMethodService : InputMethodService() {
             // Open the network connection now, while the user is still speaking,
             // so the upload at Stop rides an already-warm connection.
             transcriber?.warmUp()
+            refiner?.warmUp()
         } else {
             state = State.ERROR
             renderState()
@@ -226,6 +242,20 @@ class MutterboardInputMethodService : InputMethodService() {
             renderState()
             return
         }
+        // If the cloud refiner is on, run the cleanup pass before committing.
+        // We stay in TRANSCRIBING (progress shown) during the extra round-trip,
+        // and fall back to the raw text if it fails so the message is never lost.
+        val r = refiner
+        if (r != null) {
+            r.refine(text) { refined ->
+                mainHandler.post { commitAndFinish(refined ?: text) }
+            }
+        } else {
+            commitAndFinish(text)
+        }
+    }
+
+    private fun commitAndFinish(text: String) {
         // Append a trailing space so you can keep typing — or dictate again —
         // without manually hitting the space bar first. trimEnd() guards against
         // a double space if the engine already returned trailing whitespace.
@@ -345,6 +375,7 @@ class MutterboardInputMethodService : InputMethodService() {
     override fun onDestroy() {
         recorder.cancel()
         transcriber?.close()
+        refiner?.close()
         mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
@@ -354,6 +385,7 @@ class MutterboardInputMethodService : InputMethodService() {
         const val PREFS = "mutterboard_prefs"
         const val KEY_API_KEY = "groq_api_key"
         const val KEY_ENGINE = "engine"
+        const val KEY_REFINE = "refine_cloud"
         // Tail kept recording after Stop so the last word isn't clipped. Trimmed
         // from 800ms to cut latency; the appended trailing silence in the WAV
         // still gives the model a moment of run-off.
