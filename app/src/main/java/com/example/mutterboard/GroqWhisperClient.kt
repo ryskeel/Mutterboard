@@ -11,6 +11,26 @@ class GroqWhisperClient(private val apiKey: String) : Transcriber {
 
     private val client = OkHttpClient()
 
+    /**
+     * Open a pooled TLS connection to Groq ahead of the upload so the actual
+     * transcription POST reuses an already-established connection instead of
+     * paying the TCP+TLS handshake. Fired when recording starts; fire-and-forget,
+     * and uses the same OkHttpClient (so the same connection pool) as transcribe.
+     * No auth needed — this only warms the connection, not a real API call.
+     */
+    override fun warmUp() {
+        val request = Request.Builder()
+            .url("https://api.groq.com/")
+            .head()
+            .build()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {}
+            override fun onResponse(call: Call, response: Response) {
+                response.close()
+            }
+        })
+    }
+
     override fun transcribe(audioFile: File, onResult: (String?) -> Unit) {
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)

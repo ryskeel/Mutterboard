@@ -157,6 +157,9 @@ class MutterboardInputMethodService : InputMethodService() {
             state = State.RECORDING
             renderState()
             startWaveform()
+            // Open the network connection now, while the user is still speaking,
+            // so the upload at Stop rides an already-warm connection.
+            transcriber?.warmUp()
         } else {
             state = State.ERROR
             renderState()
@@ -351,7 +354,10 @@ class MutterboardInputMethodService : InputMethodService() {
         const val PREFS = "mutterboard_prefs"
         const val KEY_API_KEY = "groq_api_key"
         const val KEY_ENGINE = "engine"
-        private const val STOP_BUFFER_MS = 800L
+        // Tail kept recording after Stop so the last word isn't clipped. Trimmed
+        // from 800ms to cut latency; the appended trailing silence in the WAV
+        // still gives the model a moment of run-off.
+        private const val STOP_BUFFER_MS = 400L
         private const val WAVEFORM_INTERVAL_MS = 50L
         // Gain applied before the sqrt curve; ~0.25 normalized peak saturates
         // the bars, so normal speaking volume drives them near full height.

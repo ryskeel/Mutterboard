@@ -13,6 +13,14 @@ import java.io.File
 interface Transcriber {
     fun transcribe(audioFile: File, onResult: (String?) -> Unit)
 
+    /**
+     * Optional hint that a transcription is imminent (e.g. recording just
+     * started), so an implementation can warm up ahead of time — for the cloud
+     * engine, opening the network connection before the audio is ready. Safe to
+     * call any number of times; the default does nothing.
+     */
+    fun warmUp() {}
+
     /** Release any native/network resources. Safe to call more than once. */
     fun close() {}
 }
