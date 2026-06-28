@@ -191,15 +191,6 @@ class MutterboardInputMethodService : InputMethodService() {
                 renderState()
                 return@postDelayed
             }
-            // If the whole take was essentially silent, no point running ASR —
-            // tell the user plainly instead of a generic error (e.g. they tapped
-            // without speaking).
-            if (recorder.maxObservedPeak() < SILENCE_PEAK_THRESHOLD) {
-                wav.delete()
-                state = State.NO_SPEECH
-                renderState()
-                return@postDelayed
-            }
             val client = transcriber
             if (client == null) {
                 wav.delete()
@@ -215,8 +206,16 @@ class MutterboardInputMethodService : InputMethodService() {
     }
 
     private fun onTranscriptionResult(text: String?) {
-        if (text.isNullOrBlank()) {
+        // A null result means the engine genuinely failed (network/API/exception).
+        // A blank-but-non-null result means it ran fine and simply heard no speech —
+        // let the engine be the judge of silence rather than gating on amplitude.
+        if (text == null) {
             state = State.ERROR
+            renderState()
+            return
+        }
+        if (text.isBlank()) {
+            state = State.NO_SPEECH
             renderState()
             return
         }
@@ -338,9 +337,5 @@ class MutterboardInputMethodService : InputMethodService() {
         const val KEY_ENGINE = "engine"
         private const val STOP_BUFFER_MS = 800L
         private const val WAVEFORM_INTERVAL_MS = 50L
-        // 16-bit peak below this means the take was effectively silent (real
-        // speech peaks in the thousands+; the noise floor sits a few hundred);
-        // used to show "no audio" instead of a generic error.
-        private const val SILENCE_PEAK_THRESHOLD = 1000
     }
 }
