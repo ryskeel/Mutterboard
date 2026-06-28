@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Brand fallback colors apply when the device has no dynamic color to
-         override them (older Android, or dynamic color unavailable/off). On
-         Pixel/Samsung etc. DynamicColors.wrapContextIfAvailable still overlays
-         the wallpaper accent, so the keyboard keeps following the system theme
-         where one exists. These keep the IME buttons + equalizer on-brand
-         (monochrome chrome, matching the settings screen) instead of falling
-         back to Material's baseline purple. -->
-    <style name="Theme.Mutterboard" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar">
+    <!-- Default (Android 11 and older): no system dynamic color exists, so use
+         the monochrome brand fallback. This keeps the IME buttons + equalizer
+         on-brand (matching the settings screen) instead of Material's baseline
+         purple. On Android 12+ the values-v31 variant takes over and follows the
+         device's dynamic (Material You) colors instead — see values-v31/themes.xml.
+         IMPORTANT: do NOT hard-code these colors on a DynamicColors.* parent;
+         doing so overrides the @android:color/system_* references and breaks
+         dynamic theming on every device (regression fixed here). -->
+    <style name="Theme.Mutterboard" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/brand_kb_primary</item>
         <item name="colorOnPrimary">@color/brand_kb_on_primary</item>
         <item name="colorSecondaryContainer">@color/brand_kb_secondary_container</item>

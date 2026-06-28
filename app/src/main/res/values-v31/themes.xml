@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Android 12+: follow the device's dynamic (Material You) colors. The
+         DynamicColors parent pulls @android:color/system_* so the keyboard and
+         equalizer adhere to the user's wallpaper/system theme. Deliberately NO
+         brand color overrides here — overriding colorPrimary would replace the
+         system-color references and stop the keyboard from following the theme.
+         The monochrome brand fallback lives in the default values/themes.xml
+         for pre-12 devices that have no dynamic color. -->
+    <style name="Theme.Mutterboard" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar" />
+
+</resources>
