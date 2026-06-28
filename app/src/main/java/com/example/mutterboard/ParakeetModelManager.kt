@@ -26,6 +26,15 @@ class ParakeetModelManager(context: Context) {
 
     fun isReady(): Boolean = LocalParakeetTranscriber.isModelReady(modelDir)
 
+    /**
+     * Removes the downloaded model from internal storage to reclaim the ~630 MB.
+     * Returns true if no usable model remains afterwards.
+     */
+    fun deleteModel(): Boolean {
+        modelDir.deleteRecursively()
+        return !isReady()
+    }
+
     sealed interface Progress {
         data class Downloading(val fraction: Float) : Progress
         object Extracting : Progress

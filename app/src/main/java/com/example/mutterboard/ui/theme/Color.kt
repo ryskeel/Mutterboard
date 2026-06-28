@@ -2,45 +2,46 @@ package com.example.mutterboard.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Mutterboard brand palette — warm peach / coral / salmon, matching the app icon.
-// Button (primary) coral is deliberately deeper than the icon's #F4533E so white
-// text clears WCAG AA (≈5:1); soft peaches are used for card/container fills.
+// Mutterboard palette. The coral/peach now lives only in the logo mark; the
+// settings UI is monochrome (black chrome) on a light-peach canvas with white
+// cards, for cleaner contrast and accessibility. The peach background is just
+// saturated enough to separate the white section cards from the page.
 
-// ---- Light ----
-val BrandPrimaryLight = Color(0xFFC83E28)            // deep coral — buttons (white text ~5.03:1)
+// ---- Light (monochrome chrome on a light-peach canvas; cards are white) ----
+val BrandPrimaryLight = Color(0xFF1A1A1A)            // near-black — buttons, radio, links, progress
 val BrandOnPrimaryLight = Color(0xFFFFFFFF)
-val BrandPrimaryContainerLight = Color(0xFFFFDBCF)   // soft peach
-val BrandOnPrimaryContainerLight = Color(0xFF3A0B02)
-val BrandSecondaryLight = Color(0xFF9A5240)
+val BrandPrimaryContainerLight = Color(0xFFE2DEDB)
+val BrandOnPrimaryContainerLight = Color(0xFF1A1A1A)
+val BrandSecondaryLight = Color(0xFF44403E)
 val BrandOnSecondaryLight = Color(0xFFFFFFFF)
-val BrandSecondaryContainerLight = Color(0xFFFFDBCF)
-val BrandOnSecondaryContainerLight = Color(0xFF3A0B02)
-val BrandTertiaryLight = Color(0xFFB5752A)
+val BrandSecondaryContainerLight = Color(0xFFE7E2DF)
+val BrandOnSecondaryContainerLight = Color(0xFF1A1A1A)
+val BrandTertiaryLight = Color(0xFF44403E)
 val BrandOnTertiaryLight = Color(0xFFFFFFFF)
-val BrandTertiaryContainerLight = Color(0xFFFFDEA8)
-val BrandOnTertiaryContainerLight = Color(0xFF2A1B00)
-val BrandBackgroundLight = Color(0xFFFFF8F4)          // warm off-white
-val BrandOnBackgroundLight = Color(0xFF271712)
-val BrandSurfaceLight = Color(0xFFFFF8F4)
-val BrandOnSurfaceLight = Color(0xFF271712)
-val BrandSurfaceVariantLight = Color(0xFFF6DDD3)      // light peach (cards)
-val BrandOnSurfaceVariantLight = Color(0xFF6E5C56)    // muted warm gray (~5:1 on peach)
-val BrandSurfaceContainerLowestLight = Color(0xFFFFFFFF)
-val BrandSurfaceContainerLowLight = Color(0xFFFEEEE8)
-val BrandSurfaceContainerLight = Color(0xFFFBE7DE)    // light peach (cards)
-val BrandSurfaceContainerHighLight = Color(0xFFF6E0D6)
-val BrandSurfaceContainerHighestLight = Color(0xFFF1DACE)
-val BrandOutlineLight = Color(0xFF9C8A82)
-val BrandOutlineVariantLight = Color(0xFFE6CDC3)
+val BrandTertiaryContainerLight = Color(0xFFE7E2DF)
+val BrandOnTertiaryContainerLight = Color(0xFF1A1A1A)
+val BrandBackgroundLight = Color(0xFFFCF2EB)          // very light peach canvas
+val BrandOnBackgroundLight = Color(0xFF1A1A1A)
+val BrandSurfaceLight = Color(0xFFFCF2EB)
+val BrandOnSurfaceLight = Color(0xFF1A1A1A)
+val BrandSurfaceVariantLight = Color(0xFFEDE9E7)      // neutral light gray
+val BrandOnSurfaceVariantLight = Color(0xFF5A5A5A)    // neutral gray (subtitles ~6:1 on white)
+val BrandSurfaceContainerLowestLight = Color(0xFFFFFFFF)  // cards
+val BrandSurfaceContainerLowLight = Color(0xFFFFFFFF)
+val BrandSurfaceContainerLight = Color(0xFFFFFFFF)    // cards = white
+val BrandSurfaceContainerHighLight = Color(0xFFF3EDE9)
+val BrandSurfaceContainerHighestLight = Color(0xFFEDE6E1)
+val BrandOutlineLight = Color(0xFF2E2E2E)             // visible outlined-button / badge ring
+val BrandOutlineVariantLight = Color(0xFFE2DEDB)      // hairline dividers on white
 val BrandErrorLight = Color(0xFFBA1A1A)
 val BrandOnErrorLight = Color(0xFFFFFFFF)
 val BrandErrorContainerLight = Color(0xFFFFDAD6)
 val BrandOnErrorContainerLight = Color(0xFF410002)
-val BrandInversePrimaryLight = Color(0xFFFFB59C)
+val BrandInversePrimaryLight = Color(0xFFB0B0B0)
 
 // ---- Dark ----
-val BrandPrimaryDark = Color(0xFFFFB59C)             // light peach — buttons (dark text)
-val BrandOnPrimaryDark = Color(0xFF561F0F)
+val BrandPrimaryDark = Color(0xFFE6E6E6)             // light neutral — buttons (dark text)
+val BrandOnPrimaryDark = Color(0xFF1A1A1A)
 val BrandPrimaryContainerDark = Color(0xFF7A2E1A)
 val BrandOnPrimaryContainerDark = Color(0xFFFFDBCF)
 val BrandSecondaryDark = Color(0xFFE7BCAC)
@@ -70,9 +71,10 @@ val BrandErrorContainerDark = Color(0xFF93000A)
 val BrandOnErrorContainerDark = Color(0xFFFFDAD6)
 val BrandInversePrimaryDark = Color(0xFFC83E28)
 
-// Success accent (semantic, kept green for "ready/done"); theme-aware so it
-// reads on both light and dark surfaces. Used directly in MainActivity.
-val SuccessLight = Color(0xFF2E7D32)
+// "Ready/done" accent — monochrome to match the black-and-white chrome (done
+// badges, checkmarks, "Setup complete"). Theme-aware so it reads on both
+// surfaces. Used directly in MainActivity.
+val SuccessLight = Color(0xFF1A1A1A)
 val OnSuccessLight = Color(0xFFFFFFFF)
-val SuccessDark = Color(0xFF7BD88F)
-val OnSuccessDark = Color(0xFF06320F)
+val SuccessDark = Color(0xFFE6E6E6)
+val OnSuccessDark = Color(0xFF1A1A1A)

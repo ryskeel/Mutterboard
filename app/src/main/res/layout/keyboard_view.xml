@@ -20,13 +20,31 @@
         android:visibility="gone"
         android:text="" />
 
-    <com.example.mutterboard.WaveformView
-        android:id="@+id/waveform"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="88dp"
-        android:layout_marginTop="12dp"
-        android:clickable="false"
-        android:focusable="false" />
+        android:layout_marginTop="12dp">
+
+        <com.example.mutterboard.WaveformView
+            android:id="@+id/waveform"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:focusable="false" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginLeft="8dp"
+            android:layout_marginRight="8dp"
+            android:indeterminate="true"
+            android:visibility="gone"
+            app:trackCornerRadius="3dp"
+            app:trackThickness="6dp" />
+
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"

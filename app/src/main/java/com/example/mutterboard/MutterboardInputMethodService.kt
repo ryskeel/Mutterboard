@@ -18,6 +18,7 @@ import android.widget.TextView
 import androidx.core.view.WindowCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.DynamicColors
+import com.google.android.material.progressindicator.LinearProgressIndicator
 
 class MutterboardInputMethodService : InputMethodService() {
 
@@ -35,6 +36,7 @@ class MutterboardInputMethodService : InputMethodService() {
     private var micButton: MaterialButton? = null
     private var cancelButton: MaterialButton? = null
     private var waveform: WaveformView? = null
+    private var progress: LinearProgressIndicator? = null
 
     private var state: State = State.IDLE
     private var waveformAnimator: Runnable? = null
@@ -87,6 +89,7 @@ class MutterboardInputMethodService : InputMethodService() {
         micButton = view.findViewById(R.id.mic_button)
         cancelButton = view.findViewById(R.id.cancel_button)
         waveform = view.findViewById(R.id.waveform)
+        progress = view.findViewById(R.id.progress)
 
         micButton?.setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
@@ -263,6 +266,11 @@ class MutterboardInputMethodService : InputMethodService() {
     private fun renderState() {
         val status = statusText ?: return
         val mic = micButton ?: return
+        // While transcribing, swap the listening waveform for an indeterminate
+        // progress bar so it's clear we're working, not still recording.
+        val transcribing = state == State.TRANSCRIBING
+        waveform?.visibility = if (transcribing) View.GONE else View.VISIBLE
+        progress?.visibility = if (transcribing) View.VISIBLE else View.GONE
         when (state) {
             State.IDLE -> {
                 status.text = "Tap Start"

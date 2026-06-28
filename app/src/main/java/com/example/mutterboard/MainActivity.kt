@@ -15,6 +15,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +27,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,12 +38,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -57,7 +63,7 @@ import org.json.JSONObject
 import java.io.File
 
 private const val REPO = "ryskeel/Mutterboard"
-private val BrandFont = FontFamily(Font(R.font.audiowide_regular))
+private val BrandFont = FontFamily(Font(R.font.montserrat_black, FontWeight.Black))
 
 // Theme-aware success accent (green = "ready/done"): lighter green on dark.
 private val successColor: Color
@@ -128,6 +134,9 @@ private fun SetupScreen(
         mutableStateOf(prefs.getString(MutterboardInputMethodService.KEY_API_KEY, "") ?: "")
     }
     var showKeyDialog by remember { mutableStateOf(false) }
+    var showRemoveKey by remember { mutableStateOf(false) }
+    var showEngineInfo by remember { mutableStateOf(false) }
+    var showDeleteModel by remember { mutableStateOf(false) }
     var hasMic by remember { mutableStateOf(false) }
     var imeEnabled by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
@@ -162,6 +171,14 @@ private fun SetupScreen(
                 if (p is ParakeetModelManager.Progress.Done) modelReady = true
             }
         }
+    }
+
+    fun deleteModel() {
+        modelManager.deleteModel()
+        modelReady = false
+        modelProgress = null
+        // Without the model, on-device can't run — fall back to Cloud.
+        if (engine == Engine.LOCAL) selectEngine(Engine.CLOUD)
     }
 
     LaunchedEffect(refreshTick) {
@@ -209,9 +226,6 @@ private fun SetupScreen(
         onDispose { activity?.lifecycle?.removeObserver(observer) }
     }
 
-    val transcriberReady = if (engine == Engine.LOCAL) modelReady else apiKey.isNotBlank()
-    val allDone = hasMic && imeEnabled && transcriberReady
-
     Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
         Column(
             modifier = Modifier
@@ -221,41 +235,46 @@ private fun SetupScreen(
                 .padding(horizontal = 24.dp)
                 .padding(top = 24.dp, bottom = 24.dp)
         ) {
-            Text("Mutterboard", fontSize = 30.sp, fontFamily = BrandFont)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    painter = painterResource(R.drawable.ic_mutterboard_mark),
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("Mutterboard", fontSize = 30.sp, fontFamily = BrandFont)
+            }
             Spacer(Modifier.height(4.dp))
             Text(
                 "Voice keyboard",
                 fontSize = 15.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 46.dp)
             )
 
             Spacer(Modifier.height(32.dp))
 
             SectionHeader("Device setup")
             Spacer(Modifier.height(12.dp))
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        )
+    ) {
                 StepRow(
                     label = "Microphone permission",
                     done = hasMic,
-                    doneText = "Granted",
                     actionLabel = "Grant",
-                    showActionWhenDone = false,
                     onAction = onRequestMic
                 )
-                HorizontalDivider(modifier = Modifier.padding(start = 62.dp))
+                HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
                 StepRow(
                     label = "Enable keyboard",
                     done = imeEnabled,
-                    doneText = "Enabled",
                     actionLabel = "Enable",
-                    showActionWhenDone = false,
                     onAction = onOpenImeSettings
                 )
-            }
-
-            if (allDone) {
-                Spacer(Modifier.height(16.dp))
-                CompletionBanner()
             }
 
             Spacer(Modifier.height(40.dp))
@@ -268,8 +287,11 @@ private fun SetupScreen(
                 modelReady = modelReady,
                 modelProgress = modelProgress,
                 onSelectEngine = { selectEngine(it) },
-                onEditKey = { showKeyDialog = true },
-                onDownloadModel = { downloadModel() }
+                onAddKey = { showKeyDialog = true },
+                onRequestRemoveKey = { showRemoveKey = true },
+                onDownloadModel = { downloadModel() },
+                onLearnMore = { showEngineInfo = true },
+                onRequestDeleteModel = { showDeleteModel = true }
             )
 
             Spacer(Modifier.height(40.dp))
@@ -293,30 +315,113 @@ private fun SetupScreen(
         }
     }
 
+    fun saveApiKey(newKey: String) {
+        apiKey = newKey.trim()
+        prefs.edit()
+            .putString(MutterboardInputMethodService.KEY_API_KEY, apiKey)
+            .apply()
+    }
+
     if (showKeyDialog) {
-        ApiKeyDialog(
-            initialKey = apiKey,
+        AddApiKeyDialog(
             onDismiss = { showKeyDialog = false },
             onSave = { newKey ->
-                apiKey = newKey.trim()
-                prefs.edit()
-                    .putString(MutterboardInputMethodService.KEY_API_KEY, apiKey)
-                    .apply()
+                saveApiKey(newKey)
                 showKeyDialog = false
+            }
+        )
+    }
+
+    if (showRemoveKey) {
+        RemoveKeyDialog(
+            onDismiss = { showRemoveKey = false },
+            onConfirm = {
+                saveApiKey("")
+                showRemoveKey = false
+            }
+        )
+    }
+
+    if (showEngineInfo) {
+        EngineInfoDialog(onDismiss = { showEngineInfo = false })
+    }
+
+    if (showDeleteModel) {
+        DeleteModelDialog(
+            onDismiss = { showDeleteModel = false },
+            onConfirm = {
+                deleteModel()
+                showDeleteModel = false
             }
         )
     }
 }
 
 @Composable
-private fun ApiKeyDialog(
-    initialKey: String,
+private fun DeleteModelDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    val haptic = rememberTapHaptic()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete the model?") },
+        text = {
+            Text(
+                "This removes the on-device model and frees up about 630 MB. " +
+                    "You'll switch to the Cloud option until you download it again."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { haptic(); onConfirm() }) { Text("Delete") }
+        },
+        dismissButton = {
+            TextButton(onClick = { haptic(); onDismiss() }) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun EngineInfoDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("How transcription works") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Cloud", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Your recording is sent to Groq's servers and transcribed " +
+                            "with OpenAI's Whisper model. Very fast and accurate, but " +
+                            "it needs an internet connection and a free Groq API key.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("On-device", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Transcription runs entirely on your phone using NVIDIA's " +
+                            "Parakeet model. It works offline and your audio never " +
+                            "leaves the device, but it's a bit slower, English-only, " +
+                            "and needs a one-time ~630 MB model download.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Got it") }
+        }
+    )
+}
+
+@Composable
+private fun AddApiKeyDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit
 ) {
     val context = LocalContext.current
     val haptic = rememberTapHaptic()
-    var draft by remember { mutableStateOf(initialKey) }
+    var draft by remember { mutableStateOf("") }
     var showKey by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -362,6 +467,88 @@ private fun ApiKeyDialog(
     )
 }
 
+/**
+ * Inline saved-key chip on the Cloud option, mirroring the on-device "model
+ * ready" row: a peach pill showing the key masked as dots, an eye toggle to
+ * reveal it in place, and a trailing delete icon. Removing is the only edit —
+ * to change the key you remove it and add a fresh one.
+ */
+@Composable
+private fun SavedKeyRow(apiKey: String, onRequestRemove: () -> Unit) {
+    val haptic = rememberTapHaptic()
+    var showKey by remember { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFF8E6DA))
+            .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
+    ) {
+        Text(
+            text = "API key",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = if (showKey) apiKey else "•".repeat(apiKey.length.coerceAtMost(24)),
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(Modifier.width(8.dp))
+        IconButton(
+            onClick = { haptic(); showKey = !showKey },
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = if (showKey) Icons.Rounded.VisibilityOff
+                else Icons.Rounded.Visibility,
+                contentDescription = if (showKey) "Hide key" else "Show key",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        IconButton(
+            onClick = { haptic(); onRequestRemove() },
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.DeleteOutline,
+                contentDescription = "Remove key",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun RemoveKeyDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    val haptic = rememberTapHaptic()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remove the API key?") },
+        text = {
+            Text(
+                "This deletes your saved Groq key from this device. You'll need to " +
+                    "add a key again to use Cloud transcription."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { haptic(); onConfirm() }) {
+                Text("Remove", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { haptic(); onDismiss() }) { Text("Cancel") }
+        }
+    )
+}
+
 /** Returns a callback that fires a light tap vibration, matching keyboard haptics. */
 @Composable
 private fun rememberTapHaptic(): () -> Unit {
@@ -382,7 +569,7 @@ private fun SectionHeader(text: String) {
 
 @Composable
 private fun StepBadge(done: Boolean) {
-    val base = Modifier.size(24.dp).clip(CircleShape)
+    val base = Modifier.size(20.dp).clip(CircleShape)
     val styled = if (done) {
         base.background(successColor)
     } else {
@@ -394,7 +581,7 @@ private fun StepBadge(done: Boolean) {
             contentDescription = if (done) "Done" else "Not done",
             tint = if (done) onSuccessColor
             else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.size(15.dp)
+            modifier = Modifier.size(12.dp)
         )
     }
 }
@@ -403,9 +590,7 @@ private fun StepBadge(done: Boolean) {
 private fun StepRow(
     label: String,
     done: Boolean,
-    doneText: String,
     actionLabel: String,
-    showActionWhenDone: Boolean,
     onAction: () -> Unit
 ) {
     val haptic = rememberTapHaptic()
@@ -419,18 +604,18 @@ private fun StepRow(
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(label, fontWeight = FontWeight.Medium)
-            Text(
-                if (done) doneText else "Required",
-                fontSize = 12.sp,
-                color = if (done) successColor else MaterialTheme.colorScheme.error
-            )
+            // When done, the checkmark says it all — no "Granted/Enabled" subtext.
+            if (!done) {
+                Text(
+                    "Required",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
         }
         if (!done) {
             Spacer(Modifier.width(12.dp))
             Button(onClick = { haptic(); onAction() }) { Text(actionLabel) }
-        } else if (showActionWhenDone) {
-            Spacer(Modifier.width(12.dp))
-            OutlinedButton(onClick = { haptic(); onAction() }) { Text(actionLabel) }
         }
     }
 }
@@ -442,41 +627,68 @@ private fun TranscriptionCard(
     modelReady: Boolean,
     modelProgress: ParakeetModelManager.Progress?,
     onSelectEngine: (Engine) -> Unit,
-    onEditKey: () -> Unit,
-    onDownloadModel: () -> Unit
+    onAddKey: () -> Unit,
+    onRequestRemoveKey: () -> Unit,
+    onDownloadModel: () -> Unit,
+    onLearnMore: () -> Unit,
+    onRequestDeleteModel: () -> Unit
 ) {
     val haptic = rememberTapHaptic()
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        )
+    ) {
         EngineOption(
-            label = "Cloud (Groq)",
-            subtitle = "Fast, needs API key + internet",
+            label = "Cloud",
+            subtitle = "Fast, but needs internet",
             selected = engine == Engine.CLOUD,
             onSelect = { haptic(); onSelectEngine(Engine.CLOUD) }
         ) {
+            // The presence of the button is implicit enough — no "required" text.
             if (apiKey.isBlank()) {
-                Text(
-                    "API key required",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.error
-                )
-                Spacer(Modifier.height(10.dp))
-                Button(onClick = { haptic(); onEditKey() }) { Text("Add API key") }
+                Button(onClick = { haptic(); onAddKey() }) { Text("Add API key") }
             } else {
-                Text("Key saved", fontSize = 12.sp, color = successColor)
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(onClick = { haptic(); onEditKey() }) { Text("Edit key") }
+                SavedKeyRow(apiKey = apiKey, onRequestRemove = onRequestRemoveKey)
             }
         }
-        HorizontalDivider(modifier = Modifier.padding(start = 54.dp))
+        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
         EngineOption(
-            label = "On-device (Parakeet)",
-            subtitle = "Private, offline, English only",
+            label = "On-device",
+            subtitle = "A bit slower, but works offline",
             selected = engine == Engine.LOCAL,
             onSelect = { haptic(); onSelectEngine(Engine.LOCAL) }
         ) {
             when {
                 modelReady -> {
-                    Text("Model ready", fontSize = 12.sp, color = successColor)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF8E6DA))
+                            .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
+                    ) {
+                        Text(
+                            "Model downloaded and ready to use",
+                            fontSize = 12.sp,
+                            color = successColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { haptic(); onRequestDeleteModel() },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.DeleteOutline,
+                                contentDescription = "Delete model",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
                 modelProgress is ParakeetModelManager.Progress.Downloading -> {
                     Text("Downloading model…", fontSize = 12.sp)
@@ -498,24 +710,28 @@ private fun TranscriptionCard(
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
                 else -> {
-                    Text(
-                        "Download required",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                    // A failed attempt still shows why; the plain "required" text
+                    // is dropped — the download button is implicit enough.
                     if (modelProgress is ParakeetModelManager.Progress.Failed) {
                         Text(
                             modelProgress.message,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.error
                         )
+                        Spacer(Modifier.height(10.dp))
                     }
-                    Spacer(Modifier.height(10.dp))
                     Button(onClick = { haptic(); onDownloadModel() }) {
                         Text("Download model (~630 MB)")
                     }
                 }
             }
+        }
+        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+        TextButton(
+            onClick = { haptic(); onLearnMore() },
+            modifier = Modifier.padding(start = 8.dp)
+        ) {
+            Text("Learn more")
         }
     }
 }
@@ -537,11 +753,14 @@ private fun EngineOption(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onSelect() }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            // RadioButton reserves a 48dp touch target (≈14dp inset around the
+            // dot), so pull the row's left padding in to line the dot up with the
+            // device-setup badges at 16dp rather than floating ~14dp further right.
+            .padding(start = 4.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
         verticalAlignment = Alignment.Top
     ) {
         RadioButton(selected = selected, onClick = onSelect)
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(4.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(label, fontWeight = FontWeight.Medium)
             Text(
@@ -553,24 +772,6 @@ private fun EngineOption(
                 Spacer(Modifier.height(4.dp))
                 content()
             }
-        }
-    }
-}
-
-@Composable
-private fun CompletionBanner() {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = successColor.copy(alpha = 0.12f)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Setup complete", fontWeight = FontWeight.Bold, color = successColor)
-            Text(
-                "You're all good to start muttering.",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
@@ -629,7 +830,12 @@ private fun UpdatesCard(
     }
 
     val haptic = rememberTapHaptic()
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        )
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
