@@ -135,6 +135,7 @@ private fun SetupScreen(
     var showRemoveKey by remember { mutableStateOf(false) }
     var showEngineInfo by remember { mutableStateOf(false) }
     var showDeleteModel by remember { mutableStateOf(false) }
+    var showPrivacy by remember { mutableStateOf(false) }
     var hasMic by remember { mutableStateOf(false) }
     var imeEnabled by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
@@ -310,6 +311,17 @@ private fun SetupScreen(
                 onUpdate = { release -> startUpdate(release) },
                 onInstall = { file -> launchInstall(context, file) }
             )
+
+            Spacer(Modifier.height(24.dp))
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                TextButton(onClick = { showPrivacy = true }) {
+                    Text(
+                        "Privacy policy",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 
@@ -354,6 +366,38 @@ private fun SetupScreen(
             }
         )
     }
+
+    if (showPrivacy) {
+        PrivacyPolicyDialog(onDismiss = { showPrivacy = false })
+    }
+}
+
+@Composable
+private fun PrivacyPolicyDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Privacy policy") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    PRIVACY_POLICY_UPDATED,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    PRIVACY_POLICY_TEXT,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
 
 @Composable
