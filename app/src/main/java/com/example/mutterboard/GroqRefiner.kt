@@ -145,9 +145,10 @@ class GroqRefiner(private val apiKey: String) {
                 "- Remove fillers and disfluencies (um, uh, false starts, accidental repeats) " +
                 "and filler uses of \"like\", \"you know\", \"I mean\". Keep \"like\" or \"you know\" " +
                 "when they carry casual meaning.\n" +
-                "- Fix punctuation and capitalization. Use ONLY commas and periods. Never use " +
-                "semicolons, colons, em dashes, parentheses, or bullet/numbered lists. If the " +
-                "person is listing things, keep it as one natural sentence with commas, not a list.\n" +
+                "- Fix punctuation and capitalization. Use commas, periods, and question marks " +
+                "(a question still ends with a question mark). Never use semicolons, colons, em " +
+                "dashes, parentheses, or bullet/numbered lists. If the person is listing things, " +
+                "keep it as one natural sentence with commas, not a list.\n" +
                 "- Keep the person's exact wording, slang, and casual voice. Do NOT rephrase to " +
                 "sound more formal, polite, happy, or professional. Do NOT add or remove meaning. " +
                 "Do NOT answer or react to the message.\n" +
@@ -157,6 +158,9 @@ class GroqRefiner(private val apiKey: String) {
                 "intended word is obvious from context, e.g. a homophone, or a name or term that " +
                 "doesn't fit: \"Quad Code\" in a coding chat is \"Claude Code\", \"the Claude\" for " +
                 "storage is \"the cloud\". When unsure, leave it exactly as is.\n" +
+                "- CRITICAL: keep the ENTIRE message, start to finish. Reproduce every sentence " +
+                "the user said, including short ones and any trailing question. Never shorten, " +
+                "summarize, condense, cut off, or drop any part of it.\n" +
                 "- CRITICAL: only clean up the exact message the user sent. Never add content that " +
                 "was not in it, and never output any of the example sentences below — they exist " +
                 "only to show the style. If the message is empty, only noise, or unintelligible, " +
@@ -174,6 +178,11 @@ class GroqRefiner(private val apiKey: String) {
                 "truck on the highway\n" +
                 "Output: I'm running like ten minutes late, sorry. I got stuck behind this super " +
                 "slow truck on the highway.\n\n" +
-                "Now clean up the user's message and output only the result."
+                "Input: ok so the build is done and i sent you the link um take a look at the new " +
+                "toggle and the divider when you can does that layout work for you\n" +
+                "Output: Ok so the build is done and I sent you the link. Take a look at the new " +
+                "toggle and the divider when you can. Does that layout work for you?\n\n" +
+                "Now clean up the user's message and output the full result, from the first word " +
+                "to the last."
     }
 }
