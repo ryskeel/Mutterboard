@@ -17,6 +17,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -35,6 +36,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -48,7 +51,11 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.isSystemInDarkTheme
+import com.example.mutterboard.ui.theme.AccentContainerDark
+import com.example.mutterboard.ui.theme.AccentContainerLight
 import com.example.mutterboard.ui.theme.MutterboardTheme
+import com.example.mutterboard.ui.theme.OnAccentContainerDark
+import com.example.mutterboard.ui.theme.OnAccentContainerLight
 import com.example.mutterboard.ui.theme.OnSuccessDark
 import com.example.mutterboard.ui.theme.OnSuccessLight
 import com.example.mutterboard.ui.theme.SuccessDark
@@ -62,6 +69,10 @@ import org.json.JSONObject
 import java.io.File
 
 private const val REPO = "ryskeel/Mutterboard"
+
+// Vocabulary list collapses to this many rows of badges; a "Show more" toggle
+// reveals the rest. Keeps a long word list from dominating the settings screen.
+private const val VOCAB_COLLAPSED_ROWS = 3
 private val BrandFont = FontFamily(Font(R.font.montserrat_black, FontWeight.Black))
 
 // Theme-aware success accent (green = "ready/done"): lighter green on dark.
@@ -71,6 +82,14 @@ private val successColor: Color
 // Content color (e.g. a checkmark) drawn on top of successColor.
 private val onSuccessColor: Color
     @Composable get() = if (isSystemInDarkTheme()) OnSuccessDark else OnSuccessLight
+
+// Theme-aware peach "accent pill" (saved-key / model-ready chips, vocab badges):
+// peach with dark content on light, warm brown with light content on dark.
+private val accentContainerColor: Color
+    @Composable get() = if (isSystemInDarkTheme()) AccentContainerDark else AccentContainerLight
+
+private val onAccentContainerColor: Color
+    @Composable get() = if (isSystemInDarkTheme()) OnAccentContainerDark else OnAccentContainerLight
 
 private data class ReleaseInfo(val tag: String, val htmlUrl: String, val apkUrl: String?)
 
@@ -296,8 +315,9 @@ private fun SetupScreen(
             Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        )
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
                 StepRow(
                     label = "Microphone permission",
@@ -585,20 +605,20 @@ private fun SavedKeyRow(onRequestEdit: () -> Unit, onRequestRemove: () -> Unit) 
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFF8E6DA))
+            .background(accentContainerColor)
             .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
     ) {
         Icon(
             imageVector = Icons.Rounded.Check,
             contentDescription = null,
-            tint = Color.Black,
+            tint = onAccentContainerColor,
             modifier = Modifier.size(16.dp)
         )
         Spacer(Modifier.width(6.dp))
         Text(
             text = "API key saved",
             fontSize = 12.sp,
-            color = successColor,
+            color = onAccentContainerColor,
             modifier = Modifier.weight(1f)
         )
         Spacer(Modifier.width(8.dp))
@@ -609,7 +629,7 @@ private fun SavedKeyRow(onRequestEdit: () -> Unit, onRequestRemove: () -> Unit) 
             Icon(
                 imageVector = Icons.Rounded.Edit,
                 contentDescription = "Edit key",
-                tint = Color.Black,
+                tint = onAccentContainerColor,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -620,7 +640,7 @@ private fun SavedKeyRow(onRequestEdit: () -> Unit, onRequestRemove: () -> Unit) 
             Icon(
                 imageVector = Icons.Rounded.DeleteOutline,
                 contentDescription = "Remove key",
-                tint = Color.Black,
+                tint = onAccentContainerColor,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -665,7 +685,13 @@ private fun RefineRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
  * lives in its own section rather than under either engine. Added words show as
  * peach badges (matching the saved-key / model-ready rows); tapping the × removes.
  */
+// expandOrCollapseIndicator (and FlowRow's overflow param) are deprecated in
+// foundation 1.10 — the maintained replacement is maxLines + a hand-rolled
+// indicator, but that needs SubcomposeLayout-level overflow measurement. The
+// overflow API still works on the pinned BOM and reads cleanly, so we keep it
+// and revisit if a Compose upgrade removes it.
 @OptIn(ExperimentalLayoutApi::class)
+@Suppress("DEPRECATION")
 @Composable
 private fun VocabularyCard(
     words: List<String>,
@@ -673,15 +699,19 @@ private fun VocabularyCard(
     onRemove: (String) -> Unit
 ) {
     val haptic = rememberTapHaptic()
+    // Collapsed by default and reset on each entry into the screen (plain remember,
+    // so reopening the app starts collapsed again) to keep a long word list compact.
+    var expanded by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        )
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Text(
-                "Names or terms you want spelled your way.",
+                "Add words that Mutterboard should remember.",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -689,7 +719,18 @@ private fun VocabularyCard(
                 Spacer(Modifier.height(14.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    maxLines = if (expanded) Int.MAX_VALUE else VOCAB_COLLAPSED_ROWS,
+                    // Lets Compose handle overflow detection: the "See more" toggle
+                    // only appears when the list actually exceeds the row cap.
+                    overflow = FlowRowOverflow.expandOrCollapseIndicator(
+                        expandIndicator = {
+                            VocabExpandToggle("Show more") { haptic(); expanded = true }
+                        },
+                        collapseIndicator = {
+                            VocabExpandToggle("Show less") { haptic(); expanded = false }
+                        }
+                    )
                 ) {
                     words.forEach { word ->
                         WordBadge(word = word, onRemove = { haptic(); onRemove(word) })
@@ -702,6 +743,26 @@ private fun VocabularyCard(
     }
 }
 
+/**
+ * The "Show more" / "Show less" control that sits inline at the end of the
+ * vocabulary badges, styled as a text link rather than a badge so it reads as an
+ * action. Shown by [VocabularyCard]'s FlowRow overflow only when the list
+ * actually exceeds [VOCAB_COLLAPSED_ROWS].
+ */
+@Composable
+private fun VocabExpandToggle(label: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = MaterialTheme.colorScheme.primary,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    )
+}
+
 /** A single custom word as a peach badge with a × to remove it. */
 @Composable
 private fun WordBadge(word: String, onRemove: () -> Unit) {
@@ -709,15 +770,15 @@ private fun WordBadge(word: String, onRemove: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFF8E6DA))
+            .background(accentContainerColor)
             .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
     ) {
-        Text(word, fontSize = 13.sp, color = Color.Black)
+        Text(word, fontSize = 13.sp, color = onAccentContainerColor)
         IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)) {
             Icon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = "Remove $word",
-                tint = Color.Black,
+                tint = onAccentContainerColor,
                 modifier = Modifier.size(16.dp)
             )
         }
@@ -728,25 +789,24 @@ private fun WordBadge(word: String, onRemove: () -> Unit) {
 private fun AddWordDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
     val haptic = rememberTapHaptic()
     var draft by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+
+    // Open straight into a focused, keyboard-up state so adding a word is a single
+    // tap-then-type instead of tap-then-tap-the-field.
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add a word") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "Enter a name, brand, or term you want spelled a certain way — " +
-                        "like a person's name or an app you mention often.",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
+            )
         },
         confirmButton = {
             TextButton(
@@ -873,8 +933,9 @@ private fun TranscriptionCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        )
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         EngineOption(
             label = "Cloud",
@@ -908,20 +969,20 @@ private fun TranscriptionCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFF8E6DA))
+                            .background(accentContainerColor)
                             .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Check,
                             contentDescription = null,
-                            tint = Color.Black,
+                            tint = onAccentContainerColor,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             "Model downloaded",
                             fontSize = 12.sp,
-                            color = successColor,
+                            color = onAccentContainerColor,
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -932,7 +993,7 @@ private fun TranscriptionCard(
                             Icon(
                                 imageVector = Icons.Rounded.DeleteOutline,
                                 contentDescription = "Delete model",
-                                tint = Color.Black,
+                                tint = onAccentContainerColor,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -1081,8 +1142,9 @@ private fun UpdatesCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        )
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
             modifier = Modifier

@@ -78,3 +78,13 @@ val SuccessLight = Color(0xFF1A1A1A)
 val OnSuccessLight = Color(0xFFFFFFFF)
 val SuccessDark = Color(0xFFE6E6E6)
 val OnSuccessDark = Color(0xFF1A1A1A)
+
+// Peach "accent pill" used for confirmation chips and vocabulary badges
+// (API-key-saved, model-downloaded, custom-word tags). The light peach was
+// previously hardcoded with black content, which left it bright and its text
+// invisible in dark mode; these theme-aware pairs swap to a warm brown pill with
+// light peach content on dark. Used directly in MainActivity.
+val AccentContainerLight = Color(0xFFF8E6DA)   // peach pill
+val OnAccentContainerLight = Color(0xFF1A1A1A) // near-black content
+val AccentContainerDark = Color(0xFF5D4033)    // warm brown pill, lifts off cards
+val OnAccentContainerDark = Color(0xFFFFDBCF)  // light peach content
