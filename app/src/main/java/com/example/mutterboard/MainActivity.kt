@@ -737,7 +737,10 @@ private fun TranscriptionCard(
                 Button(onClick = { haptic(); onAddKey() }) { Text("Add API key") }
             } else {
                 SavedKeyRow(onRequestEdit = onAddKey, onRequestRemove = onRequestRemoveKey)
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(8.dp))
+                // Separator so the refine toggle reads as an added layer on top
+                // of cloud transcription, not part of the API-key setup above.
+                HorizontalDivider()
                 RefineRow(enabled = refineEnabled, onToggle = onToggleRefine)
             }
         }
