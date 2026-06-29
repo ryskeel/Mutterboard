@@ -125,9 +125,12 @@ class GroqRefiner(private val apiKey: String) {
     }
 
     companion object {
-        // Fast and cheap — the right default for a keyboard where the refine
-        // pass adds a second network round-trip on top of transcription.
-        private const val MODEL = "llama-3.1-8b-instant"
+        // llama-3.1-8b-instant was too lossy on longer dictations — even with an
+        // explicit "reproduce the whole message" rule it dropped trailing
+        // sentences. The 70b is far more faithful and is still fast on Groq
+        // (~280 tok/s); the refine output is short, so the latency cost over the
+        // 8b is a fraction of a second — well worth it for not mangling messages.
+        private const val MODEL = "llama-3.3-70b-versatile"
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
         // The examples are embedded here as labeled Input/Output pairs (see the
