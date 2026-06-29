@@ -84,8 +84,15 @@ class GroqRefiner(private val apiKey: String) {
     }
 
     fun close() {
-        client.dispatcher.executorService.shutdown()
-        client.connectionPool.evictAll()
+        // evictAll() flushes and closes pooled TLS sockets — that's network I/O,
+        // and close() is called from the IME's onDestroy()/refresh on the MAIN
+        // thread, where StrictMode throws NetworkOnMainThreadException and takes
+        // the whole process down. Tear the client down on a background thread.
+        val doomed = client
+        Thread {
+            doomed.dispatcher.executorService.shutdown()
+            doomed.connectionPool.evictAll()
+        }.start()
     }
 
     private fun message(role: String, content: String): JSONObject =
