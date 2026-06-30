@@ -685,7 +685,7 @@ private fun RefineRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
  * lives in its own section rather than under either engine. Added words show as
  * peach badges (matching the saved-key / model-ready rows); tapping the × removes.
  */
-// expandOrCollapseIndicator (and FlowRow's overflow param) are deprecated in
+// FlowRow's overflow param (and the expandIndicator factory) are deprecated in
 // foundation 1.10 — the maintained replacement is maxLines + a hand-rolled
 // indicator, but that needs SubcomposeLayout-level overflow measurement. The
 // overflow API still works on the pinned BOM and reads cleanly, so we keep it
@@ -702,6 +702,12 @@ private fun VocabularyCard(
     // Collapsed by default and reset on each entry into the screen (plain remember,
     // so reopening the app starts collapsed again) to keep a long word list compact.
     var expanded by remember { mutableStateOf(false) }
+    // Whether the collapsed list ever actually overflowed VOCAB_COLLAPSED_ROWS. We
+    // only know this when the expand indicator composes (it only renders on real
+    // overflow), so latch it. Without this gate, the FlowRow shows "Show less"
+    // whenever expanded — even when the whole list fits and there's nothing to
+    // collapse, making the toggle look broken.
+    var overflowed by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -721,20 +727,23 @@ private fun VocabularyCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     maxLines = if (expanded) Int.MAX_VALUE else VOCAB_COLLAPSED_ROWS,
-                    // Lets Compose handle overflow detection: the "See more" toggle
-                    // only appears when the list actually exceeds the row cap.
-                    overflow = FlowRowOverflow.expandOrCollapseIndicator(
-                        expandIndicator = {
-                            VocabExpandToggle("Show more") { haptic(); expanded = true }
-                        },
-                        collapseIndicator = {
-                            VocabExpandToggle("Show less") { haptic(); expanded = false }
-                        }
-                    )
+                    // Only the expand side is driven by FlowRow overflow: this
+                    // indicator composes solely when the list exceeds the row cap,
+                    // so it both shows "Show more" and latches that there's really
+                    // something to collapse. "Show less" is rendered separately
+                    // below, gated on that latch, so it never appears when the
+                    // whole list already fits.
+                    overflow = FlowRowOverflow.expandIndicator {
+                        SideEffect { overflowed = true }
+                        VocabExpandToggle("Show more") { haptic(); expanded = true }
+                    }
                 ) {
                     words.forEach { word ->
                         WordBadge(word = word, onRemove = { haptic(); onRemove(word) })
                     }
+                }
+                if (expanded && overflowed) {
+                    VocabExpandToggle("Show less") { haptic(); expanded = false }
                 }
             }
             Spacer(Modifier.height(14.dp))
