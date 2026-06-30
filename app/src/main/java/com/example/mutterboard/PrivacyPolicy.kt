@@ -5,7 +5,7 @@ package com.example.mutterboard
  * sync with PRIVACY.md at the repo root (which doubles as the public policy URL
  * required for a Play Store listing). When you change one, change the other.
  */
-const val PRIVACY_POLICY_UPDATED = "Last updated: 28 June 2026"
+const val PRIVACY_POLICY_UPDATED = "Last updated: 30 June 2026"
 
 const val PRIVACY_POLICY_TEXT = """Mutterboard is a voice keyboard: it turns your speech into text and inserts that text into whatever app you are using. In short: Mutterboard has no accounts, no analytics, no advertising, and no third-party tracking.
 
@@ -19,13 +19,16 @@ Mutterboard records audio only while you are actively dictating. It does not lis
 In both modes, the recording is written to a temporary file in the app's private cache only for as long as it takes to transcribe, and is deleted immediately afterward.
 
 YOUR TRANSCRIBED TEXT AND WHAT YOU TYPE
-The transcribed text is inserted into the app you are typing in. Mutterboard does not store, log, or transmit your transcribed text anywhere. As a keyboard, Mutterboard does not capture your keystrokes and does not read the existing contents of the text fields you use it in.
+The transcribed text is inserted into the app you are typing in. Mutterboard does not store or log your transcribed text, and does not transmit it anywhere except in the one case described under "LLM Enhanced" below. As a keyboard, Mutterboard does not capture your keystrokes and does not read the existing contents of the text fields you use it in.
+
+LLM ENHANCED (OPTIONAL)
+"LLM Enhanced" is an optional setting for Cloud mode, off by default. When you turn it on, your transcribed text is sent over an encrypted (HTTPS) connection to Groq (api.groq.com) to be lightly cleaned up by an AI language model before it is typed out. Your Groq API key is sent with the request to authenticate it. Groq's handling of that text is governed by Groq's own privacy policy at groq.com/privacy-policy. Mutterboard does not keep a copy of the text after the cleanup, and when this setting is off your transcribed text is never sent anywhere.
 
 YOUR GROQ API KEY
 If you use Cloud mode, your Groq API key is stored locally on your device in the app's private storage. It is only ever transmitted to Groq, and only to authenticate your transcription requests. It is never sent anywhere else.
 
 NETWORK CONNECTIONS
-Mutterboard makes network connections only for: (1) cloud transcription — sending audio to Groq, in Cloud mode only; (2) checking for app updates from GitHub; and (3) a one-time speech-model download from GitHub if you enable On-device mode. These requests carry no personal information beyond what is described above.
+Mutterboard makes network connections only for: (1) cloud transcription — sending audio to Groq, in Cloud mode only; (2) the LLM Enhanced cleanup step — sending your transcribed text to Groq, only when you have turned that setting on; (3) checking for app updates from GitHub; and (4) a one-time speech-model download from GitHub if you enable On-device mode. These requests carry no personal information beyond what is described above.
 
 ANALYTICS, ADVERTISING, AND TRACKING
 There are none. Mutterboard contains no analytics, crash-reporting, advertising, or third-party tracking SDKs.

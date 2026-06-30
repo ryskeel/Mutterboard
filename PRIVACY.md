@@ -1,6 +1,6 @@
 # Mutterboard Privacy Policy
 
-_Last updated: 28 June 2026_
+_Last updated: 30 June 2026_
 
 Mutterboard is a voice keyboard: it turns your speech into text and inserts that
 text into whatever app you are using. This policy explains exactly what the app
@@ -31,9 +31,21 @@ afterward.
 ## Your transcribed text and what you type
 
 The transcribed text is inserted into the app you are typing in. Mutterboard does
-**not** store, log, or transmit your transcribed text anywhere. As a keyboard,
-Mutterboard does **not** capture your keystrokes and does **not** read the
-existing contents of the text fields you use it in.
+**not** store or log your transcribed text, and does **not** transmit it anywhere
+except in the one case described under [LLM Enhanced](#llm-enhanced-optional)
+below. As a keyboard, Mutterboard does **not** capture your keystrokes and does
+**not** read the existing contents of the text fields you use it in.
+
+## LLM Enhanced (optional)
+
+**LLM Enhanced** is an optional setting for Cloud mode, **off by default**. When
+you turn it on, your transcribed text is sent over an encrypted (HTTPS) connection
+to **Groq** (`api.groq.com`) to be lightly cleaned up by an AI language model
+before it is typed out. Your Groq API key is sent with the request to authenticate
+it. Groq's handling of that text is governed by Groq's own privacy policy:
+<https://groq.com/privacy-policy/>. Mutterboard does not keep a copy of the text
+after the cleanup, and when this setting is off your transcribed text is **never**
+sent anywhere.
 
 ## Your Groq API key
 
@@ -47,8 +59,10 @@ never collected by the app's developer.
 Mutterboard makes network connections only for:
 
 1. **Cloud transcription** — sending audio to Groq (Cloud mode only).
-2. **Checking for app updates** — a request to GitHub for the latest release.
-3. **One‑time model download** — if you enable On‑device mode, the speech model is
+2. **LLM Enhanced cleanup** — sending your transcribed text to Groq, only when you
+   have turned that setting on.
+3. **Checking for app updates** — a request to GitHub for the latest release.
+4. **One‑time model download** — if you enable On‑device mode, the speech model is
    downloaded once from GitHub.
 
 These requests carry no personal information beyond what is described above.

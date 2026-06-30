@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
@@ -36,8 +37,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -48,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -70,9 +70,6 @@ import java.io.File
 
 private const val REPO = "ryskeel/Mutterboard"
 
-// Vocabulary list collapses to this many rows of badges; a "Show more" toggle
-// reveals the rest. Keeps a long word list from dominating the settings screen.
-private const val VOCAB_COLLAPSED_ROWS = 3
 private val BrandFont = FontFamily(Font(R.font.montserrat_black, FontWeight.Black))
 
 // Theme-aware success accent (green = "ready/done"): lighter green on dark.
@@ -207,25 +204,13 @@ private fun SetupScreen(
             )
         )
     }
-    var showAddWord by remember { mutableStateOf(false) }
+    var showVocabEditor by remember { mutableStateOf(false) }
 
     fun saveCustomWords(words: List<String>) {
         customWords = words
         prefs.edit()
             .putString(MutterboardInputMethodService.KEY_CUSTOM_WORDS, words.joinToString("\n"))
             .apply()
-    }
-
-    fun addCustomWord(word: String) {
-        val cleaned = word.trim()
-        if (cleaned.isEmpty()) return
-        // Case-insensitive de-dupe so "Mutterboard" and "mutterboard" don't both stick.
-        if (customWords.any { it.equals(cleaned, ignoreCase = true) }) return
-        saveCustomWords(customWords + cleaned)
-    }
-
-    fun removeCustomWord(word: String) {
-        saveCustomWords(customWords.filterNot { it == word })
     }
 
     fun downloadModel() {
@@ -368,8 +353,7 @@ private fun SetupScreen(
             Spacer(Modifier.height(12.dp))
             VocabularyCard(
                 words = customWords,
-                onAdd = { showAddWord = true },
-                onRemove = { removeCustomWord(it) }
+                onEdit = { showVocabEditor = true }
             )
 
             Spacer(Modifier.height(40.dp))
@@ -459,12 +443,13 @@ private fun SetupScreen(
         PrivacyPolicyDialog(onDismiss = { showPrivacy = false })
     }
 
-    if (showAddWord) {
-        AddWordDialog(
-            onDismiss = { showAddWord = false },
-            onAdd = { word ->
-                addCustomWord(word)
-                showAddWord = false
+    if (showVocabEditor) {
+        VocabularyEditSheet(
+            initialWords = customWords,
+            onClose = { showVocabEditor = false },
+            onSave = { words ->
+                saveCustomWords(words)
+                showVocabEditor = false
             }
         )
     }
@@ -543,6 +528,20 @@ private fun EngineInfoDialog(onDismiss: () -> Unit) {
                             "Parakeet model. It works offline and your audio never " +
                             "leaves the device, but it's a bit slower, English-only, " +
                             "and needs a one-time ~630 MB model download.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("LLM Enhanced", fontWeight = FontWeight.Bold)
+                    Text(
+                        "An optional extra step for Cloud mode. After your speech is " +
+                            "transcribed, the text is passed through a small cloud " +
+                            "language model that smooths out the wording, tidying " +
+                            "phrasing and punctuation so it reads more naturally " +
+                            "before it's typed out. It keeps what you meant, just " +
+                            "polished. Needs an internet connection and adds a moment " +
+                            "of delay.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -682,9 +681,9 @@ private fun RefineRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
             .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("Polish my text", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            Text("LLM Enhanced", fontWeight = FontWeight.Medium, fontSize = 14.sp)
             Text(
-                "Fixes small slips so messages come out cleaner. Slightly slower.",
+                "Cleans up dictated text.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -723,7 +722,7 @@ private fun ShakeToStopCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("Shake to stop", fontWeight = FontWeight.Medium, fontSize = 14.sp)
                 Text(
-                    "While recording, a quick flick of the phone stops and transcribes — like tapping Stop.",
+                    "Once you've started speaking, a quick flick of the phone stops and transcribes — like tapping Stop.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -738,34 +737,19 @@ private fun ShakeToStopCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
 }
 
 /**
- * Custom vocabulary editor. The word list applies to both engines (it's fed to
+ * Custom vocabulary summary. The word list applies to both engines (it's fed to
  * Whisper as a prompt on Cloud and fuzzy-matched against output on-device), so it
- * lives in its own section rather than under either engine. Added words show as
- * peach badges (matching the saved-key / model-ready rows); tapping the × removes.
+ * lives in its own section rather than under either engine. Rather than editing
+ * inline — where it was too easy to tap a word and delete it by accident — the
+ * card shows a compact peach summary pill (matching the saved-key / model-ready
+ * rows) with an edit icon; tapping it opens [VocabularyEditSheet] to make changes.
  */
-// FlowRow's overflow param (and the expandIndicator factory) are deprecated in
-// foundation 1.10 — the maintained replacement is maxLines + a hand-rolled
-// indicator, but that needs SubcomposeLayout-level overflow measurement. The
-// overflow API still works on the pinned BOM and reads cleanly, so we keep it
-// and revisit if a Compose upgrade removes it.
-@OptIn(ExperimentalLayoutApi::class)
-@Suppress("DEPRECATION")
 @Composable
 private fun VocabularyCard(
     words: List<String>,
-    onAdd: () -> Unit,
-    onRemove: (String) -> Unit
+    onEdit: () -> Unit
 ) {
     val haptic = rememberTapHaptic()
-    // Collapsed by default and reset on each entry into the screen (plain remember,
-    // so reopening the app starts collapsed again) to keep a long word list compact.
-    var expanded by remember { mutableStateOf(false) }
-    // Whether the collapsed list ever actually overflowed VOCAB_COLLAPSED_ROWS. We
-    // only know this when the expand indicator composes (it only renders on real
-    // overflow), so latch it. Without this gate, the FlowRow shows "Show less"
-    // whenever expanded — even when the whole list fits and there's nothing to
-    // collapse, making the toggle look broken.
-    var overflowed by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -779,55 +763,49 @@ private fun VocabularyCard(
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (words.isNotEmpty()) {
-                Spacer(Modifier.height(14.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    maxLines = if (expanded) Int.MAX_VALUE else VOCAB_COLLAPSED_ROWS,
-                    // Only the expand side is driven by FlowRow overflow: this
-                    // indicator composes solely when the list exceeds the row cap,
-                    // so it both shows "Show more" and latches that there's really
-                    // something to collapse. "Show less" is rendered separately
-                    // below, gated on that latch, so it never appears when the
-                    // whole list already fits.
-                    overflow = FlowRowOverflow.expandIndicator {
-                        SideEffect { overflowed = true }
-                        VocabExpandToggle("Show more") { haptic(); expanded = true }
-                    }
+            Spacer(Modifier.height(14.dp))
+            if (words.isEmpty()) {
+                Button(onClick = { haptic(); onEdit() }) { Text("Add words") }
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { haptic(); onEdit() }
+                        .background(accentContainerColor)
+                        .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
                 ) {
-                    words.forEach { word ->
-                        WordBadge(word = word, onRemove = { haptic(); onRemove(word) })
-                    }
-                }
-                if (expanded && overflowed) {
-                    VocabExpandToggle("Show less") { haptic(); expanded = false }
+                    Text(
+                        text = vocabSummary(words),
+                        fontSize = 13.sp,
+                        color = onAccentContainerColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Rounded.Edit,
+                        contentDescription = "Edit words",
+                        tint = onAccentContainerColor,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
-            Spacer(Modifier.height(14.dp))
-            Button(onClick = { haptic(); onAdd() }) { Text("Add word") }
         }
     }
 }
 
 /**
- * The "Show more" / "Show less" control that sits inline at the end of the
- * vocabulary badges, styled as a text link rather than a badge so it reads as an
- * action. Shown by [VocabularyCard]'s FlowRow overflow only when the list
- * actually exceeds [VOCAB_COLLAPSED_ROWS].
+ * Builds the one-line vocabulary summary shown on the card: the first few words
+ * followed by a "+N more" count, e.g. "Mutterboard, Groq, Parakeet, +5 more".
  */
-@Composable
-private fun VocabExpandToggle(label: String, onClick: () -> Unit) {
-    Text(
-        text = label,
-        color = MaterialTheme.colorScheme.primary,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    )
+private fun vocabSummary(words: List<String>): String {
+    // Newest first: stored order is oldest-first, so reverse before taking the head.
+    val shown = words.asReversed().take(3)
+    val rest = words.size - shown.size
+    return shown.joinToString(", ") + if (rest > 0) ", +$rest more" else ""
 }
 
 /** A single custom word as a peach badge with a × to remove it. */
@@ -852,39 +830,181 @@ private fun WordBadge(word: String, onRemove: () -> Unit) {
     }
 }
 
+/**
+ * Vocabulary editor, presented as a [ModalBottomSheet]. The sheet handles its own
+ * window, insets, edge-to-edge bars, and back dispatch, so the back gesture/button
+ * dismisses it cleanly without the per-version system-bar fights a stretched dialog
+ * ran into. It rises over a scrim with rounded top corners, stopping short of the
+ * status bar. Edits touch only a local copy of the word list — nothing persists
+ * until Save — so an accidental tap (the reason inline editing was dropped) is never
+ * destructive, and leaving with unsaved changes prompts a discard confirmation.
+ */
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun AddWordDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
+private fun VocabularyEditSheet(
+    initialWords: List<String>,
+    onClose: () -> Unit,
+    onSave: (List<String>) -> Unit
+) {
     val haptic = rememberTapHaptic()
+    val scope = rememberCoroutineScope()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var words by remember { mutableStateOf(initialWords) }
     var draft by remember { mutableStateOf("") }
-    val focusRequester = remember { FocusRequester() }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
 
-    // Open straight into a focused, keyboard-up state so adding a word is a single
-    // tap-then-type instead of tap-then-tap-the-field.
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    val dirty = words != initialWords
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add a word") },
-        text = {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                singleLine = true,
+    // Animate the sheet down, then run [after] once it's actually hidden.
+    fun dismissSheet(after: () -> Unit) {
+        scope.launch { sheetState.hide() }.invokeOnCompletion {
+            if (!sheetState.isVisible) after()
+        }
+    }
+
+    // Every exit route (back arrow, system back, swipe-down, scrim tap) funnels
+    // here. With unsaved edits we confirm first; the dismiss gestures hide the sheet
+    // before calling this, so re-show it so the discard dialog reads over the sheet
+    // rather than over an empty screen.
+    fun attemptClose() {
+        if (dirty) {
+            showDiscardConfirm = true
+            if (!sheetState.isVisible) scope.launch { sheetState.show() }
+        } else {
+            dismissSheet(onClose)
+        }
+    }
+
+    fun addDraft() {
+        val cleaned = draft.trim()
+        if (cleaned.isEmpty()) return
+        // Case-insensitive de-dupe so "Mutterboard" and "mutterboard" don't both stick.
+        // Stored in insertion order (oldest first); the list is reversed at display
+        // time so the newest word shows at the top.
+        if (words.none { it.equals(cleaned, ignoreCase = true) }) {
+            words = words + cleaned
+        }
+        draft = ""
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = { attemptClose() },
+        sheetState = sheetState,
+        containerColor = accentContainerColor,
+        dragHandle = null
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 16.dp)
+                .imePadding()
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { haptic(); attemptClose() },
+                    modifier = Modifier.offset(x = (-12).dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        tint = onAccentContainerColor
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { haptic(); dismissSheet { onSave(words) } }) {
+                    Text("Save", color = onAccentContainerColor, fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Custom words",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = onAccentContainerColor
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Add names, jargon, or brands you want Mutterboard to get right.",
+                fontSize = 13.sp,
+                color = onAccentContainerColor.copy(alpha = 0.8f)
+            )
+            Spacer(Modifier.height(16.dp))
+
+            // White card holding the badges. It's the flexible row (weight, fill =
+            // false) so it grows with the word count up to a cap, but yields space —
+            // shrinking and scrolling internally — when the keyboard is up, instead
+            // of crushing the fixed input row below it.
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .focusRequester(focusRequester)
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { haptic(); onAdd(draft) },
-                enabled = draft.isNotBlank()
-            ) { Text("Add") }
-        },
-        dismissButton = {
-            TextButton(onClick = { haptic(); onDismiss() }) { Text("Cancel") }
+                    .weight(1f, fill = false)
+                    .heightIn(min = 140.dp, max = 420.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(16.dp)
+            ) {
+                if (words.isEmpty()) {
+                    Text(
+                        "No words yet.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        // Newest first: stored oldest-first, shown reversed.
+                        words.asReversed().forEach { word ->
+                            WordBadge(
+                                word = word,
+                                onRemove = { haptic(); words = words.filterNot { it == word } }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    placeholder = { Text("Add a word") },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = { haptic(); addDraft() },
+                    enabled = draft.isNotBlank()
+                ) { Text("Add") }
+            }
         }
-    )
+    }
+
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text("Discard changes?") },
+            text = { Text("You've added or removed words without saving. Leave anyway?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    haptic(); showDiscardConfirm = false; dismissSheet(onClose)
+                }) {
+                    Text("Discard", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { haptic(); showDiscardConfirm = false }) { Text("Keep editing") }
+            }
+        )
+    }
 }
 
 @Composable

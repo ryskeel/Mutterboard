@@ -74,13 +74,16 @@ class ShakeDetector(private val onShake: () -> Unit) : SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     private companion object {
-        // Still a flick, not a vigorous shake, but tightened so walking/footstep
-        // jostling doesn't trip it: footsteps rarely clear ~1.9g, and the shorter
-        // window means the two peaks must come in quick succession (a flick's
-        // out-and-back) rather than at a walking step cadence (~0.5s apart).
-        const val SHAKE_G_FORCE = 1.9f
-        const val SHAKE_G_FORCE_RESET = 1.5f
-        const val REQUIRED_PEAKS = 2
-        const val WINDOW_MS = 500L
+        // Tuned for a single quick whip of the phone, not a back-and-forth shake.
+        // Earlier versions required two peaks (an out-and-back) which is what made
+        // the gesture feel like you had to shake hard and repeatedly; one peak fires
+        // on the first forward whip, so a light flick is enough. The caller only
+        // acts on it once speech has actually been detected (you have to "talk to
+        // shake"), so a single low threshold won't trip from incidental handling
+        // before dictation. WINDOW_MS is unused at one peak but kept for clarity.
+        const val SHAKE_G_FORCE = 1.7f
+        const val SHAKE_G_FORCE_RESET = 1.3f
+        const val REQUIRED_PEAKS = 1
+        const val WINDOW_MS = 600L
     }
 }

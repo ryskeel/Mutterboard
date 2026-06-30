@@ -46,6 +46,10 @@ class MutterboardInputMethodService : InputMethodService() {
 
     private var shakeToStop: Boolean = false
     private val shakeDetector by lazy { ShakeDetector { onShakeDetected() } }
+    // Latched true once the recording's level crosses a speech threshold. Gates
+    // shake-to-stop so a shake only counts after the user has actually started
+    // talking ("talk to shake") — before that, a too-eager flick is ignored.
+    private var speechDetected: Boolean = false
 
     override fun onCreate() {
         super.onCreate()
@@ -184,6 +188,7 @@ class MutterboardInputMethodService : InputMethodService() {
         }
         if (recorder.start()) {
             state = State.RECORDING
+            speechDetected = false
             renderState()
             startWaveform()
             // Shake-to-stop is live only while recording, so a shake can never
@@ -215,10 +220,12 @@ class MutterboardInputMethodService : InputMethodService() {
     /**
      * A shake fired while recording: treat it exactly like tapping Stop. Guarded
      * on RECORDING so a late callback (e.g. a shake mid-transcription) is ignored,
-     * and given a firmer haptic than a tap so the gesture is felt as confirmed.
+     * and on [speechDetected] so the gesture only fires after the user has actually
+     * started talking — you have to "talk to shake." Given a firmer haptic than a
+     * tap so the gesture is felt as confirmed.
      */
     private fun onShakeDetected() {
-        if (state != State.RECORDING) return
+        if (state != State.RECORDING || !speechDetected) return
         keyboardView?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         stopAndTranscribe()
     }
@@ -329,6 +336,10 @@ class MutterboardInputMethodService : InputMethodService() {
                 // Apply gain plus a sqrt (compressive) curve so quiet and normal
                 // speech register strongly while loud speech still has headroom.
                 val normalized = recorder.currentPeak() / 32767f
+                // Latch once the level clears the speech threshold; this is what
+                // arms shake-to-stop ("talk to shake"). We read it here because the
+                // animator already polls the peak every tick while recording.
+                if (normalized >= SPEECH_PEAK_THRESHOLD) speechDetected = true
                 val level = sqrt((normalized * WAVEFORM_GAIN).coerceIn(0f, 1f))
                 view.setLevel(level)
                 mainHandler.postDelayed(this, WAVEFORM_INTERVAL_MS)
@@ -447,5 +458,10 @@ class MutterboardInputMethodService : InputMethodService() {
         // Gain applied before the sqrt curve; ~0.25 normalized peak saturates
         // the bars, so normal speaking volume drives them near full height.
         private const val WAVEFORM_GAIN = 4f
+        // Normalized peak (0..1) the recording must clear for us to count it as
+        // "the user has started speaking" and arm shake-to-stop. Low enough that
+        // ordinary speaking volume trips it quickly, high enough to ignore room
+        // tone and quiet handling noise.
+        private const val SPEECH_PEAK_THRESHOLD = 0.06f
     }
 }
