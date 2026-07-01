@@ -84,6 +84,9 @@ android {
     }
     buildFeatures {
         compose = true
+        // Needed for BuildConfig.DEBUG, which gates the refiner's raw->refined
+        // diff logging so user message text is only ever logged in debug builds.
+        buildConfig = true
     }
 }
 
