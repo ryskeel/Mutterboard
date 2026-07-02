@@ -179,15 +179,6 @@ private fun SetupScreen(
         prefs.edit().putString(MutterboardInputMethodService.KEY_ENGINE, newEngine.prefValue).apply()
     }
 
-    var refineEnabled by remember {
-        mutableStateOf(prefs.getBoolean(MutterboardInputMethodService.KEY_REFINE, false))
-    }
-
-    fun setRefine(enabled: Boolean) {
-        refineEnabled = enabled
-        prefs.edit().putBoolean(MutterboardInputMethodService.KEY_REFINE, enabled).apply()
-    }
-
     var customWords by remember {
         mutableStateOf(
             MutterboardInputMethodService.parseCustomWords(
@@ -328,8 +319,6 @@ private fun SetupScreen(
                 apiKey = apiKey,
                 modelReady = modelReady,
                 modelProgress = modelProgress,
-                refineEnabled = refineEnabled,
-                onToggleRefine = { setRefine(it) },
                 onSelectEngine = { selectEngine(it) },
                 onAddKey = { showKeyDialog = true },
                 onRequestRemoveKey = { showRemoveKey = true },
@@ -474,7 +463,7 @@ private fun DeleteModelDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
         text = {
             Text(
                 "This removes the on-device model and frees up about 630 MB. " +
-                    "You'll switch to the Cloud option until you download it again."
+                    "You'll switch to the Default option until you download it again."
             )
         },
         confirmButton = {
@@ -494,30 +483,28 @@ private fun EngineInfoDialog(onDismiss: () -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Cloud", fontWeight = FontWeight.Bold)
+                    Text("Default", fontWeight = FontWeight.Bold)
                     Text(
-                        "Your recording is sent to Groq and transcribed with OpenAI's " +
-                            "Whisper Large v3 Turbo model. Very fast and accurate, but " +
-                            "it needs an internet connection and a free Groq API key.",
+                        "Everything runs over an encrypted connection to Groq's servers. " +
+                            "Your recording is sent there, transcribed by OpenAI's Whisper " +
+                            "Large v3 model, then passed through Meta's Llama 3.3 model to " +
+                            "tidy up the phrasing and punctuation. The finished text " +
+                            "is sent right back to your phone.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "Mutterboard never saves your recordings. Each one lives only in " +
+                            "a temporary file while it's being transcribed, and is deleted " +
+                            "the moment it's done, so nothing is kept afterward. No accounts, " +
+                            "no analytics, no tracking. You just need an internet " +
+                            "connection and a free Groq API key.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Polish my text", fontWeight = FontWeight.Bold)
-                    Text(
-                        "An optional extra step for Cloud mode. After Whisper " +
-                            "transcribes your speech, the text is passed through Meta's " +
-                            "Llama 3.3 70B model (also on Groq), which tidies up the " +
-                            "phrasing and punctuation so it reads more naturally before " +
-                            "it's typed out. It keeps what you meant, just polished. " +
-                            "Needs an internet connection and adds a moment of delay.",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("On-device", fontWeight = FontWeight.Bold)
+                    Text("Offline", fontWeight = FontWeight.Bold)
                     Text(
                         "Transcription runs entirely on your phone using NVIDIA's " +
                             "Parakeet model. It works offline and your audio never " +
@@ -642,38 +629,6 @@ private fun SavedKeyRow(onRequestEdit: () -> Unit, onRequestRemove: () -> Unit) 
                 modifier = Modifier.size(20.dp)
             )
         }
-    }
-}
-
-/**
- * Cloud-only toggle for the post-transcription AI cleanup pass. Sits under the
- * saved-key row because it's an enhancement to Cloud dictation, not a separate
- * engine. Off by default; flipping it just writes the pref the IME reads.
- */
-@Composable
-private fun RefineRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
-    val haptic = rememberTapHaptic()
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { haptic(); onToggle(!enabled) }
-            .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Polish my text", fontWeight = FontWeight.Medium, fontSize = 14.sp)
-            Text(
-                "(Recommended) cleans up dictation for best output.",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        Switch(
-            checked = enabled,
-            onCheckedChange = { haptic(); onToggle(it) }
-        )
     }
 }
 
@@ -957,7 +912,7 @@ private fun RemoveKeyDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
         text = {
             Text(
                 "This deletes your saved Groq key from this device. You'll need to " +
-                    "add a key again to use Cloud transcription."
+                    "add a key again to use Default transcription."
             )
         },
         confirmButton = {
@@ -1048,8 +1003,6 @@ private fun TranscriptionCard(
     apiKey: String,
     modelReady: Boolean,
     modelProgress: ParakeetModelManager.Progress?,
-    refineEnabled: Boolean,
-    onToggleRefine: (Boolean) -> Unit,
     onSelectEngine: (Engine) -> Unit,
     onAddKey: () -> Unit,
     onRequestRemoveKey: () -> Unit,
@@ -1066,8 +1019,8 @@ private fun TranscriptionCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         EngineOption(
-            label = "Cloud",
-            subtitle = "Fast, but needs internet",
+            label = "Default",
+            subtitle = "(Recommended) The best Mutterboard experience with ultra fast transcription",
             selected = engine == Engine.CLOUD,
             onSelect = { haptic(); onSelectEngine(Engine.CLOUD) }
         ) {
@@ -1076,17 +1029,12 @@ private fun TranscriptionCard(
                 Button(onClick = { haptic(); onAddKey() }) { Text("Add API key") }
             } else {
                 SavedKeyRow(onRequestEdit = onAddKey, onRequestRemove = onRequestRemoveKey)
-                Spacer(Modifier.height(8.dp))
-                // Separator so the refine toggle reads as an added layer on top
-                // of cloud transcription, not part of the API-key setup above.
-                HorizontalDivider()
-                RefineRow(enabled = refineEnabled, onToggle = onToggleRefine)
             }
         }
         HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
         EngineOption(
-            label = "On-device",
-            subtitle = "A bit slower, but works offline",
+            label = "Offline",
+            subtitle = "Slower but works offline and runs fully on device",
             selected = engine == Engine.LOCAL,
             onSelect = { haptic(); onSelectEngine(Engine.LOCAL) }
         ) {

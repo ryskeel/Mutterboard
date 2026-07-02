@@ -77,11 +77,11 @@ class MutterboardInputMethodService : InputMethodService() {
                 // even when the client itself was kept.
                 (transcriber as? GroqWhisperClient)?.vocabularyPrompt =
                     customWords.joinToString(", ").ifBlank { null }
-                // The refiner is a cloud-only extra: rebuild it only when toggled
-                // on with a key present, or when the key changed, so it isn't
-                // reallocated every time the keyboard reappears.
-                val wantRefine = prefs.getBoolean(KEY_REFINE, false)
-                if (!wantRefine || key.isEmpty()) {
+                // The refiner is baked into the Default (cloud) experience — it
+                // always runs when a key is present. Rebuild only when there's no
+                // refiner yet or the key changed, so it isn't reallocated every
+                // time the keyboard reappears.
+                if (key.isEmpty()) {
                     refiner?.close()
                     refiner = null
                 } else if (refiner == null || keyChanged) {
@@ -426,7 +426,6 @@ class MutterboardInputMethodService : InputMethodService() {
         const val PREFS = "mutterboard_prefs"
         const val KEY_API_KEY = "groq_api_key"
         const val KEY_ENGINE = "engine"
-        const val KEY_REFINE = "refine_cloud"
         // Custom vocabulary, stored as a newline-separated list of words/phrases.
         const val KEY_CUSTOM_WORDS = "custom_words"
 
