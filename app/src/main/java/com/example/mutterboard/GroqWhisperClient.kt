@@ -42,6 +42,31 @@ class GroqWhisperClient(private val apiKey: String) : Transcriber {
     }
 
     override fun transcribe(audioFile: File, onResult: (String?) -> Unit) {
+        // Compress before upload: raw WAV is 32 KB/s and made long dictations
+        // upload-bound; Opus cuts that ~8x. Encoding blocks (a few hundred ms at
+        // most), so it runs off the caller's thread. On failure or pre-API-29
+        // the WAV is uploaded as before.
+        Thread {
+            val opus = File(audioFile.parentFile, audioFile.nameWithoutExtension + ".ogg")
+            val encodeStart = android.os.SystemClock.elapsedRealtime()
+            val useOpus = OggOpusEncoder.encode(audioFile, opus)
+            if (useOpus) {
+                android.util.Log.d(
+                    TAG,
+                    "opus encode took ${android.os.SystemClock.elapsedRealtime() - encodeStart}ms, " +
+                        "${audioFile.length()} -> ${opus.length()} bytes"
+                )
+            }
+            val upload = if (useOpus) opus else audioFile
+            val mediaType = if (useOpus) "audio/ogg" else "audio/wav"
+            upload(upload, mediaType) { text ->
+                opus.delete()
+                onResult(text)
+            }
+        }.start()
+    }
+
+    private fun upload(audioFile: File, mediaType: String, onResult: (String?) -> Unit) {
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("model", "whisper-large-v3-turbo")
@@ -55,7 +80,7 @@ class GroqWhisperClient(private val apiKey: String) : Transcriber {
             .addFormDataPart(
                 "file",
                 audioFile.name,
-                audioFile.asRequestBody("audio/wav".toMediaType())
+                audioFile.asRequestBody(mediaType.toMediaType())
             )
             .addFormDataPart("response_format", "json")
             .build()
@@ -84,5 +109,9 @@ class GroqWhisperClient(private val apiKey: String) : Transcriber {
                 }
             }
         })
+    }
+
+    companion object {
+        private const val TAG = "MutterboardWhisper"
     }
 }
