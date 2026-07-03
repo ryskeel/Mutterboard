@@ -9,6 +9,7 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.util.TypedValue
 import android.view.HapticFeedbackConstants
@@ -207,6 +208,7 @@ class MutterboardInputMethodService : InputMethodService() {
             // so the upload at Stop rides an already-warm connection.
             transcriber?.warmUp()
             refiner?.warmUp()
+            startRewarmLoop()
         } else {
             state = State.ERROR
             renderState()
@@ -281,10 +283,34 @@ class MutterboardInputMethodService : InputMethodService() {
         switchToPrevious()
     }
 
+    /**
+     * While recording, re-warm the pooled connections every [REWARM_INTERVAL_MS].
+     * The warm-up at record start only helps if the connection survives until
+     * Stop, and idle server-side timeouts can close it during a long dictation;
+     * refreshing it keeps the upload handshake-free no matter how long the user
+     * talks. The state guard stops the loop when recording ends, however it ends.
+     */
+    private fun startRewarmLoop() {
+        val runnable = object : Runnable {
+            override fun run() {
+                if (state != State.RECORDING) return
+                transcriber?.warmUp()
+                refiner?.warmUp()
+                mainHandler.postDelayed(this, REWARM_INTERVAL_MS)
+            }
+        }
+        mainHandler.postDelayed(runnable, REWARM_INTERVAL_MS)
+    }
+
     private fun stopAndTranscribe() {
         stopWaveform()
         state = State.TRANSCRIBING
         renderState()
+        // The refiner won't be called until Whisper returns, a second or more
+        // from now; its warmed connection from record start may have idled out.
+        // Re-warm it here so its TLS handshake overlaps the Whisper round trip
+        // instead of delaying the refine call.
+        refiner?.warmUp()
 
         mainHandler.postDelayed({
             val wav = recorder.stopAndWriteWav()
@@ -300,7 +326,9 @@ class MutterboardInputMethodService : InputMethodService() {
                 renderState()
                 return@postDelayed
             }
+            val sent = SystemClock.elapsedRealtime()
             client.transcribe(wav) { text ->
+                Log.d(TAG, "transcribe took ${SystemClock.elapsedRealtime() - sent}ms")
                 wav.delete()
                 mainHandler.post { onTranscriptionResult(text) }
             }
@@ -335,7 +363,9 @@ class MutterboardInputMethodService : InputMethodService() {
         // and fall back to the raw text if it fails so the message is never lost.
         val r = refiner
         if (r != null) {
+            val sent = SystemClock.elapsedRealtime()
             r.refine(corrected) { refined ->
+                Log.d(TAG, "refine took ${SystemClock.elapsedRealtime() - sent}ms")
                 mainHandler.post { commitAndFinish(refined ?: corrected) }
             }
         } else {
@@ -450,7 +480,7 @@ class MutterboardInputMethodService : InputMethodService() {
                 mic.contentDescription = "Open app to download the on-device model"
             }
             State.NO_NETWORK -> {
-                status.text = "No internet — offline model not downloaded"
+                status.text = "No internet. Offline model not downloaded"
                 status.visibility = View.VISIBLE
                 mic.text = "Retry"
                 mic.contentDescription = "Retry after reconnecting"
@@ -500,6 +530,10 @@ class MutterboardInputMethodService : InputMethodService() {
         // from 800ms to cut latency; the appended trailing silence in the WAV
         // still gives the model a moment of run-off.
         private const val STOP_BUFFER_MS = 400L
+        // How often to refresh the warmed connections during a recording. Kept
+        // under typical server/NAT idle timeouts (about a minute) so the pooled
+        // connection never goes cold before Stop.
+        private const val REWARM_INTERVAL_MS = 45_000L
         private const val WAVEFORM_INTERVAL_MS = 50L
         // Gain applied before the sqrt curve; ~0.25 normalized peak saturates
         // the bars, so normal speaking volume drives them near full height.

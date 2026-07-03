@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">Mutterboard</string>
     <string name="ime_label">Mutterboard Voice Keyboard</string>
-    <string name="ime_subtype_label">English (US) — Voice</string>
+    <string name="ime_subtype_label">English (US) Voice</string>
 </resources>
