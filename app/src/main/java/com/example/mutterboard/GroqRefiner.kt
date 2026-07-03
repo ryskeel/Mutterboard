@@ -17,15 +17,23 @@ import java.io.IOException
  * right; a full-rewrite pass just gives the model room to reword and reframe the
  * message, which is the failure mode this is tuned to avoid.
  *
- * The refined text is committed whenever the model returns one; [refine] only
- * yields null (raw fallback) on a genuine API failure or empty response. The
- * model proved reliable enough in testing that the user prefers its output even
- * on the occasional reorder/reword over ever getting the raw transcript back.
+ * The refined text is committed whenever the model returns one; [refine] yields
+ * null (raw fallback) on a genuine API failure, an empty response, or when
+ * [isInvented] fires. The model proved reliable enough in testing that the user
+ * prefers its output even on the occasional reorder/reword over ever getting the
+ * raw transcript back — but "occasional reword" is a different animal from the
+ * model ANSWERING the message (dictate a question, get a reply committed as if
+ * the user typed it), which happened in the wild and must never reach the field.
  *
- * [isCleanEdit] is kept purely as an *advisory* signal: in debug builds it labels
- * each result `clean-edit` or `rewrite` in the log (see [logDiff]) so rewrites
- * can still be watched and the prompt tuned, but it no longer blocks anything. If
- * rewrites ever start changing meaning, re-gating on it is a one-line change.
+ * So there are two checks with different jobs:
+ *  - [isInvented] is a HARD gate: if the output is substantially built from
+ *    words the user never said — the signature of an answer or fabrication —
+ *    the refined text is discarded and the raw transcript is committed instead.
+ *  - [isCleanEdit] stays purely *advisory*: in debug builds it labels each
+ *    result `clean-edit` or `rewrite` in the log (see [logDiff]) so benign
+ *    rewrites can still be watched and the prompt tuned, but it doesn't block.
+ *    If rewrites ever start changing meaning, re-gating on it is a one-line
+ *    change.
  *
  * Uses the same Groq API key and host as [GroqWhisperClient]; chat lives at a
  * sibling endpoint.
@@ -87,19 +95,22 @@ class GroqRefiner(private val apiKey: String) {
                     return
                 }
                 val refined = parseContent(body)
-                // Always commit the refined text when we got one (null only on a
-                // failed/empty parse, which falls back to raw). The clean-edit
-                // check is advisory now — computed only to label the debug log so
-                // rewrites stay visible; it no longer gates the output.
+                // Invention is the one model failure that must never be
+                // committed: an "edit" made of words the user didn't say is the
+                // model answering or fabricating, so fall back to the raw
+                // transcript. Benign rewrites still go through; the clean-edit
+                // check stays advisory and only labels the debug log.
+                val invented = refined != null && isInvented(text, refined)
                 if (BuildConfig.DEBUG) {
                     val verdict = when {
                         refined == null -> "empty"
+                        invented -> "invented"
                         isCleanEdit(text, refined) -> "clean-edit"
                         else -> "rewrite"
                     }
                     logDiff(text, refined, verdict)
                 }
-                onResult(refined)
+                onResult(if (invented) null else refined)
             }
         })
     }
@@ -143,6 +154,32 @@ class GroqRefiner(private val apiKey: String) {
             if (isPair) return s.substring(1, s.length - 1).trim()
         }
         return s
+    }
+
+    /**
+     * True if [refined] is substantially built from words that never appeared
+     * in [raw] — the signature of the model ANSWERING the message (the user
+     * dictates a question, the model replies with instructions) or fabricating
+     * content, rather than editing the transcript.
+     *
+     * Deliberately much looser than [isCleanEdit], because it hard-gates the
+     * output: a faithful edit introduces at most the odd word (an apostrophe
+     * fix, a stray article), while an answer is composed almost entirely of new
+     * material. Tokens are normalized the same way as the clean-edit check, and
+     * membership is a set test (position and count don't matter), so reorders
+     * and dedup never trip it. The threshold allows a few novel words on short
+     * messages (a benign "gonna" to "going to" fix costs three) and up to a
+     * quarter on long ones — an answer to a dictated question blows far past
+     * that, since nearly every word of a reply is new.
+     *
+     * Internal (not private) only so the unit test can pin the regression.
+     */
+    internal fun isInvented(raw: String, refined: String): Boolean {
+        val rawSet = contentTokens(raw).toSet()
+        val refTokens = contentTokens(refined).filterNot { it in IGNORED_TOKENS }
+        if (refTokens.isEmpty()) return false
+        val novel = refTokens.count { it !in rawSet }
+        return novel > maxOf(3, refTokens.size / 4)
     }
 
     /**
@@ -251,8 +288,12 @@ class GroqRefiner(private val apiKey: String) {
                 "\"going to\". You may fix casing and add a missing apostrophe (\"im\" to \"I'm\"), " +
                 "but never turn one word into two or two words into one.\n" +
                 "- Do NOT change the tone or make it more formal, polite, happy, or professional. " +
-                "Do NOT add or remove meaning. Do NOT answer or react to the message. It must read " +
-                "like a real person texting, never like an AI or a document.\n" +
+                "Do NOT add or remove meaning. It must read like a real person texting, never " +
+                "like an AI or a document.\n" +
+                "- CRITICAL: NEVER answer, reply to, or react to the message. The user is often " +
+                "dictating a question to send to SOMEONE ELSE. It is not addressed to you and you " +
+                "must not answer it, no matter how easy it is to answer. Output the cleaned-up " +
+                "question itself, nothing else.\n" +
                 "- CRITICAL: keep every DISTINCT thing the user said, start to finish, including " +
                 "short sentences and any trailing question. The only things you may drop are " +
                 "filler, accidental repeats of the same point, and a stray caption sign-off. Never " +
@@ -271,6 +312,8 @@ class GroqRefiner(private val apiKey: String) {
                 "coffee too\n" +
                 "Output: Can you grab a few things from the store. Milk, eggs, bread, and maybe " +
                 "some coffee too.\n\n" +
+                "Input: um how do you get to the airport from downtown like whats the fastest way\n" +
+                "Output: How do you get to the airport from downtown? What's the fastest way?\n\n" +
                 "Input: im running like ten minutes late sorry i got stuck behind this super slow " +
                 "truck on the highway\n" +
                 "Output: I'm running like ten minutes late, sorry. I got stuck behind this super " +
