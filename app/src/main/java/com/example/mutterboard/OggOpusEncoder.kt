@@ -46,6 +46,7 @@ object OggOpusEncoder {
             MediaFormat.MIMETYPE_AUDIO_OPUS, SAMPLE_RATE, 1
         ).apply {
             setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE)
+            setInteger(MediaFormat.KEY_COMPLEXITY, COMPLEXITY)
         }
         val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_OPUS)
         var muxer: MediaMuxer? = null
@@ -125,6 +126,11 @@ object OggOpusEncoder {
     // 32 kbps is comfortably transparent for speech recognition (ASR holds up
     // well below this) while still cutting the 256 kbps WAV by 8x.
     private const val BIT_RATE = 32_000
+    // The platform encoder defaults to libopus complexity 10 (max effort, tuned
+    // for music), which measured ~50ms per second of speech. ASR doesn't need
+    // that; low effort encodes several times faster at the same bitrate with a
+    // quality difference speech recognition can't hear.
+    private const val COMPLEXITY = 2
     private const val INPUT_TIMEOUT_US = 10_000L
     private const val EOS_DRAIN_TIMEOUT_US = 10_000L
 }
