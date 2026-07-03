@@ -43,13 +43,16 @@ class GroqWhisperClient(private val apiKey: String) : Transcriber {
 
     override fun transcribe(audioFile: File, onResult: (String?) -> Unit) {
         // Compress before upload: raw WAV is 32 KB/s and made long dictations
-        // upload-bound; Opus cuts that ~8x. Encoding blocks (a few hundred ms at
-        // most), so it runs off the caller's thread. On failure or pre-API-29
-        // the WAV is uploaded as before.
+        // upload-bound; Opus cuts that ~8x. But the platform encoder measures
+        // ~45ms per second of audio (its complexity hint is ignored), so on
+        // short clips encoding costs about what the smaller upload saves; skip
+        // it below the threshold. Encoding blocks, so it runs off the caller's
+        // thread. On failure or pre-API-29 the WAV is uploaded as before.
         Thread {
             val opus = File(audioFile.parentFile, audioFile.nameWithoutExtension + ".ogg")
             val encodeStart = android.os.SystemClock.elapsedRealtime()
-            val useOpus = OggOpusEncoder.encode(audioFile, opus)
+            val useOpus = audioFile.length() > OPUS_MIN_WAV_BYTES &&
+                OggOpusEncoder.encode(audioFile, opus)
             if (useOpus) {
                 android.util.Log.d(
                     TAG,
@@ -113,5 +116,9 @@ class GroqWhisperClient(private val apiKey: String) : Transcriber {
 
     companion object {
         private const val TAG = "MutterboardWhisper"
+        // Compress only above ~10s of audio (32 KB/s WAV). Below this the fixed
+        // encode cost rivals the upload savings on a decent connection; above it
+        // compression wins, and by a lot on long dictations or weak signal.
+        private const val OPUS_MIN_WAV_BYTES = 320_000L
     }
 }
