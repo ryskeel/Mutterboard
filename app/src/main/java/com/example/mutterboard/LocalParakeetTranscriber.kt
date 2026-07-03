@@ -42,7 +42,29 @@ class LocalParakeetTranscriber(private val modelDir: File) : Transcriber {
         return OfflineRecognizer(config = config).also { recognizer = it }
     }
 
+    /**
+     * Preload the recognizer — the heavy ~622 MB step — ahead of transcription.
+     * The IME calls this the moment recording starts, so the model loads *while
+     * the user is still speaking* instead of on the critical path after they tap
+     * stop. Best-effort: if it hasn't finished by the time audio arrives,
+     * [transcribe] builds it as before. Runs on the same single thread as
+     * transcription, so a real request simply queues behind an in-flight warm-up.
+     */
+    override fun warmUp() {
+        if (recognizer != null) return
+        executor.execute {
+            val t0 = System.currentTimeMillis()
+            runCatching { ensureRecognizer() }.onSuccess {
+                if (BuildConfig.DEBUG) Log.i(TAG, "recognizer warmed in ${System.currentTimeMillis() - t0}ms")
+            }
+        }
+    }
+
     override fun transcribe(audioFile: File, onResult: (String?) -> Unit) {
+        // Captured on the calling thread: was the model already loaded when the
+        // user stopped? "warm" means the warm-up hid the load behind speaking.
+        val wasWarm = recognizer != null
+        val t0 = System.currentTimeMillis()
         executor.execute {
             val text = runCatching {
                 val samples = readWavToFloat(audioFile)
@@ -65,6 +87,9 @@ class LocalParakeetTranscriber(private val modelDir: File) : Transcriber {
             }.getOrElse {
                 Log.e(TAG, "Local transcription failed", it)
                 null
+            }
+            if (BuildConfig.DEBUG) {
+                Log.i(TAG, "transcribe took ${System.currentTimeMillis() - t0}ms (recognizer ${if (wasWarm) "warm" else "cold"} at stop)")
             }
             onResult(text)
         }
