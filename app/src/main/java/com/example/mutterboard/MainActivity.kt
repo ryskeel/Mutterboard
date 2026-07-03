@@ -513,6 +513,13 @@ private fun EngineInfoDialog(onDismiss: () -> Unit) {
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Text(
+                        "Bonus: with the model downloaded, Default automatically " +
+                            "switches to Offline whenever you have no internet, so " +
+                            "dictation keeps working in airplane mode or a dead zone.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         },

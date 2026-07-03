@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -24,7 +26,7 @@ import kotlin.math.sqrt
 
 class MutterboardInputMethodService : InputMethodService() {
 
-    private enum class State { IDLE, RECORDING, TRANSCRIBING, ERROR, NO_PERMISSION, NO_API_KEY, NO_MODEL, NO_SPEECH }
+    private enum class State { IDLE, RECORDING, TRANSCRIBING, ERROR, NO_PERMISSION, NO_API_KEY, NO_MODEL, NO_NETWORK, NO_SPEECH }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var recorder: WavRecorder
@@ -34,6 +36,15 @@ class MutterboardInputMethodService : InputMethodService() {
     private var cloudKey: String = ""
     private var customWords: List<String> = emptyList()
     private var modelManager: ParakeetModelManager? = null
+
+    /**
+     * True when the user chose Default (cloud) but the device has no internet, so
+     * we're dictating with the on-device engine instead. Distinguishes "cloud user
+     * gone offline" from a deliberate Offline selection: it drives the "Offline
+     * mode" label while recording and the NO_NETWORK (rather than NO_MODEL) state
+     * when the local model isn't downloaded.
+     */
+    private var offlineFallback = false
 
     private var keyboardView: View? = null
     private var statusText: TextView? = null
@@ -64,41 +75,45 @@ class MutterboardInputMethodService : InputMethodService() {
         // Custom vocabulary applies to both engines; re-read it every refresh so
         // edits made in the app take effect the next time the keyboard appears.
         customWords = parseCustomWords(prefs.getString(KEY_CUSTOM_WORDS, null))
-        when (newEngine) {
-            Engine.CLOUD -> {
-                val key = prefs.getString(KEY_API_KEY, "") ?: ""
-                val keyChanged = key != cloudKey
-                if (engine != Engine.CLOUD || transcriber !is GroqWhisperClient || keyChanged) {
-                    transcriber?.close()
-                    transcriber = if (key.isNotEmpty()) GroqWhisperClient(key) else null
-                }
-                // Bias Whisper toward the user's vocabulary via its prompt field.
-                // Set every refresh (not just on rebuild) so word-list edits apply
-                // even when the client itself was kept.
-                (transcriber as? GroqWhisperClient)?.vocabularyPrompt =
-                    customWords.joinToString(", ").ifBlank { null }
-                // The refiner is baked into the Default (cloud) experience — it
-                // always runs when a key is present. Rebuild only when there's no
-                // refiner yet or the key changed, so it isn't reallocated every
-                // time the keyboard reappears.
-                if (key.isEmpty()) {
-                    refiner?.close()
-                    refiner = null
-                } else if (refiner == null || keyChanged) {
-                    refiner?.close()
-                    refiner = GroqRefiner(key)
-                }
-                cloudKey = key
+        // Default (cloud) users shouldn't be dead in the water in airplane mode
+        // or a dead zone: with no internet, run the on-device engine instead when
+        // its model is downloaded. Re-checked every refresh, so connectivity
+        // coming back flips us to the cloud path the next time the keyboard shows.
+        offlineFallback = newEngine == Engine.CLOUD && !isOnline()
+        if (newEngine == Engine.LOCAL || offlineFallback) {
+            // The cloud refiner can't run without internet and never applies to
+            // on-device output; the cloud refresh below rebuilds it when needed.
+            refiner?.close()
+            refiner = null
+            val mm = modelManager ?: ParakeetModelManager(this).also { modelManager = it }
+            if (transcriber !is LocalParakeetTranscriber) {
+                transcriber?.close()
+                transcriber = if (mm.isReady()) LocalParakeetTranscriber(mm.modelDir) else null
             }
-            Engine.LOCAL -> {
+        } else {
+            val key = prefs.getString(KEY_API_KEY, "") ?: ""
+            val keyChanged = key != cloudKey
+            if (transcriber !is GroqWhisperClient || keyChanged) {
+                transcriber?.close()
+                transcriber = if (key.isNotEmpty()) GroqWhisperClient(key) else null
+            }
+            // Bias Whisper toward the user's vocabulary via its prompt field.
+            // Set every refresh (not just on rebuild) so word-list edits apply
+            // even when the client itself was kept.
+            (transcriber as? GroqWhisperClient)?.vocabularyPrompt =
+                customWords.joinToString(", ").ifBlank { null }
+            // The refiner is baked into the Default (cloud) experience — it
+            // always runs when a key is present. Rebuild only when there's no
+            // refiner yet or the key changed, so it isn't reallocated every
+            // time the keyboard reappears.
+            if (key.isEmpty()) {
                 refiner?.close()
                 refiner = null
-                val mm = modelManager ?: ParakeetModelManager(this).also { modelManager = it }
-                if (engine != Engine.LOCAL || transcriber !is LocalParakeetTranscriber) {
-                    transcriber?.close()
-                    transcriber = if (mm.isReady()) LocalParakeetTranscriber(mm.modelDir) else null
-                }
+            } else if (refiner == null || keyChanged) {
+                refiner?.close()
+                refiner = GroqRefiner(key)
             }
+            cloudKey = key
         }
         engine = newEngine
     }
@@ -180,7 +195,7 @@ class MutterboardInputMethodService : InputMethodService() {
             return
         }
         if (transcriber == null) {
-            state = if (engine == Engine.LOCAL) State.NO_MODEL else State.NO_API_KEY
+            state = noTranscriberState()
             renderState()
             return
         }
@@ -202,11 +217,42 @@ class MutterboardInputMethodService : InputMethodService() {
         when (state) {
             State.RECORDING -> stopAndTranscribe()
             State.IDLE, State.ERROR, State.NO_SPEECH -> tryStartRecording()
+            // Connectivity may have come back since the keyboard appeared, so
+            // Retry re-evaluates the engine choice before recording.
+            State.NO_NETWORK -> {
+                refreshTranscriber()
+                tryStartRecording()
+            }
             State.NO_PERMISSION -> openSetupActivity()
             State.NO_API_KEY -> openSetupActivity()
             State.NO_MODEL -> openSetupActivity()
             State.TRANSCRIBING -> Unit
         }
+    }
+
+    /**
+     * Why recording can't start when no transcriber exists. Order matters: a
+     * cloud user with no internet gets NO_NETWORK (downloading a model or setting
+     * a key can't help them right now), an Offline user without the model gets
+     * NO_MODEL, and a cloud user online but keyless gets NO_API_KEY.
+     */
+    private fun noTranscriberState(): State = when {
+        offlineFallback -> State.NO_NETWORK
+        engine == Engine.LOCAL -> State.NO_MODEL
+        else -> State.NO_API_KEY
+    }
+
+    /**
+     * Connectivity check used to decide the cloud→on-device fallback. Requires a
+     * VALIDATED network so captive portals and dead Wi-Fi count as offline. Errs
+     * toward "online" when the answer is unknowable, keeping the cloud path (and
+     * its clearer failure states) the default.
+     */
+    private fun isOnline(): Boolean {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return true
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     private fun onCancelTapped() {
@@ -250,7 +296,7 @@ class MutterboardInputMethodService : InputMethodService() {
             val client = transcriber
             if (client == null) {
                 wav.delete()
-                state = if (engine == Engine.LOCAL) State.NO_MODEL else State.NO_API_KEY
+                state = noTranscriberState()
                 renderState()
                 return@postDelayed
             }
@@ -278,7 +324,8 @@ class MutterboardInputMethodService : InputMethodService() {
         // On-device transcription can't be biased toward the user's vocabulary,
         // so fuzzy-correct the output against the custom word list here. The cloud
         // path already biases Whisper via its prompt, so it's left untouched.
-        val corrected = if (engine == Engine.LOCAL && customWords.isNotEmpty()) {
+        val ranOnDevice = engine == Engine.LOCAL || offlineFallback
+        val corrected = if (ranOnDevice && customWords.isNotEmpty()) {
             TextCorrector.apply(text, customWords)
         } else {
             text
@@ -361,7 +408,14 @@ class MutterboardInputMethodService : InputMethodService() {
                 mic.contentDescription = "Start recording"
             }
             State.RECORDING -> {
-                status.visibility = View.GONE
+                // A cloud user silently switched to the on-device engine should
+                // know: no polish pass will run, and accuracy may differ.
+                if (offlineFallback) {
+                    status.text = "Offline mode"
+                    status.visibility = View.VISIBLE
+                } else {
+                    status.visibility = View.GONE
+                }
                 mic.text = "Stop"
                 mic.contentDescription = "Stop recording"
             }
@@ -394,6 +448,12 @@ class MutterboardInputMethodService : InputMethodService() {
                 status.visibility = View.VISIBLE
                 mic.text = "Open app"
                 mic.contentDescription = "Open app to download the on-device model"
+            }
+            State.NO_NETWORK -> {
+                status.text = "No internet — offline model not downloaded"
+                status.visibility = View.VISIBLE
+                mic.text = "Retry"
+                mic.contentDescription = "Retry after reconnecting"
             }
             State.NO_SPEECH -> {
                 status.text = "Didn't catch any audio"
