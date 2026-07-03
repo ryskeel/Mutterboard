@@ -8,7 +8,10 @@ import android.util.Log
 import java.io.File
 
 /**
- * Re-encodes a recorded WAV as Ogg/Opus before upload.
+ * Re-encodes a recorded WAV as Ogg/Opus before upload. Since
+ * [StreamingOpusEncoder] took over the normal cloud path (encoding during
+ * recording), this post-Stop encode only runs as the fallback when streaming
+ * was unavailable or failed and the client was handed a WAV.
  *
  * Raw 16 kHz mono WAV costs 32 KB per second of speech, and the timing logs
  * showed the Whisper leg growing with dictation length, i.e. upload-bound. At
