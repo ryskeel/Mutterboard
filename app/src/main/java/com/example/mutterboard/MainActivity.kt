@@ -507,9 +507,12 @@ private fun EngineInfoDialog(onDismiss: () -> Unit) {
                     Text("Offline", fontWeight = FontWeight.Bold)
                     Text(
                         "Transcription runs entirely on your phone using NVIDIA's " +
-                            "Parakeet model. It works offline and your audio never " +
-                            "leaves the device, but it's a bit slower, English-only, " +
-                            "and needs a one-time ~630 MB model download.",
+                            "Parakeet model. It's quick, works without any internet " +
+                            "connection, and your audio never leaves the device. The " +
+                            "tradeoff is that the wording isn't cleaned up the way " +
+                            "Default does it, so results won't be quite as polished. " +
+                            "It's also English-only and needs a one-time ~630 MB " +
+                            "model download.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1041,7 +1044,7 @@ private fun TranscriptionCard(
         HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
         EngineOption(
             label = "Offline",
-            subtitle = "Slower but works offline and runs fully on device",
+            subtitle = "Quick and runs fully offline, but results won't be quite as polished",
             selected = engine == Engine.LOCAL,
             onSelect = { haptic(); onSelectEngine(Engine.LOCAL) }
         ) {
