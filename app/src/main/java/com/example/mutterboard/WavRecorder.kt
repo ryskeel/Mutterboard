@@ -10,18 +10,32 @@ import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+/**
+ * The finished capture: the trimmed WAV, plus the same audio as Ogg/Opus when
+ * it was stream-encoded during recording (cloud path only; null when streaming
+ * was off, unsupported, or failed). Both files are cut at the same
+ * trailing-silence trim point. The caller owns and deletes both.
+ */
+data class Recording(val wav: File, val opus: File?)
+
 class WavRecorder(private val cacheDir: File) {
 
     @Volatile private var capturing = false
     private var audioRecord: AudioRecord? = null
     private var captureThread: Thread? = null
     private var pcmFile: File? = null
+    private var opusEncoder: StreamingOpusEncoder? = null
     @Volatile private var peakAmplitude: Int = 0
 
     fun currentPeak(): Int = peakAmplitude
 
+    /**
+     * [streamOpus] turns on the parallel Ogg/Opus encode ([StreamingOpusEncoder])
+     * so the cloud upload needs no post-Stop compression. The offline path
+     * passes false — Parakeet consumes the WAV.
+     */
     @SuppressLint("MissingPermission")
-    fun start(): Boolean {
+    fun start(streamOpus: Boolean = false): Boolean {
         if (capturing) return false
 
         val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
@@ -55,17 +69,29 @@ class WavRecorder(private val cacheDir: File) {
         audioRecord = record
         peakAmplitude = 0
 
+        val encoder = if (streamOpus) {
+            StreamingOpusEncoder.start(File(cacheDir, outputFile.nameWithoutExtension + ".ogg"))
+        } else null
+        opusEncoder = encoder
+
         record.startRecording()
         capturing = true
 
         captureThread = Thread {
             val buffer = ByteArray(bufferSize)
+            val marginBytes = SAMPLE_RATE * TRIM_MARGIN_MS / 1000 * 2
+            var total = 0L
+            // Absolute byte offset of the last sample that cleared the silence
+            // threshold — the live counterpart of trimmedLength()'s backward
+            // scan, driving how far the streaming encoder may advance.
+            var lastLoud = -1L
             FileOutputStream(outputFile).use { out ->
                 while (capturing) {
                     val read = record.read(buffer, 0, buffer.size)
                     if (read > 0) {
                         out.write(buffer, 0, read)
                         var localPeak = 0
+                        var lastLoudInBuf = -1
                         var i = 0
                         while (i < read - 1) {
                             val lo = buffer[i].toInt() and 0xFF
@@ -74,9 +100,16 @@ class WavRecorder(private val cacheDir: File) {
                             val signed = if (sample > 32767) sample - 65536 else sample
                             val abs = if (signed < 0) -signed else signed
                             if (abs > localPeak) localPeak = abs
+                            if (abs > SILENCE_THRESHOLD) lastLoudInBuf = i
                             i += 2
                         }
                         peakAmplitude = localPeak
+                        if (encoder != null) {
+                            if (lastLoudInBuf >= 0) lastLoud = total + lastLoudInBuf
+                            val frontier = if (lastLoud >= 0) lastLoud + 2 + marginBytes else 0L
+                            encoder.feed(buffer, read, frontier)
+                        }
+                        total += read
                     } else if (read < 0) {
                         Log.e(TAG, "AudioRecord.read error: $read")
                         break
@@ -87,7 +120,7 @@ class WavRecorder(private val cacheDir: File) {
         return true
     }
 
-    fun stopAndWriteWav(): File? {
+    fun stopAndFinalize(): Recording? {
         if (!capturing && audioRecord == null) return null
         capturing = false
         captureThread?.join(1000)
@@ -101,15 +134,32 @@ class WavRecorder(private val cacheDir: File) {
         val pcm = pcmFile
         pcmFile = null
         peakAmplitude = 0
+        val encoder = opusEncoder
+        opusEncoder = null
 
         if (pcm == null || !pcm.exists() || pcm.length() == 0L) {
             pcm?.delete()
+            encoder?.cancel()
             return null
         }
 
-        val wav = pcmToWav(pcm)
+        val pcmBytes = pcm.readBytes()
+        // Whisper hallucinates on trailing silence — it emits caption-style
+        // sign-offs ("Thank you") and, when a vocab prompt is set, bleeds the
+        // prompt words into garbage. So trim the dead air off the end down to a
+        // short natural margin instead of feeding it the full silent tail (the
+        // post-Stop ambient run-off) plus a block of appended zero-silence.
+        val dataSize = trimmedLength(pcmBytes)
+        val wav = writeWav(pcm.nameWithoutExtension, pcmBytes, dataSize)
         pcm.delete()
-        return wav
+        if (BuildConfig.DEBUG) {
+            fun ms(bytes: Int) = bytes * 1000 / (SAMPLE_RATE * 2)
+            Log.i(TAG, "trimmed trailing silence: ${ms(pcmBytes.size)}ms -> ${ms(dataSize)}ms")
+        }
+        // Seal the streamed Opus at the same trim point. Normally only the
+        // ~150ms margin is left to encode, so this returns almost immediately.
+        val opus = encoder?.finish(dataSize.toLong())
+        return Recording(wav, opus)
     }
 
     fun cancel() {
@@ -121,28 +171,19 @@ class WavRecorder(private val cacheDir: File) {
             it.release()
         }
         audioRecord = null
+        opusEncoder?.cancel()
+        opusEncoder = null
         pcmFile?.delete()
         pcmFile = null
         peakAmplitude = 0
     }
 
-    private fun pcmToWav(pcm: File): File {
-        val wav = File(cacheDir, pcm.nameWithoutExtension + ".wav")
-        val pcmBytes = pcm.readBytes()
-        // Whisper hallucinates on trailing silence — it emits caption-style
-        // sign-offs ("Thank you") and, when a vocab prompt is set, bleeds the
-        // prompt words into garbage. So trim the dead air off the end down to a
-        // short natural margin instead of feeding it the full silent tail (the
-        // post-Stop ambient run-off) plus a block of appended zero-silence.
-        val dataSize = trimmedLength(pcmBytes)
+    private fun writeWav(baseName: String, pcmBytes: ByteArray, dataSize: Int): File {
+        val wav = File(cacheDir, "$baseName.wav")
         val header = wavHeader(dataSize, SAMPLE_RATE, channels = 1, bitsPerSample = 16)
         FileOutputStream(wav).use { out ->
             out.write(header)
             out.write(pcmBytes, 0, dataSize)
-        }
-        if (BuildConfig.DEBUG) {
-            fun ms(bytes: Int) = bytes * 1000 / (SAMPLE_RATE * 2)
-            Log.i(TAG, "trimmed trailing silence: ${ms(pcmBytes.size)}ms -> ${ms(dataSize)}ms")
         }
         return wav
     }

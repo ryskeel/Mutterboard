@@ -200,7 +200,10 @@ class MutterboardInputMethodService : InputMethodService() {
             renderState()
             return
         }
-        if (recorder.start()) {
+        // Cloud uploads go out as Ogg/Opus; encode it live during recording so
+        // Stop pays no compression delay. Parakeet consumes the WAV, so the
+        // offline path skips the parallel encode.
+        if (recorder.start(streamOpus = transcriber is GroqWhisperClient)) {
             state = State.RECORDING
             renderState()
             startWaveform()
@@ -313,23 +316,28 @@ class MutterboardInputMethodService : InputMethodService() {
         refiner?.warmUp()
 
         mainHandler.postDelayed({
-            val wav = recorder.stopAndWriteWav()
-            if (wav == null) {
+            val rec = recorder.stopAndFinalize()
+            if (rec == null) {
                 state = State.ERROR
                 renderState()
                 return@postDelayed
             }
             val client = transcriber
             if (client == null) {
-                wav.delete()
+                rec.wav.delete()
+                rec.opus?.delete()
                 state = noTranscriberState()
                 renderState()
                 return@postDelayed
             }
+            // The cloud client gets the stream-encoded Opus when it exists;
+            // Parakeet (and any streaming failure) gets the WAV.
+            val audio = if (client is GroqWhisperClient && rec.opus != null) rec.opus else rec.wav
             val sent = SystemClock.elapsedRealtime()
-            client.transcribe(wav) { text ->
+            client.transcribe(audio) { text ->
                 Log.d(TAG, "transcribe took ${SystemClock.elapsedRealtime() - sent}ms")
-                wav.delete()
+                rec.wav.delete()
+                rec.opus?.delete()
                 mainHandler.post { onTranscriptionResult(text) }
             }
         }, STOP_BUFFER_MS)
