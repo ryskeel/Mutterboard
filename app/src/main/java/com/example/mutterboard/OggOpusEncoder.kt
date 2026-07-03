@@ -55,13 +55,18 @@ object OggOpusEncoder {
             codec.start()
             muxer = MediaMuxer(out.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_OGG)
 
+            // Feed input as fast as the codec accepts it and drain output without
+            // blocking. Blocking on dequeueOutputBuffer per frame serializes the
+            // encode to near real time (~10s for an 18s dictation); the only
+            // blocking wait allowed is for output after all input is queued.
             var track = -1
             var inPos = WAV_HEADER_BYTES
             var inputDone = false
+            var outputDone = false
             val info = MediaCodec.BufferInfo()
-            while (true) {
+            while (!outputDone) {
                 if (!inputDone) {
-                    val idx = codec.dequeueInputBuffer(TIMEOUT_US)
+                    val idx = codec.dequeueInputBuffer(INPUT_TIMEOUT_US)
                     if (idx >= 0) {
                         val buf = codec.getInputBuffer(idx)!!
                         val chunk = minOf(buf.capacity(), pcm.size - inPos)
@@ -77,18 +82,26 @@ object OggOpusEncoder {
                         }
                     }
                 }
-                val outIdx = codec.dequeueOutputBuffer(info, TIMEOUT_US)
-                if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    track = muxer.addTrack(codec.outputFormat)
-                    muxer.start()
-                    muxerStarted = true
-                } else if (outIdx >= 0) {
-                    val codecConfig = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
-                    if (info.size > 0 && !codecConfig) {
-                        muxer.writeSampleData(track, codec.getOutputBuffer(outIdx)!!, info)
+                while (!outputDone) {
+                    val outIdx = codec.dequeueOutputBuffer(
+                        info, if (inputDone) EOS_DRAIN_TIMEOUT_US else 0L
+                    )
+                    if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        track = muxer.addTrack(codec.outputFormat)
+                        muxer.start()
+                        muxerStarted = true
+                    } else if (outIdx >= 0) {
+                        val codecConfig = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                        if (info.size > 0 && !codecConfig) {
+                            muxer.writeSampleData(track, codec.getOutputBuffer(outIdx)!!, info)
+                        }
+                        codec.releaseOutputBuffer(outIdx, false)
+                        if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                            outputDone = true
+                        }
+                    } else {
+                        break
                     }
-                    codec.releaseOutputBuffer(outIdx, false)
-                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
                 }
             }
         } finally {
@@ -112,5 +125,6 @@ object OggOpusEncoder {
     // 32 kbps is comfortably transparent for speech recognition (ASR holds up
     // well below this) while still cutting the 256 kbps WAV by 8x.
     private const val BIT_RATE = 32_000
-    private const val TIMEOUT_US = 10_000L
+    private const val INPUT_TIMEOUT_US = 10_000L
+    private const val EOS_DRAIN_TIMEOUT_US = 10_000L
 }
