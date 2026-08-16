@@ -40,7 +40,7 @@ the existing contents of the text fields you use it in.
 
 In **Default mode**, after your speech is transcribed by Whisper, your transcribed
 text is sent over an encrypted (HTTPS) connection to **Groq** (`api.groq.com`) to
-be lightly cleaned up by **Meta's Llama 3.3** language model (which tidies the
+be lightly cleaned up by **Alibaba's Qwen3.6** language model (which tidies the
 phrasing and punctuation) before it is typed out. Your Groq API key is sent with
 the request to authenticate
 it. Groq's handling of that text is governed by Groq's own privacy policy:
