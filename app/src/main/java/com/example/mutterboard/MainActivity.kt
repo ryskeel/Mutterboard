@@ -487,7 +487,7 @@ private fun EngineInfoDialog(onDismiss: () -> Unit) {
                     Text(
                         "Everything runs over an encrypted connection to Groq's servers. " +
                             "Your recording is sent there, transcribed by OpenAI's Whisper " +
-                            "Large v3 model, then passed through Meta's Llama 3.3 model to " +
+                            "Large v3 model, then passed through Alibaba's Qwen3.6 model to " +
                             "tidy up the phrasing and punctuation. The finished text " +
                             "is sent right back to your phone.",
                         fontSize = 13.sp,

@@ -75,6 +75,10 @@ class GroqRefiner(private val apiKey: String) {
         val payload = JSONObject().apply {
             put("model", MODEL)
             put("temperature", 0)
+            // Qwen3.6 is a thinking model and reasons by default: it emits a
+            // <think> block into the content and takes ~4.4s instead of ~0.4s,
+            // which is fatal for a keyboard. "none" turns it off entirely.
+            put("reasoning_effort", "none")
             put("messages", messages)
         }
         val request = Request.Builder()
@@ -136,6 +140,10 @@ class GroqRefiner(private val apiKey: String) {
             .getJSONObject(0)
             .getJSONObject("message")
             .getString("content")
+            // Belt and braces for the reasoning_effort=none request above: if
+            // that param is ever dropped or ignored, Qwen's <think> block
+            // arrives inline in the content and would be typed out verbatim.
+            .replace(Regex("(?s)<think>.*?</think>"), "")
             .trim()
         // The model is told not to wrap its answer, but strip a stray pair of
         // surrounding quotes defensively so they never leak into the message.
@@ -240,12 +248,16 @@ class GroqRefiner(private val apiKey: String) {
         // anything that could change meaning (e.g. "not") must NOT go here.
         private val IGNORED_TOKENS = setOf("a", "an", "the", "and")
 
+        // Groq decommissioned llama-3.3-70b-versatile on 2026-08-16. Qwen3.6 27B
+        // is the replacement: on a bake-off of the prompt below it matched the
+        // 70b edit-for-edit (including collapsing stutter repeats and refusing to
+        // answer a dictated question) at a slightly better median latency.
+        //
+        // Earlier history, still the reason a small model isn't used here:
         // llama-3.1-8b-instant was too lossy on longer dictations — even with an
         // explicit "reproduce the whole message" rule it dropped trailing
-        // sentences. The 70b is far more faithful and is still fast on Groq
-        // (~280 tok/s); the refine output is short, so the latency cost over the
-        // 8b is a fraction of a second — well worth it for not mangling messages.
-        private const val MODEL = "llama-3.3-70b-versatile"
+        // sentences.
+        private const val MODEL = "qwen/qwen3.6-27b"
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
         // The examples are embedded here as labeled Input/Output pairs (see the
