@@ -264,12 +264,62 @@ class GroqRefiner(private val apiKey: String) {
         // note in refine() for why they aren't sent as conversation turns). The
         // anti-echo / anti-invention rule is deliberately blunt because a small
         // model is the one most likely to fabricate on sparse audio.
+        //
+        // Rule 3 is the one rule here that CHANGES a word rather than deleting or
+        // re-punctuating one, and it had to be carved out of two hard rules to
+        // work at all: the word-preservation rule ("the ONLY words you may remove
+        // are filler") and the anti-invention rule both forbid it on their face.
+        // It exists because the user talks TO the transcriber mid-sentence. When
+        // they know Whisper will mangle a name they say it and then spell it, and
+        // before this rule both halves survived into the sent message - a real
+        // dictation came out as "the townsend y, like spelled w-y-e".
+        //
+        // The "exactly once" clause and the predicate example are there because the
+        // first live test half-fired: given "Las Fuentas is spelled L-A-S-F-U-E-N-T-A-S"
+        // it produced the right spelling and then kept everything, committing
+        // "Las Fuentas is spelled Las Fuentas". Every example here had been a
+        // comma-set-off aside ("the Townsend Y, like spelled W-Y-E"), so "delete
+        // the lead-in" had nothing to grab when the instruction WAS the predicate.
+        // Stating the invariant on the output (the word appears once) turned out
+        // to matter more than enumerating lead-in phrasings.
+        //
+        // "THE LETTERS ARE AUTHORITATIVE" is the clause that actually makes this
+        // rule do anything, and it took three live tests to find that out. The
+        // deletion half worked immediately; the RESPELLING half never fired once.
+        // Given "Las Fuentes, spelled L-A-S-F-U-E-N-T-A-S" the model kept Whisper's
+        // "Fuentes" every time - the two spellings are homophones differing by one
+        // letter, and nothing in the rule said which source outranks the other. The
+        // run that appeared to pass had simply been handed a transcript where
+        // Whisper already agreed with the letters. Every example here had that same
+        // defect: the letters never contradicted what the model would have written
+        // anyway, so none of them taught precedence. An example is only load-
+        // bearing when its Input and Output disagree about the thing being tested.
+        //
+        // Rule 3 has to be carved out of BOTH word-level hard rules or it silently
+        // does nothing. Carving it out of the removal clause alone was not enough:
+        // across four live tests the deletion half fired perfectly every time and
+        // the respelling half never fired once, because "every word you KEEP must
+        // stay exactly as the user said it" and "you may fix casing and add a
+        // missing apostrophe" together enumerate the permitted word-level edits,
+        // and respelling was not among them. A block labelled "Hard rules" beats a
+        // numbered rule above it. The lesson generalizes: adding a rule that does
+        // something new means finding every hard rule that forbids it, not just the
+        // nearest one.
+        //
+        // The initialism carve-out is not optional. Without it the rule reads as
+        // "letters become words" and PDF, IBM and confirmation codes are exactly
+        // the shape it would fire on. The trigger is a word ATTEMPTED and then
+        // spelled, not the mere presence of separated letters.
+        //
+        // [isInvented] tolerates this by construction rather than by luck:
+        // contentTokens splits "W-Y-E" into w/y/e, so the respelled "wye" is a
+        // single novel token against a floor of three. GroqRefinerTest pins it.
         private const val SYSTEM_PROMPT =
             "You EDIT raw voice-dictation transcripts for a casual text-messaging keyboard. " +
                 "The user's message is the single user turn. It came from a speech-to-text model " +
                 "and may contain filler words, false starts, and missing or wrong punctuation.\n\n" +
                 "This is an edit, NOT a rewrite. The words are already correct. Make only these " +
-                "two kinds of change:\n" +
+                "three kinds of change:\n" +
                 "1. Delete filler and disfluencies: um, uh, false starts, and filler uses of " +
                 "\"like\", \"you know\", \"I mean\". Keep \"like\" or " +
                 "\"you know\" when they carry real meaning. Collapse accidental repetition: when " +
@@ -291,13 +341,41 @@ class GroqRefiner(private val apiKey: String) {
                 "clean sentences. Use commas only within a sentence. A question ends with a " +
                 "question mark. Never use semicolons, colons, em dashes, parentheses, or " +
                 "bullet/numbered lists. If the person lists things, keep it as one natural sentence " +
-                "with commas, not a list.\n\n" +
+                "with commas, not a list.\n" +
+                "3. Carry out a spelling instruction, then delete it. Sometimes the user spells a "  +
+                "word out letter by letter because they know the speech-to-text model will get it " +
+                "wrong — \"the Townsend Y, like spelled W-Y-E\", \"my friend Kaitlyn, that's " +
+                "K-A-I-T-L-Y-N\". Those letters are an instruction addressed to YOU, not part of " +
+                "the message. THE LETTERS ARE AUTHORITATIVE: when they disagree with how the " +
+                "speech-to-text model spelled the word — even by a single letter, even when its " +
+                "spelling looks more correct or more standard to you — THE LETTERS WIN. " +
+                "\"the Mexican place is Las Fuentes, spelled L-A-S-F-U-E-N-T-A-S\" becomes " +
+                "\"the Mexican place is Las Fuentas\", NOT \"Las Fuentes\". Spell the word the " +
+                "way the letters say, put it in place of the " +
+                "model's earlier attempt at that word, and delete the letters and their lead-in " +
+                "(\"like spelled\", \"that's spelled\", \"spelled\", \"as in\") entirely. So " +
+                "\"this thing called the Townsend Y, like spelled W-Y-E\" becomes \"this thing " +
+                "called the Townsend Wye\". The word must appear EXACTLY ONCE in your output — " +
+                "NEVER leave both the model's attempt and the spelled-out version. When the " +
+                "spelling instruction is the sentence's whole predicate, delete the whole " +
+                "predicate: \"Oh yeah, Las Fuentas is spelled L-A-S-F-U-E-N-T-A-S\" becomes " +
+                "\"Oh yeah, Las Fuentas\", never \"Las Fuentas is spelled Las Fuentas\". " +
+                "Do this ONLY when the letters clearly spell out a word " +
+                "the user just said or is introducing. Leave a genuine initialism, acronym or code " +
+                "alone — \"send me the PDF\", \"he works at IBM\", \"my confirmation is A-4-7-J\" " +
+                "all stay exactly as said.\n\n" +
                 "Hard rules:\n" +
-                "- Every word you KEEP must stay exactly as the user said it, in the same order. " +
+                "- Every word you KEEP must stay exactly as the user said it, in the same order, " +
+                "with ONE exception: a word the user spelled out letter by letter is respelled to " +
+                "match those letters, per rule 3. That exception is the only way a kept word may " +
+                "change. " +
                 "Do NOT swap in synonyms, reorder words, reword, or rephrase anything. The ONLY " +
-                "words you may remove are filler.\n" +
+                "words you may remove are filler, and the letters of a spelling instruction you have " +
+                "already carried out under rule 3.\n" +
                 "- Do NOT merge or split words: keep \"I am\" as \"I am\" and \"going to\" as " +
-                "\"going to\". You may fix casing and add a missing apostrophe (\"im\" to \"I'm\"), " +
+                "\"going to\". You may fix casing, add a missing apostrophe (\"im\" to \"I'm\"), " +
+                "and respell a word the user spelled out under rule 3 (\"Katie\" to \"Katy\" when " +
+                "they said K-A-T-Y), " +
                 "but never turn one word into two or two words into one.\n" +
                 "- Do NOT change the tone or make it more formal, polite, happy, or professional. " +
                 "Do NOT add or remove meaning. It must read like a real person texting, never " +
@@ -311,7 +389,8 @@ class GroqRefiner(private val apiKey: String) {
                 "filler, accidental repeats of the same point, and a stray caption sign-off. Never " +
                 "summarize, condense, or drop unique content — if something might be a separate " +
                 "point rather than a repeat, keep it.\n" +
-                "- CRITICAL: never add content that was not said, and never output any of the " +
+                "- CRITICAL: never add content that was not said — re-spelling a word the user spelled " +
+                "out for you is NOT adding content — and never output any of the " +
                 "example sentences below — they only show the style. If the message is empty, only " +
                 "noise, or unintelligible, return it unchanged.\n\n" +
                 "Return ONLY the edited message. No preamble, no quotes, no explanation.\n\n" +
@@ -348,6 +427,10 @@ class GroqRefiner(private val apiKey: String) {
                 "later i had some blueberries\n" +
                 "Output: For the side I had a serving of chips. And then a bit later I had some " +
                 "blueberries.\n\n" +
+                "Input: we went out to this place called the townsend y like spelled w y e and it was " +
+                "packed but honestly still worth it\n" +
+                "Output: We went out to this place called the Townsend Wye. It was packed but " +
+                "honestly still worth it.\n\n" +
                 "Input: we could probably hike until two and then head back yeah so hike until two " +
                 "anyway let me know what you think\n" +
                 "Output: We could probably hike until two and then head back. Let me know what you " +

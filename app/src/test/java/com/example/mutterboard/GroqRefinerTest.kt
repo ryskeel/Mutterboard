@@ -54,6 +54,19 @@ class GroqRefinerTest {
     }
 
     @Test
+    fun toleratesWordRespelledFromASpellingInstruction() {
+        // Rule 3 replaces a misheard word with the spelling the user dictated and
+        // deletes the letters. contentTokens splits "W-Y-E" into three tokens, so
+        // the respelled word is the only novel one - well under the floor of
+        // three. Pinned because rule 3 is the one rule that makes output diverge
+        // from the input by design, and isInvented is a hard gate.
+        val raw = "we went out to this place called the Townsend Y, like spelled W-Y-E, " +
+            "and it was packed"
+        val edited = "We went out to this place called the Townsend Wye. It was packed."
+        assertFalse(refiner.isInvented(raw, edited))
+    }
+
+    @Test
     fun flagsFabricatedContentOnLongerMessages() {
         val raw = "remind me to send the report tomorrow morning"
         val fabricated = "Sure, I will remind you to send the report tomorrow " +
