@@ -1,0 +1,107 @@
+# Mutterboard
+
+Android voice-dictation keyboard (IME). Record, transcribe, commit text into
+whatever field the user is in.
+
+Two transcription engines, chosen in the app: **Default** (cloud — Groq
+Whisper V3 Turbo) and **Offline** (on-device Parakeet). On the cloud path only, a
+second LLM pass then cleans the transcript up before it is committed.
+
+Two refine modes for that pass, toggled from the keyboard itself:
+`GroqRefiner` (Default) and `CasualRefiner` (Casual). The toggle hides itself
+whenever no refiner exists - Offline engine, the automatic offline fallback, or
+no API key - because a toggle naming a mode that isn't running would be lying.
+
+Both prompts also carry **rule 3**: when the user spells a word out letter by
+letter mid-sentence ("Las Fuentas, spelled L-A-S-F-U-E-N-T-A-S"), those letters
+are an instruction addressed to the model. It respells the word, deletes the
+instruction, and the letters outrank the transcript.
+
+## The refiners are the heart of this app
+
+The dictation quality is the product, and it comes from the system prompts in
+`GroqRefiner.kt` and `CasualRefiner.kt`. Both files carry long comments
+explaining *why* each rule is worded the way it is, usually because some earlier
+wording failed in the wild. **Read those comments before touching either
+prompt.** They are the design document.
+
+### Rules that are not obvious from the code
+
+- **`GroqRefiner.kt` is load-bearing and stable. Do not "improve" it.** The user
+  relies on Default mode daily. Casual mode was built as a separate class
+  specifically so the default path keeps a zero-line diff. Deleting
+  `CasualRefiner.kt`, `RefineMode.kt`, `ModeToggleView.kt` and the toggle wiring
+  must restore the previous behavior exactly. Preserve that property.
+
+- **The guard helpers are duplicated on purpose.** `isInvented`, `isCleanEdit`,
+  `contentTokens` and friends exist in both refiners. That is ~60 lines of
+  deliberate duplication bought to keep the two paths independent. Do not
+  refactor them into a shared base class or util.
+
+- **`isInvented` is a hard gate and must stay one.** It catches the model
+  ANSWERING a dictated question instead of editing it — which reached a real
+  message once. Any prompt change that makes output diverge further from the
+  input must be checked against it.
+
+- **Whisper's output is already punctuated and capitalized.** It usually returns
+  document-style prose; on fast speech it returns bare unpunctuated text. Any
+  prompt work has to handle both. Casual mode is mostly *subtraction*. Note the
+  bare path is hard to test on demand - Whisper punctuated every attempt across
+  a session of deliberately fast speech.
+
+- **Casual mode's prompt is derived from the user's real hand-TYPED messages.**
+  Never add an example taken from dictated output — it has already happened once
+  and produced a rule that was a transcription artifact rather than a habit. If
+  you need a new example, ask the user to type how they would have written it.
+
+- **`CasualRefiner`'s prompt IS `GroqRefiner`'s prompt plus a short delta.** The
+  opening paragraph, the numbered rules and the whole hard-rules block are
+  carried over; the additions are the five CASUAL HAND bullets and the examples.
+  Keep it that way, and when you edit the default prompt, edit the carried-over
+  copy to match. An earlier version diverged into a two-and-a-half-times-longer
+  two-pass typesetting procedure. Every rule in it was justified by a real
+  failure and the result was still worse: it read like 2012-era voice dictation,
+  and rule 1 stopped deleting filler even though its wording never changed.
+  **Length in this prompt is spent out of rule 1's budget.**
+
+- **A rule that ADDS or CHANGES must be carved out of every hard rule that
+  forbids it, not just the nearest one.** Rule 3 (the spelling instruction)
+  respells a word, which both "every word you KEEP must stay exactly as the user
+  said it" and "you may fix casing and add a missing apostrophe" prohibit.
+  Carving it out of one of them left the feature silently half-working across
+  four live tests: it deleted the instruction every time and never once applied
+  the letters.
+
+- **An example only teaches when its Input and Output disagree about the thing
+  being tested.** Rule 3 shipped with examples whose spelled letters matched what
+  the model would have written anyway, so none of them established that the
+  letters outrank the transcript. Two "passing" live tests were coincidences
+  where Whisper had already guessed right.
+
+## Verifying a prompt change
+
+Text-level unit tests only cover the guards, not the prompt. To actually check a
+change:
+
+```
+./gradlew test assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb logcat -s GroqRefiner:I CasualRefiner:I
+```
+
+Debug builds log `raw:` and `refined:` with a verdict (`clean-edit`, `rewrite`,
+`invented`, `empty`). **Always read the raw transcript before blaming the
+refiner** — several apparent refiner bugs turned out to be Whisper mishearing,
+truncating, or already having made the "mistake". Logging is debug-only because
+the text is the user's private messages.
+
+To judge whether casual output sounds like the user, measure it rather than
+eyeball it: sentence-length distribution and commas-per-100-words against their
+own typed messages. Averages matched long before the output stopped reading
+like a machine; the defect was in the tail.
+
+## Conventions
+
+- Feature branches (`feature/...`, `fix/...`), merged to `main`.
+- No em dashes in user-facing copy.
+- Comments explain *why*, not what. Match the density already in the file.

@@ -33,7 +33,9 @@ class MutterboardInputMethodService : InputMethodService() {
     private lateinit var recorder: WavRecorder
     private var transcriber: Transcriber? = null
     private var refiner: GroqRefiner? = null
+    private var casualRefiner: CasualRefiner? = null
     private var engine: Engine = Engine.CLOUD
+    private var refineMode: RefineMode = RefineMode.DEFAULT
     private var cloudKey: String = ""
     private var customWords: List<String> = emptyList()
     private var modelManager: ParakeetModelManager? = null
@@ -52,6 +54,7 @@ class MutterboardInputMethodService : InputMethodService() {
     private var micButton: MaterialButton? = null
     private var cancelButton: MaterialButton? = null
     private var settingsButton: ImageButton? = null
+    private var modeToggle: ModeToggleView? = null
     private var waveform: WaveformView? = null
     private var progress: LinearProgressIndicator? = null
 
@@ -76,16 +79,22 @@ class MutterboardInputMethodService : InputMethodService() {
         // Custom vocabulary applies to both engines; re-read it every refresh so
         // edits made in the app take effect the next time the keyboard appears.
         customWords = parseCustomWords(prefs.getString(KEY_CUSTOM_WORDS, null))
+        // Which refine pass runs. Re-read every refresh so a flip made from the
+        // keyboard's own toggle (which writes the pref directly) survives a
+        // keyboard teardown, and so the two never drift apart.
+        refineMode = RefineMode.fromPref(prefs.getString(KEY_REFINE_MODE, RefineMode.DEFAULT.prefValue))
         // Default (cloud) users shouldn't be dead in the water in airplane mode
         // or a dead zone: with no internet, run the on-device engine instead when
         // its model is downloaded. Re-checked every refresh, so connectivity
         // coming back flips us to the cloud path the next time the keyboard shows.
         offlineFallback = newEngine == Engine.CLOUD && !isOnline()
         if (newEngine == Engine.LOCAL || offlineFallback) {
-            // The cloud refiner can't run without internet and never applies to
-            // on-device output; the cloud refresh below rebuilds it when needed.
+            // The cloud refiners can't run without internet and never apply to
+            // on-device output; the cloud refresh below rebuilds them when needed.
             refiner?.close()
             refiner = null
+            casualRefiner?.close()
+            casualRefiner = null
             val mm = modelManager ?: ParakeetModelManager(this).also { modelManager = it }
             if (transcriber !is LocalParakeetTranscriber) {
                 transcriber?.close()
@@ -107,12 +116,19 @@ class MutterboardInputMethodService : InputMethodService() {
             // always runs when a key is present. Rebuild only when there's no
             // refiner yet or the key changed, so it isn't reallocated every
             // time the keyboard reappears.
+            // Both refiners are built, warmed and torn down together rather than
+            // on demand: the mode toggle is tappable mid-recording, so whichever one
+            // the user lands on at Stop must already have a warm connection.
             if (key.isEmpty()) {
                 refiner?.close()
                 refiner = null
+                casualRefiner?.close()
+                casualRefiner = null
             } else if (refiner == null || keyChanged) {
                 refiner?.close()
                 refiner = GroqRefiner(key)
+                casualRefiner?.close()
+                casualRefiner = CasualRefiner(key)
             }
             cloudKey = key
         }
@@ -132,6 +148,7 @@ class MutterboardInputMethodService : InputMethodService() {
         micButton = view.findViewById(R.id.mic_button)
         cancelButton = view.findViewById(R.id.cancel_button)
         settingsButton = view.findViewById(R.id.settings_button)
+        modeToggle = view.findViewById(R.id.mode_toggle)
         waveform = view.findViewById(R.id.waveform)
         progress = view.findViewById(R.id.progress)
 
@@ -147,6 +164,11 @@ class MutterboardInputMethodService : InputMethodService() {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             onSettingsTapped()
         }
+        modeToggle?.onModeChanged = { casual ->
+            modeToggle?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            onModeChanged(casual)
+        }
+        renderMode()
 
         applyNavigationBarStyling(themedContext)
 
@@ -210,7 +232,7 @@ class MutterboardInputMethodService : InputMethodService() {
             // Open the network connection now, while the user is still speaking,
             // so the upload at Stop rides an already-warm connection.
             transcriber?.warmUp()
-            refiner?.warmUp()
+            warmRefiners()
             startRewarmLoop()
         } else {
             state = State.ERROR
@@ -298,7 +320,7 @@ class MutterboardInputMethodService : InputMethodService() {
             override fun run() {
                 if (state != State.RECORDING) return
                 transcriber?.warmUp()
-                refiner?.warmUp()
+                warmRefiners()
                 mainHandler.postDelayed(this, REWARM_INTERVAL_MS)
             }
         }
@@ -313,7 +335,7 @@ class MutterboardInputMethodService : InputMethodService() {
         // from now; its warmed connection from record start may have idled out.
         // Re-warm it here so its TLS handshake overlaps the Whisper round trip
         // instead of delaying the refine call.
-        refiner?.warmUp()
+        warmRefiners()
 
         mainHandler.postDelayed({
             val rec = recorder.stopAndFinalize()
@@ -366,18 +388,22 @@ class MutterboardInputMethodService : InputMethodService() {
         } else {
             text
         }
-        // If the cloud refiner is on, run the cleanup pass before committing.
-        // We stay in TRANSCRIBING (progress shown) during the extra round-trip,
-        // and fall back to the raw text if it fails so the message is never lost.
-        val r = refiner
-        if (r != null) {
-            val sent = SystemClock.elapsedRealtime()
-            r.refine(corrected) { refined ->
-                Log.d(TAG, "refine took ${SystemClock.elapsedRealtime() - sent}ms")
-                mainHandler.post { commitAndFinish(refined ?: corrected) }
-            }
-        } else {
-            commitAndFinish(corrected)
+        // If a cloud refiner is on, run the cleanup pass before committing. The
+        // mode toggle picks which one; the two are built and torn down together, so
+        // in practice both are present or neither is. We stay in TRANSCRIBING
+        // (progress shown) during the extra round-trip, and fall back to the raw
+        // text if it fails so the message is never lost.
+        val sent = SystemClock.elapsedRealtime()
+        val onRefined: (String?) -> Unit = { refined ->
+            Log.d(TAG, "refine took ${SystemClock.elapsedRealtime() - sent}ms")
+            mainHandler.post { commitAndFinish(refined ?: corrected) }
+        }
+        val default = refiner
+        val casual = casualRefiner
+        when {
+            refineMode == RefineMode.CASUAL && casual != null -> casual.refine(corrected, onRefined)
+            default != null -> default.refine(corrected, onRefined)
+            else -> commitAndFinish(corrected)
         }
     }
 
@@ -431,6 +457,7 @@ class MutterboardInputMethodService : InputMethodService() {
     }
 
     private fun renderState() {
+        renderMode()
         val status = statusText ?: return
         val mic = micButton ?: return
         // While transcribing, swap the listening waveform for an indeterminate
@@ -502,6 +529,50 @@ class MutterboardInputMethodService : InputMethodService() {
         }
     }
 
+    /**
+     * Warm both refine paths, not just the active one. The toggle can be tapped at
+     * any point up to Stop, so the cost of a second HEAD request buys the
+     * guarantee that the mode the user actually lands on is never cold.
+     */
+    private fun warmRefiners() {
+        refiner?.warmUp()
+        casualRefiner?.warmUp()
+    }
+
+    /**
+     * Persist the refine mode the user just selected. The toggle has already
+     * animated itself, so this only records the choice. Deliberately usable
+     * mid-recording: the mode is read once the transcript comes back, so a tap
+     * made while still speaking applies to the message being dictated.
+     */
+    private fun onModeChanged(casual: Boolean) {
+        refineMode = if (casual) RefineMode.CASUAL else RefineMode.DEFAULT
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_REFINE_MODE, refineMode.prefValue)
+            .apply()
+    }
+
+    /**
+     * Paint the mode toggle. Hidden entirely when no refiner exists — on the
+     * Offline engine, during the offline fallback, and before a key is set,
+     * nothing polishes the transcript at all, so a toggle claiming a mode would
+     * be lying about what the keyboard is going to do.
+     *
+     * Never animates: this only ever runs on a state render, where the thumb is
+     * already where it belongs, and sliding it here would signal a change the
+     * user did not make. The animation belongs to the tap alone.
+     */
+    private fun renderMode() {
+        val toggle = modeToggle ?: return
+        if (refiner == null && casualRefiner == null) {
+            toggle.visibility = View.GONE
+            return
+        }
+        toggle.visibility = View.VISIBLE
+        toggle.setMode(refineMode == RefineMode.CASUAL, animate = false)
+    }
+
     private fun hasRecordAudioPermission(): Boolean =
         checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
@@ -515,6 +586,7 @@ class MutterboardInputMethodService : InputMethodService() {
         recorder.cancel()
         transcriber?.close()
         refiner?.close()
+        casualRefiner?.close()
         mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
@@ -524,6 +596,9 @@ class MutterboardInputMethodService : InputMethodService() {
         const val PREFS = "mutterboard_prefs"
         const val KEY_API_KEY = "groq_api_key"
         const val KEY_ENGINE = "engine"
+        // Which refine pass runs on the cloud path. Written from the keyboard's
+        // own mode toggle, not from the setup screen.
+        const val KEY_REFINE_MODE = "refine_mode"
         // Custom vocabulary, stored as a newline-separated list of words/phrases.
         const val KEY_CUSTOM_WORDS = "custom_words"
 
