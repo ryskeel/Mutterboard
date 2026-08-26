@@ -10,16 +10,45 @@
     android:paddingTop="8dp"
     android:paddingBottom="56dp">
 
-    <ImageButton
-        android:id="@+id/settings_button"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_marginStart="-8dp"
-        android:padding="8dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:src="@drawable/ic_settings_gear"
-        android:scaleType="fitCenter"
-        android:contentDescription="Settings" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ImageButton
+            android:id="@+id/settings_button"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="-8dp"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_settings_gear"
+            android:scaleType="fitCenter"
+            android:contentDescription="Settings" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/mode_button"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="34dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            app:cornerRadius="17dp"
+            android:text="Default"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:contentDescription="Refine mode: Default. Tap to switch." />
+
+    </LinearLayout>
 
     <TextView
         android:id="@+id/status_text"
