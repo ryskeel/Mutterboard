@@ -238,9 +238,20 @@ class CasualRefiner(private val apiKey: String) {
         // deletions will happily pass a transcript straight through — it left one
         // message as a single sentence carrying five separate thoughts. This
         // person does use periods; what makes them casual is long sentences with
-        // few commas, not missing periods. Hence the explicit ~35 word ceiling:
-        // "break separate thoughts apart" alone was too soft to act on, and the
-        // longest sentence anywhere in their real typed messages runs about that.
+        // few commas, not missing periods.
+        //
+        // The sentence-length rule went through two wrong versions before this
+        // one, and the measurement is worth recording. Against the user's 17
+        // typed messages, casual mode's output already matched on every average:
+        // 15.6 words per sentence against their 17.6, and 1.8 commas per hundred
+        // words against their 2.4 — it was using FEWER commas than they do. The
+        // defect was entirely in the tail. Their longest sentence is 46 words and
+        // is a single thought with subordinate clauses; the refiner was emitting
+        // 55, 62 and 75 word sentences that had fused three or four separate
+        // thoughts with "and". So a word ceiling was the wrong instrument, since
+        // it condemns their real 40 word sentences and does not name the actual
+        // fault. The rule is now one thought per sentence, with the word count
+        // demoted to a symptom worth checking.
         //
         // The two input shapes in the opening paragraph are both real. Whisper
         // usually returns a fully typeset transcript, but on fast speech it
@@ -297,13 +308,17 @@ class CasualRefiner(private val apiKey: String) {
                 "- FIRST: this person DOES use periods, and their sentences are not endless. Before " +
                 "removing anything, break the message into sentences - every separate thought ends with a " +
                 "period. If the transcript strings thoughts together with only commas, or gives you no " +
-                "punctuation at all, ADD those periods. A sentence should rarely run past about 35 words: " +
-                "if one does, find the nearest natural thought boundary and end it there. A message that " +
-                "runs start to finish without a single period, or one enormous sentence carrying four or " +
-                "five different thoughts, reads as a bad transcript and makes the user look careless - " +
-                "never leave one that way. This is the ONE place you ADD punctuation instead of removing " +
-                "it. What makes this person casual is long sentences with FEW COMMAS, not an absence of " +
-                "periods.\n" +
+                "punctuation at all, ADD those periods. ONE SENTENCE CARRIES ONE THOUGHT. The moment the " +
+                "speaker moves to a new thought, end the sentence with a period and start the next one. A " +
+                "sentence may run long - 35 or 40 words is fine - when it is genuinely a SINGLE thought " +
+                "with subordinate clauses hanging off it. What you must never do is fuse two, three or " +
+                "four separate thoughts into one sentence by chaining them with \"and\", \"but\" or \"so\". If " +
+                "a sentence runs past about 40 words, it is almost certainly carrying more than one " +
+                "thought: find the boundary and split it. A message that runs start to finish without a " +
+                "single period, or one enormous sentence carrying four or five different thoughts, reads " +
+                "as a bad transcript and makes the user look careless - never leave one that way. This is " +
+                "the ONE place you ADD punctuation instead of removing it. What makes this person casual " +
+                "is long sentences with FEW COMMAS, not an absence of periods.\n" +
                 "- A QUESTION ALWAYS ENDS WITH A QUESTION MARK, even when the transcript gives you no " +
                 "punctuation at all. If the last thing the user said is a question, it MUST end with \"?\" " +
                 "or \"?!\". Never leave a question bare - that is worse than any typesetting.\n" +
@@ -317,7 +332,9 @@ class CasualRefiner(private val apiKey: String) {
                 "worth,\").\n" +
                 "- DELETE commas before \"but\", \"and\", \"so\" joining clauses, and DELETE the comma after a " +
                 "short leading clause (\"If we can go on Saturday, we'd\" becomes \"If we can go on Saturday " +
-                "we'd\"). Within a sentence, let it run long with almost no internal punctuation.\n" +
+                "we'd\"). Within a SINGLE thought, let the sentence run long with almost no internal " +
+                "punctuation. This licenses long sentences, never fused ones - see the first rule " +
+                "above.\n" +
                 "- KEEP a comma joining two short clauses where it reads as a real pause (\"I really don't " +
                 "blame you at all, it's seriously ok\"). A comma splice is fine and normal. KEEP the " +
                 "commas in a genuine list of things, but drop the one before the final \"and\".\n" +
