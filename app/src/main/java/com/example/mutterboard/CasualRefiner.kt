@@ -253,6 +253,28 @@ class CasualRefiner(private val apiKey: String) {
         // fault. The rule is now one thought per sentence, with the word count
         // demoted to a symptom worth checking.
         //
+        // Stating that rule was not enough on its own, three rewordings running.
+        // In a prompt that is otherwise a list of things to DELETE, one lonely
+        // instruction to ADD keeps losing, and the failure compounds: given a
+        // 49-word sentence whose commas sat exactly on its thought boundaries,
+        // the refiner dutifully deleted all three and inserted no periods,
+        // turning a punctuated run-on into an unpunctuated one. The commas were
+        // the only surviving record of where the thoughts broke.
+        //
+        // So the fix is ordering, not wording. The prompt now opens with an
+        // explicit two-pass procedure — split into sentences first, strip the
+        // typesetting second — and the comma rules defer to whatever pass 1
+        // decided. Boundary information has to be consumed before the pass that
+        // destroys it.
+        //
+        // The comma splice needed defending by name once the delete rules got
+        // sharp enough to work. Measured against the user's own messages the
+        // refiner runs slightly UNDER their comma rate, not over, and the deficit
+        // is all in this one construction — two short clauses side by side with
+        // no conjunction, which they write constantly. A rule that merely
+        // permitted it lost to the rules that delete; it has to name the shape
+        // and say keep.
+        //
         // The two input shapes in the opening paragraph are both real. Whisper
         // usually returns a fully typeset transcript, but on fast speech it
         // returns bare unpunctuated text, and a prompt written only for the
@@ -285,24 +307,40 @@ class CasualRefiner(private val apiKey: String) {
                 "Either way the target is the same hand. Rule 2 begins with the part that matters most in " +
                 "both cases.\n" +
                 "\n" +
+                "DO THE WORK IN TWO PASSES, IN THIS ORDER. This order matters more than any single rule " +
+                "below, because a comma the machine placed is often the only marker of where one thought " +
+                "ends and the next begins - strip it before you have split there and the boundary is gone " +
+                "for good.\n" +
+                "\n" +
+                "PASS 1 - SPLIT. Read the whole message and decide where each separate thought ends. Put " +
+                "a period at every one of those boundaries. Add nothing else and remove nothing yet. Pay " +
+                "special attention to a comma followed by \"and then\", \"but then\", \"so then\", or \"and " +
+                "yeah\": that comma is almost always marking a new thought, so it becomes a PERIOD, not " +
+                "nothing.\n" +
+                "\n" +
+                "PASS 2 - STRIP. Only now go through and take out the machine's typesetting per the rules " +
+                "below - the leftover commas, the final period, the capitals.\n" +
+                "\n" +
                 "Make only these two kinds of change:\n" +
-                "1. Delete filler and disfluencies: um, uh, false starts, and filler uses of \"like\", \"you " +
-                "know\", \"I mean\". Keep \"like\" or \"you know\" when they carry real meaning. Collapse " +
-                "accidental repetition: when the speaker says the same thing twice by mistake - a stutter " +
-                "like \"a serving of chips a serving of chips\", or the same point restated a moment later " +
-                "- keep it only once. But only when it is clearly the SAME thing said twice; if the two " +
-                "mentions could be separate things (chips earlier AND chips again later), keep both. When " +
-                "unsure, keep both. EXCEPTION: NEVER collapse a repeated short interjection - \"yep yep\", " +
-                "\"no no\", \"ok ok\", \"haha haha\", \"dude dude\". Doubling one of those is deliberate " +
-                "emphasis, not a stutter, and it must survive exactly as said. Also drop a stray sign-off " +
-                "that the speech model tacked on but the user clearly did not say - a caption-style " +
-                "\"thank you\", \"thank you for watching\", or \"thanks for watching\" appearing after the real " +
-                "message has already ended. Only remove such an ending when it plainly does not belong; " +
-                "if a \"thanks\" or \"thank you\" is genuinely part of the message, keep it. Never remove " +
-                "other real words - only these caption artifacts. A false start is an abandoned run at a " +
-                "sentence: in \"that's insane Are you wait so you're telling me that she was going\", the " +
-                "\"Are you\" is abandoned mid-question and restarted as \"wait so you're telling me\" - drop " +
-                "the abandoned words and keep the restart.\n" +
+                "1. Delete filler and disfluencies. ALWAYS delete every \"um\" and every \"uh\", every time, " +
+                "wherever they sit - start of a sentence, middle, anywhere. They are never part of the " +
+                "message. Also delete false starts and filler uses of \"like\", \"you know\", \"I mean\". Keep " +
+                "\"like\" or \"you know\" when they carry real meaning. Collapse accidental repetition: when " +
+                "the speaker says the same thing twice by mistake - a stutter like \"a serving of chips a " +
+                "serving of chips\", or the same point restated a moment later - keep it only once. But " +
+                "only when it is clearly the SAME thing said twice; if the two mentions could be separate " +
+                "things (chips earlier AND chips again later), keep both. When unsure, keep both. " +
+                "EXCEPTION: NEVER collapse a repeated short interjection - \"yep yep\", \"no no\", \"ok ok\", " +
+                "\"haha haha\", \"dude dude\". Doubling one of those is deliberate emphasis, not a stutter, " +
+                "and it must survive exactly as said. Also drop a stray sign-off that the speech model " +
+                "tacked on but the user clearly did not say - a caption-style \"thank you\", \"thank you for " +
+                "watching\", or \"thanks for watching\" appearing after the real message has already ended. " +
+                "Only remove such an ending when it plainly does not belong; if a \"thanks\" or \"thank you\" " +
+                "is genuinely part of the message, keep it. Never remove other real words - only these " +
+                "caption artifacts. A false start is an abandoned run at a sentence: in \"that's insane " +
+                "Are you wait so you're telling me that she was going\", the \"Are you\" is abandoned " +
+                "mid-question and restarted as \"wait so you're telling me\" - drop the abandoned words and " +
+                "keep the restart.\n" +
                 "2. Re-punctuate and re-capitalize the way THIS person texts. Follow these rules " +
                 "exactly:\n" +
                 "- FIRST: this person DOES use periods, and their sentences are not endless. Before " +
@@ -330,17 +368,24 @@ class CasualRefiner(private val apiKey: String) {
                 "you\" becomes \"Wait are you\". Same for No, Oh, Yo, Man, Haha, Noooo. KEEP the comma after " +
                 "\"Ok\" or \"Okay\", and after a lead-in of two or more words (\"Lol wtf,\", \"For what it's " +
                 "worth,\").\n" +
-                "- DELETE commas before \"but\", \"and\", \"so\" joining clauses, and DELETE the comma after a " +
-                "short leading clause (\"If we can go on Saturday, we'd\" becomes \"If we can go on Saturday " +
-                "we'd\"). Within a SINGLE thought, let the sentence run long with almost no internal " +
-                "punctuation. This licenses long sentences, never fused ones - see the first rule " +
-                "above.\n" +
-                "- KEEP a comma joining two short clauses where it reads as a real pause (\"I really don't " +
-                "blame you at all, it's seriously ok\"). A comma splice is fine and normal. KEEP the " +
-                "commas in a genuine list of things, but drop the one before the final \"and\".\n" +
-                "- LOWERCASE the first word of a sentence when it is: if, and, but, so, like, it's, let " +
-                "me know, lol, haha, yep, wait. Roughly one sentence start in three should end up " +
-                "lowercase. Otherwise capitalize normally. Always capitalize \"I\".\n" +
+                "- DELETE commas before \"but\", \"and\", \"so\" joining clauses - but ONLY where pass 1 " +
+                "decided the two halves are the same thought. If pass 1 put a period there, that wins. " +
+                "and DELETE the comma after a short leading clause (\"If we can go on Saturday, we'd\" " +
+                "becomes \"If we can go on Saturday we'd\"). Within a SINGLE thought, let the sentence run " +
+                "long with almost no internal punctuation. This licenses long sentences, never fused ones " +
+                "- see the first rule above.\n" +
+                "- KEEP a comma joining two short clauses where it reads as a real pause. This person " +
+                "writes comma splices constantly and deleting them makes the message read flatter than " +
+                "they actually write: \"I really don't blame you at all, it's seriously ok\", \"It's close, " +
+                "it's not bad\", \"It's not a particular song, it's just a song I started making up\". When " +
+                "two short clauses sit side by side with no \"and\"/\"but\"/\"so\" between them, KEEP the " +
+                "comma. KEEP the commas in a genuine list of things, but drop the one before the final " +
+                "\"and\".\n" +
+                "- CHANGE a capital to lowercase at the start of a sentence beginning with: if, and, but, " +
+                "so, like, it's, let me know, lol, haha, yep, wait. The transcript will have capitalized " +
+                "these; take them back down. \"And then just picked it back up\" becomes \"and then just " +
+                "picked it back up\". Roughly one sentence start in three should end up lowercase. " +
+                "Otherwise capitalize normally. Always capitalize \"I\".\n" +
                 "- Use \"!\" instead of \".\" when a sentence is clearly excited, surprised, or emphatic - " +
                 "\"that's nuts!\", \"hell yeah!\", \"holy shit!\". An incredulous or disbelieving question ends " +
                 "with \"??\" or \"?!\" (\"why in the world would he do that?!\", \"she was going 20 miles per " +
