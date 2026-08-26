@@ -54,7 +54,7 @@ class MutterboardInputMethodService : InputMethodService() {
     private var micButton: MaterialButton? = null
     private var cancelButton: MaterialButton? = null
     private var settingsButton: ImageButton? = null
-    private var modeButton: MaterialButton? = null
+    private var modeToggle: ModeToggleView? = null
     private var waveform: WaveformView? = null
     private var progress: LinearProgressIndicator? = null
 
@@ -80,7 +80,7 @@ class MutterboardInputMethodService : InputMethodService() {
         // edits made in the app take effect the next time the keyboard appears.
         customWords = parseCustomWords(prefs.getString(KEY_CUSTOM_WORDS, null))
         // Which refine pass runs. Re-read every refresh so a flip made from the
-        // keyboard's own chip (which writes the pref directly) survives a
+        // keyboard's own toggle (which writes the pref directly) survives a
         // keyboard teardown, and so the two never drift apart.
         refineMode = RefineMode.fromPref(prefs.getString(KEY_REFINE_MODE, RefineMode.DEFAULT.prefValue))
         // Default (cloud) users shouldn't be dead in the water in airplane mode
@@ -117,7 +117,7 @@ class MutterboardInputMethodService : InputMethodService() {
             // refiner yet or the key changed, so it isn't reallocated every
             // time the keyboard reappears.
             // Both refiners are built, warmed and torn down together rather than
-            // on demand: the mode chip is tappable mid-recording, so whichever one
+            // on demand: the mode toggle is tappable mid-recording, so whichever one
             // the user lands on at Stop must already have a warm connection.
             if (key.isEmpty()) {
                 refiner?.close()
@@ -148,7 +148,7 @@ class MutterboardInputMethodService : InputMethodService() {
         micButton = view.findViewById(R.id.mic_button)
         cancelButton = view.findViewById(R.id.cancel_button)
         settingsButton = view.findViewById(R.id.settings_button)
-        modeButton = view.findViewById(R.id.mode_button)
+        modeToggle = view.findViewById(R.id.mode_toggle)
         waveform = view.findViewById(R.id.waveform)
         progress = view.findViewById(R.id.progress)
 
@@ -164,9 +164,9 @@ class MutterboardInputMethodService : InputMethodService() {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             onSettingsTapped()
         }
-        modeButton?.setOnClickListener { v ->
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            onModeTapped()
+        modeToggle?.onModeChanged = { casual ->
+            modeToggle?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            onModeChanged(casual)
         }
         renderMode()
 
@@ -389,7 +389,7 @@ class MutterboardInputMethodService : InputMethodService() {
             text
         }
         // If a cloud refiner is on, run the cleanup pass before committing. The
-        // mode chip picks which one; the two are built and torn down together, so
+        // mode toggle picks which one; the two are built and torn down together, so
         // in practice both are present or neither is. We stay in TRANSCRIBING
         // (progress shown) during the extra round-trip, and fall back to the raw
         // text if it fails so the message is never lost.
@@ -530,7 +530,7 @@ class MutterboardInputMethodService : InputMethodService() {
     }
 
     /**
-     * Warm both refine paths, not just the active one. The chip can be tapped at
+     * Warm both refine paths, not just the active one. The toggle can be tapped at
      * any point up to Stop, so the cost of a second HEAD request buys the
      * guarantee that the mode the user actually lands on is never cold.
      */
@@ -540,35 +540,37 @@ class MutterboardInputMethodService : InputMethodService() {
     }
 
     /**
-     * Flip the refine mode and persist it. Deliberately usable mid-recording:
-     * the mode is only read once the transcript comes back, so a tap made while
-     * still speaking still applies to the message being dictated.
+     * Persist the refine mode the user just selected. The toggle has already
+     * animated itself, so this only records the choice. Deliberately usable
+     * mid-recording: the mode is read once the transcript comes back, so a tap
+     * made while still speaking applies to the message being dictated.
      */
-    private fun onModeTapped() {
-        refineMode = if (refineMode == RefineMode.CASUAL) RefineMode.DEFAULT else RefineMode.CASUAL
+    private fun onModeChanged(casual: Boolean) {
+        refineMode = if (casual) RefineMode.CASUAL else RefineMode.DEFAULT
         getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_REFINE_MODE, refineMode.prefValue)
             .apply()
-        renderMode()
     }
 
     /**
-     * Paint the mode chip. Hidden entirely when no refiner exists — on the
+     * Paint the mode toggle. Hidden entirely when no refiner exists — on the
      * Offline engine, during the offline fallback, and before a key is set,
-     * nothing polishes the transcript at all, so a chip claiming a mode would be
-     * lying about what the keyboard is going to do.
+     * nothing polishes the transcript at all, so a toggle claiming a mode would
+     * be lying about what the keyboard is going to do.
+     *
+     * Never animates: this only ever runs on a state render, where the thumb is
+     * already where it belongs, and sliding it here would signal a change the
+     * user did not make. The animation belongs to the tap alone.
      */
     private fun renderMode() {
-        val button = modeButton ?: return
+        val toggle = modeToggle ?: return
         if (refiner == null && casualRefiner == null) {
-            button.visibility = View.GONE
+            toggle.visibility = View.GONE
             return
         }
-        button.visibility = View.VISIBLE
-        val label = if (refineMode == RefineMode.CASUAL) "Casual" else "Default"
-        button.text = label
-        button.contentDescription = "Refine mode: $label. Tap to switch."
+        toggle.visibility = View.VISIBLE
+        toggle.setMode(refineMode == RefineMode.CASUAL, animate = false)
     }
 
     private fun hasRecordAudioPermission(): Boolean =
@@ -595,7 +597,7 @@ class MutterboardInputMethodService : InputMethodService() {
         const val KEY_API_KEY = "groq_api_key"
         const val KEY_ENGINE = "engine"
         // Which refine pass runs on the cloud path. Written from the keyboard's
-        // own mode chip, not from the setup screen.
+        // own mode toggle, not from the setup screen.
         const val KEY_REFINE_MODE = "refine_mode"
         // Custom vocabulary, stored as a newline-separated list of words/phrases.
         const val KEY_CUSTOM_WORDS = "custom_words"

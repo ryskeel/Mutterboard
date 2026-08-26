@@ -94,6 +94,16 @@ class CasualRefinerTest {
     }
 
     @Test
+    fun acceptsStretchedWordCarriedThrough() {
+        // Whisper transcribes a held vowel literally, and casual mode keeps it.
+        // Carrying it through is what keeps the pair token-identical here —
+        // normalizing "ohhhhh" to "oh" would spend novel-word budget for nothing.
+        val raw = "Ohhhhh yeah dude, I am really down to do that."
+        val edited = "Ohhhhh yeah dude I am really down to do that"
+        assertFalse(refiner.isInvented(raw, edited))
+    }
+
+    @Test
     fun acceptsParentheticalAside() {
         val raw = "i think its pretty fun and also surprisingly economical to go " +
             "with the chefs choice experience assuming they still have it"

@@ -32,21 +32,10 @@
             android:layout_height="match_parent"
             android:layout_weight="1" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/mode_button"
-            style="@style/Widget.Material3.Button.TonalButton"
+        <com.example.mutterboard.ModeToggleView
+            android:id="@+id/mode_toggle"
             android:layout_width="wrap_content"
-            android:layout_height="34dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:paddingLeft="16dp"
-            android:paddingRight="16dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            app:cornerRadius="17dp"
-            android:text="Default"
-            android:textAppearance="?attr/textAppearanceLabelMedium"
-            android:contentDescription="Refine mode: Default. Tap to switch." />
+            android:layout_height="wrap_content" />
 
     </LinearLayout>
 
