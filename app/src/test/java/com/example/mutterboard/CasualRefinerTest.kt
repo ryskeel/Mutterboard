@@ -43,19 +43,17 @@ class CasualRefinerTest {
             "called good lock"
         val edited = "I'm sure you already know this but the way to make it so you " +
             "can fully customize the outer display is with a third party app " +
-            "called Good Lock"
+            "called good lock"
         assertFalse(refiner.isInvented(raw, edited))
     }
 
     @Test
-    fun acceptsLowercaseSentenceStartAfterAPeriod() {
-        // Casual mode's signature move: a period mid-message, then a lowercase
-        // next word. The tokenizer lowercases anyway, so this must be invisible
-        // to the guard.
-        val raw = "i put it on my calendar to sign up when the tickets go on sale " +
-            "let me know if you do the same"
-        val edited = "I put it on my calendar to sign up when the tickets go on " +
-            "sale. let me know if you do the same!"
+    fun acceptsLowercasedPlaceAndBrandNames() {
+        // Casual mode takes a place, business or brand name back down to
+        // lowercase while leaving a person's name alone. The tokenizer
+        // lowercases everything anyway, so this must be invisible to the guard.
+        val raw = "Katie went to Best Buy yesterday but couldn't find anything."
+        val edited = "Katie went to best buy yesterday but couldn't find anything"
         assertFalse(refiner.isInvented(raw, edited))
     }
 

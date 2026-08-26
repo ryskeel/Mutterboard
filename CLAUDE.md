@@ -8,7 +8,14 @@ Whisper V3 Turbo) and **Offline** (on-device Parakeet). On the cloud path only, 
 second LLM pass then cleans the transcript up before it is committed.
 
 Two refine modes for that pass, toggled from the keyboard itself:
-`GroqRefiner` (Default) and `CasualRefiner` (Casual).
+`GroqRefiner` (Default) and `CasualRefiner` (Casual). The toggle hides itself
+whenever no refiner exists - Offline engine, the automatic offline fallback, or
+no API key - because a toggle naming a mode that isn't running would be lying.
+
+Both prompts also carry **rule 3**: when the user spells a word out letter by
+letter mid-sentence ("Las Fuentas, spelled L-A-S-F-U-E-N-T-A-S"), those letters
+are an instruction addressed to the model. It respells the word, deletes the
+instruction, and the letters outrank the transcript.
 
 ## The refiners are the heart of this app
 
@@ -38,17 +45,38 @@ prompt.** They are the design document.
 
 - **Whisper's output is already punctuated and capitalized.** It usually returns
   document-style prose; on fast speech it returns bare unpunctuated text. Any
-  prompt work has to handle both. Casual mode is mostly *subtraction*.
+  prompt work has to handle both. Casual mode is mostly *subtraction*. Note the
+  bare path is hard to test on demand - Whisper punctuated every attempt across
+  a session of deliberately fast speech.
 
 - **Casual mode's prompt is derived from the user's real hand-TYPED messages.**
   Never add an example taken from dictated output — it has already happened once
   and produced a rule that was a transcription artifact rather than a habit. If
   you need a new example, ask the user to type how they would have written it.
 
-- **Order matters in the casual prompt: split into sentences first, strip
-  typesetting second.** Whisper's commas are often the only marker of where one
-  thought ends. Rules that ADD lose to rules that DELETE unless the adding step
-  is made to happen first.
+- **`CasualRefiner`'s prompt IS `GroqRefiner`'s prompt plus a short delta.** The
+  opening paragraph, the numbered rules and the whole hard-rules block are
+  carried over; the additions are the five CASUAL HAND bullets and the examples.
+  Keep it that way, and when you edit the default prompt, edit the carried-over
+  copy to match. An earlier version diverged into a two-and-a-half-times-longer
+  two-pass typesetting procedure. Every rule in it was justified by a real
+  failure and the result was still worse: it read like 2012-era voice dictation,
+  and rule 1 stopped deleting filler even though its wording never changed.
+  **Length in this prompt is spent out of rule 1's budget.**
+
+- **A rule that ADDS or CHANGES must be carved out of every hard rule that
+  forbids it, not just the nearest one.** Rule 3 (the spelling instruction)
+  respells a word, which both "every word you KEEP must stay exactly as the user
+  said it" and "you may fix casing and add a missing apostrophe" prohibit.
+  Carving it out of one of them left the feature silently half-working across
+  four live tests: it deleted the instruction every time and never once applied
+  the letters.
+
+- **An example only teaches when its Input and Output disagree about the thing
+  being tested.** Rule 3 shipped with examples whose spelled letters matched what
+  the model would have written anyway, so none of them established that the
+  letters outrank the transcript. Two "passing" live tests were coincidences
+  where Whisper had already guessed right.
 
 ## Verifying a prompt change
 

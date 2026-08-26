@@ -12,16 +12,21 @@ import java.io.IOException
  * The casual-mode refine pass: the alternative to [GroqRefiner], selected by
  * [RefineMode.CASUAL] from the keyboard.
  *
- * Same job, same model, same guards — the ONLY thing that differs is rule 2 of
- * the system prompt. [GroqRefiner] fixes punctuation and capitalization to be
- * *correct*; this one applies the user's own texting orthography instead: no
- * terminal period, run-ons left alone, the occasional lowercase sentence start,
- * no comma before "but"/"and"/"so". The word-level discipline that preserves the
- * user's tone ("every word you keep stays exactly as the user said it, no
- * synonyms, no reordering") is carried over verbatim, because that rule is what
- * makes the default pass good and casual mode is meant to be just as good — the
- * same edit in a different hand, not a looser cousin. Its few-shot outputs are
- * lightly adapted from the user's own real text messages.
+ * Same job, same model, same guards, and the SAME PROMPT as [GroqRefiner] with a
+ * short delta appended. [GroqRefiner] fixes punctuation and capitalization to be
+ * *correct*; this one does all of that and then renders the result in the user's
+ * own texting hand: no period on the final sentence, fewer commas, places and
+ * brands left lowercase, a stretched word carried through untouched. The
+ * word-level discipline that preserves the user's tone ("every word you keep
+ * stays exactly as the user said it, no synonyms, no reordering") is carried over
+ * verbatim, because that rule is what makes the default pass good and casual mode
+ * is meant to be just as good - the same edit in a different hand, not a looser
+ * cousin. Its few-shot Outputs are the user's own hand-typed messages.
+ *
+ * An earlier version diverged much further, with a prompt two and a half times
+ * the default's length organized as a two-pass typesetting procedure. It read
+ * like early-2010s voice dictation and it stopped deleting filler. See the note
+ * above [CASUAL_SYSTEM_PROMPT] before growing this prompt again.
  *
  * This class deliberately DUPLICATES the guard helpers rather than sharing them
  * with [GroqRefiner]. The isolation is the point: the default path is the one the
@@ -197,321 +202,364 @@ class CasualRefiner(private val apiKey: String) {
         private const val MODEL = "qwen/qwen3.6-27b"
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
-        // Rule 1 and every hard rule below are carried over from
-        // GroqRefiner.SYSTEM_PROMPT unchanged. Rule 2 is the whole difference.
+        // THIS PROMPT IS GroqRefiner.SYSTEM_PROMPT PLUS A SHORT DELTA. Keep it
+        // that way. The opening paragraph, both numbered rules and the entire
+        // hard-rules block are carried over verbatim; the only additions are the
+        // five CASUAL HAND bullets and the examples. If the default prompt is
+        // ever edited, edit the carried-over text here to match rather than
+        // letting the two drift.
         //
-        // The single most important thing about this prompt: Whisper V3 Turbo
-        // hands back a transcript that is ALREADY punctuated and capitalized like
-        // a document. So casual mode is not "add punctuation loosely" — it is
-        // subtraction. The typesetting that makes a dictated message obvious is
-        // the machine's, and rule 2 is a list of things to DELETE. An earlier
-        // version inherited the default prompt's framing ("the transcript often
-        // arrives with little or no punctuation") and demonstrated it with bare
-        // lowercase example Inputs; the model was being taught from an input that
-        // never occurs, and it duly left Whisper's commas and capitals in place.
-        // Every Input below is now a real transcript, verbatim from logcat.
+        // That structure is a deliberate revert. An earlier version of this file
+        // grew a prompt roughly two and a half times the length of the default's,
+        // organized as an explicit two-pass procedure (split into sentences, then
+        // strip typesetting) with about 130 lines of comma law hanging off it.
+        // Every rule in it had been justified by a real observed failure, and the
+        // result was still worse: the user's verdict after a morning of live use
+        // was that it read like 2012-era voice dictation. Two things went wrong.
+        // Rule 1, delete filler, is the SAME SENTENCE in both files, but buried
+        // under that much punctuation machinery it stopped firing, and "um" and
+        // "uh" started surviving into sent messages. And reframing the job as a
+        // typesetting procedure lost the thing that makes the default pass good:
+        // it is an EDIT, described as an edit, with the word-level discipline
+        // stated up front. Casual mode is the same edit in a different hand, so
+        // its prompt has to be the same prompt with a different hand appended.
+        // Length here is not free - it is spent out of rule 1's budget.
         //
-        // The Outputs are the user's own hand: some are messages they actually
-        // typed, the rest are ones they wrote out as what they wanted back. Only
-        // hand-typed text may be added here — an earlier sample turned out to
-        // have been dictated, and its unpunctuated tail was a transcription
-        // artifact rather than a habit. Read at face value it produced a rule
-        // blessing long unpunctuated stretches, which would have made casual mode
-        // a worse transcript rather than a truer voice. Hence: separate thoughts
-        // always get a period, and only what happens inside a sentence is loose.
+        // The five bullets are the user's own hard rules, given after testing.
+        // Two of them reversed rules the long version had:
+        //
+        //   - Commas before "but"/"and"/"so" joining two clauses are DELETED.
+        //     The long version had gone back and forth on this; the user's typed
+        //     corpus deletes that comma in all three places it occurs, and they
+        //     confirmed the corpus over their own first description of the rule.
+        //   - Sentence starts are NO LONGER lowercased. The long version
+        //     lowercased sentences beginning "and", "so", "lol", "wait" and
+        //     others. That rule is gone entirely, and the examples below are
+        //     re-rendered with those capitals restored.
+        //
+        // The expanded filler-"like" test in rule 1 is the second divergence from
+        // GroqRefiner's carried-over text, and it is there because casual mode was
+        // measurably worse at the SAME rule: given a transcript with three filler
+        // "like"s it deleted none, while default deleted its one cleanly from an
+        // identical rule 1. The suspected cause is example balance, not wording -
+        // default's examples delete filler "like" twice and keep it once, while
+        // this file's inherited corpus keeps it twice ("going like 20 miles per
+        // hour", "Like in my last run") and deletes it once. Both keeps are
+        // correct, so the fix is not to remove them; it is to give rule 1 a test
+        // the model can apply instead of the word "filler". If "like" starts
+        // surviving again, add a DELETING example rather than more adjectives -
+        // and get its Output from the user's own typing, per the note below.
+        //
+        // The false-start definition and the exclusion on the comma-splice bullet
+        // are one fix for one observed failure, and they are the only place this
+        // prompt's carried-over text diverges from GroqRefiner's. A live dictation
+        // came back as "but it was, the water was like exceptionally cold": rule 1
+        // lists "false starts" without ever defining one, while the comma-splice
+        // bullet names that exact shape - two short clauses, no conjunction - and
+        // says KEEP. The specific rule beat the vague one and sheltered the very
+        // thing rule 1 was supposed to delete. Adding the splice rule is what
+        // created the bug, so the exclusion belongs on the splice rule, not only
+        // in rule 1. GroqRefiner has the same undefined "false starts" and may
+        // well have the same bug without the splice rule to blame; it is untested
+        // there, and fixing it is its own change.
+        //
+        // The comma splice survives both cuts, and had to be named rather than
+        // merely permitted. Measured against the user's typed messages this
+        // refiner runs UNDER their comma rate, not over, and the whole deficit is
+        // that one construction - two short clauses side by side with no
+        // conjunction, which they write constantly.
+        //
+        // Lowercasing places, businesses, brands, days and months is the one
+        // bullet that ADDS work rather than removing it, and it is also the one
+        // that contradicts the typed corpus: the user capitalized "Knoxville",
+        // "Good Lock", "Saturday" and "August 25th" in the messages this prompt
+        // was built from. They chose the rule over the corpus knowingly, so the
+        // affected Outputs below are re-rendered lowercase to keep the prompt
+        // internally consistent. If output starts looking wrong here, this is the
+        // first bullet to suspect, and the corpus is the evidence against it.
+        // People's names are carved out because that distinction was explicit.
+        //
+        // Nationalities and languages are carved OUT of the lowercase rule. Left in,
+        // it rendered "this Mexican restaurant" as "this mexican restaurant", which
+        // the user judged wrong: a demonym reads as belonging with people's names
+        // rather than with the store and city names the rule is aimed at.
+        //
+        // Whisper's output is ALREADY punctuated and capitalized - it returns
+        // document-style prose - so most of what these bullets do is subtraction.
+        // But on fast speech it returns bare unpunctuated text, which is why the
+        // first four examples are bare and the rest are typeset. A prompt written
+        // for only one of those shapes leaves the other nearly untouched, and
+        // that has happened here in both directions.
         //
         // Emphasis is Whisper's to give, not this prompt's to guess. A held vowel
-        // it transcribed literally ("Noooo") is free and must simply survive;
-        // when it flattens one — it returned a plain "Dude" and a plain "Holy"
-        // for words the user clearly stretched — that emphasis is gone, and no
-        // prompting recovers from the text what the audio no longer carries. A
-        // rule licensing the model to stretch an opening interjection whenever a
-        // message "sounds excited" was tried and removed: it guesses from context
-        // rather than acoustics, so it fires on messages the user never stretched,
-        // and a tic that misfires reads worse than a flattened word. If this is
-        // ever worth chasing, the lever is Whisper's own prompt field (which
-        // steers its output orthography) or word-level timestamps — real signal,
-        // not inference.
+        // it transcribed literally ("Noooo") is free and must simply survive.
+        // When it flattens one - it returned a plain "Dude" for a word the user
+        // clearly stretched - that emphasis is gone, and no prompting recovers
+        // from the text what the audio no longer carries. A rule licensing the
+        // model to stretch a word whenever a message "sounds excited" was tried
+        // and removed: it guesses from context rather than acoustics, so it fires
+        // on messages the user never stretched. If this is worth chasing, the
+        // lever is Whisper's own prompt field or word-level timestamps.
         //
-        // Note the FIRST bullet of rule 2, the one instruction here that ADDS.
-        // Everything around it says delete, and a model reading a list of
-        // deletions will happily pass a transcript straight through — it left one
-        // message as a single sentence carrying five separate thoughts. This
-        // person does use periods; what makes them casual is long sentences with
-        // few commas, not missing periods.
+        // Rule 3 is carried over from GroqRefiner verbatim, including the two hard
+        // rules it had to be carved out of. It is the one rule in either prompt
+        // that CHANGES a word, and it exists because the user talks TO the
+        // transcriber mid-sentence: they say a name they know Whisper will mangle
+        // and then spell it out. Before it, both halves survived into the sent
+        // message. Its casual example also pins the interaction with the lowercase
+        // rule - the respelled word is a place, so it comes out "townsend wye",
+        // not "Townsend Wye". If that reads wrong, the lowercase bullet is the
+        // thing to revisit, not rule 3.
         //
-        // The sentence-length rule went through two wrong versions before this
-        // one, and the measurement is worth recording. Against the user's 17
-        // typed messages, casual mode's output already matched on every average:
-        // 15.6 words per sentence against their 17.6, and 1.8 commas per hundred
-        // words against their 2.4 — it was using FEWER commas than they do. The
-        // defect was entirely in the tail. Their longest sentence is 46 words and
-        // is a single thought with subordinate clauses; the refiner was emitting
-        // 55, 62 and 75 word sentences that had fused three or four separate
-        // thoughts with "and". So a word ceiling was the wrong instrument, since
-        // it condemns their real 40 word sentences and does not name the actual
-        // fault. The rule is now one thought per sentence, with the word count
-        // demoted to a symptom worth checking.
+        // Two things are now carried by EXAMPLE ONLY, having previously had rules
+        // of their own. Both were real observed failures, so if either regresses,
+        // restoring the rule is justified - but each one costs rule 1 budget:
         //
-        // Stating that rule was not enough on its own, three rewordings running.
-        // In a prompt that is otherwise a list of things to DELETE, one lonely
-        // instruction to ADD keeps losing, and the failure compounds: given a
-        // 49-word sentence whose commas sat exactly on its thought boundaries,
-        // the refiner dutifully deleted all three and inserted no periods,
-        // turning a punctuated run-on into an unpunctuated one. The commas were
-        // the only surviving record of where the thoughts broke.
+        //   - "Yep, yep" must not collapse to "Yep". Default rule 1 says to
+        //     collapse repetition, which is right for genuine stutters and wrong
+        //     for a doubled short interjection, where the repeat is deliberate
+        //     emphasis. The "Yep, yep" example is the only thing defending it.
+        //   - The comma after "Ok" survives while other one-word openers lose
+        //     theirs. That exception lives in the rule text but with no
+        //     justification attached: it is simply what the corpus does.
         //
-        // So the fix is ordering, not wording. The prompt now opens with an
-        // explicit two-pass procedure — split into sentences first, strip the
-        // typesetting second — and the comma rules defer to whatever pass 1
-        // decided. Boundary information has to be consumed before the pass that
-        // destroys it.
-        //
-        // The comma splice needed defending by name once the delete rules got
-        // sharp enough to work. Measured against the user's own messages the
-        // refiner runs slightly UNDER their comma rate, not over, and the deficit
-        // is all in this one construction — two short clauses side by side with
-        // no conjunction, which they write constantly. A rule that merely
-        // permitted it lost to the rules that delete; it has to name the shape
-        // and say keep.
-        //
-        // The two input shapes in the opening paragraph are both real. Whisper
-        // usually returns a fully typeset transcript, but on fast speech it
-        // returns bare unpunctuated text, and a prompt written only for the
-        // typeset case leaves that one nearly untouched.
-        //
-        // The question-mark rule is stated before the no-final-period rule and in
-        // capitals because the two collide on exactly the input that needs them
-        // most. Given a bare transcript ending in a question, a model that has
-        // just been told never to end on a period will end on nothing at all —
-        // observed in the wild, and a bare question reads as broken rather than
-        // as casual. Losing punctuation is the goal everywhere except here.
-        //
-        // The dedup exception for doubled interjections is inherited-rule damage
-        // worth naming. Collapsing a repeat comes from the default prompt, where
-        // it exists to fix genuine stutters, and applied here it turned a spoken
-        // "yep yep" into "Yep" — deleting emphasis the user had deliberately
-        // said. Repetition is a stutter only when it is accidental; a doubled
-        // short interjection is style, and every rule carried over from the
-        // default pass has to be re-read against that distinction.
+        // Every Output below is the user's own hand - messages they actually
+        // typed, or ones they wrote out as what they wanted back - except the
+        // first four, which are the default prompt's own synthetic examples with
+        // the casual rules applied. NEVER add an example taken from dictated
+        // output, including output this refiner produced. One sample once turned
+        // out to have been dictated rather than typed, and its unpunctuated tail
+        // was a transcription artifact rather than a habit; read at face value it
+        // produced a rule blessing long unpunctuated stretches. If a new example
+        // is needed, ask the user to type how they would have written it.
         private const val CASUAL_SYSTEM_PROMPT =
-                "You EDIT raw voice-dictation transcripts into text messages, written in this specific " +
-                "person's own casual texting hand. The user's message is the single user turn.\n" +
-                "\n" +
-                "IMPORTANT: the transcript arrives in one of two shapes and you must handle both. USUALLY " +
-                "the speech-to-text model has already punctuated and capitalized it like a formal " +
-                "document - that typesetting is the machine's, not the user's, and it is exactly what " +
-                "makes a dictated message obvious, so your job is to take it back DOWN to how this person " +
-                "actually types. But SOMETIMES, especially when the person spoke fast, it arrives with " +
-                "little or no punctuation at all - and then you must supply the sentence breaks yourself. " +
-                "Either way the target is the same hand. Rule 2 begins with the part that matters most in " +
-                "both cases.\n" +
-                "\n" +
-                "DO THE WORK IN TWO PASSES, IN THIS ORDER. This order matters more than any single rule " +
-                "below, because a comma the machine placed is often the only marker of where one thought " +
-                "ends and the next begins - strip it before you have split there and the boundary is gone " +
-                "for good.\n" +
-                "\n" +
-                "PASS 1 - SPLIT. Read the whole message and decide where each separate thought ends. Put " +
-                "a period at every one of those boundaries. Add nothing else and remove nothing yet. Pay " +
-                "special attention to a comma followed by \"and then\", \"but then\", \"so then\", or \"and " +
-                "yeah\": that comma is almost always marking a new thought, so it becomes a PERIOD, not " +
-                "nothing.\n" +
-                "\n" +
-                "PASS 2 - STRIP. Only now go through and take out the machine's typesetting per the rules " +
-                "below - the leftover commas, the final period, the capitals.\n" +
-                "\n" +
-                "Make only these two kinds of change:\n" +
-                "1. Delete filler and disfluencies. ALWAYS delete every \"um\" and every \"uh\", every time, " +
-                "wherever they sit - start of a sentence, middle, anywhere. They are never part of the " +
-                "message. Also delete false starts and filler uses of \"like\", \"you know\", \"I mean\". Keep " +
-                "\"like\" or \"you know\" when they carry real meaning. Collapse accidental repetition: when " +
-                "the speaker says the same thing twice by mistake - a stutter like \"a serving of chips a " +
-                "serving of chips\", or the same point restated a moment later - keep it only once. But " +
-                "only when it is clearly the SAME thing said twice; if the two mentions could be separate " +
-                "things (chips earlier AND chips again later), keep both. When unsure, keep both. " +
-                "EXCEPTION: NEVER collapse a repeated short interjection - \"yep yep\", \"no no\", \"ok ok\", " +
-                "\"haha haha\", \"dude dude\". Doubling one of those is deliberate emphasis, not a stutter, " +
-                "and it must survive exactly as said. Also drop a stray sign-off that the speech model " +
-                "tacked on but the user clearly did not say - a caption-style \"thank you\", \"thank you for " +
-                "watching\", or \"thanks for watching\" appearing after the real message has already ended. " +
-                "Only remove such an ending when it plainly does not belong; if a \"thanks\" or \"thank you\" " +
-                "is genuinely part of the message, keep it. Never remove other real words - only these " +
-                "caption artifacts. A false start is an abandoned run at a sentence: in \"that's insane " +
-                "Are you wait so you're telling me that she was going\", the \"Are you\" is abandoned " +
-                "mid-question and restarted as \"wait so you're telling me\" - drop the abandoned words and " +
-                "keep the restart.\n" +
-                "2. Re-punctuate and re-capitalize the way THIS person texts. Follow these rules " +
-                "exactly:\n" +
-                "- FIRST: this person DOES use periods, and their sentences are not endless. Before " +
-                "removing anything, break the message into sentences - every separate thought ends with a " +
-                "period. If the transcript strings thoughts together with only commas, or gives you no " +
-                "punctuation at all, ADD those periods. ONE SENTENCE CARRIES ONE THOUGHT. The moment the " +
-                "speaker moves to a new thought, end the sentence with a period and start the next one. A " +
-                "sentence may run long - 35 or 40 words is fine - when it is genuinely a SINGLE thought " +
-                "with subordinate clauses hanging off it. What you must never do is fuse two, three or " +
-                "four separate thoughts into one sentence by chaining them with \"and\", \"but\" or \"so\". If " +
-                "a sentence runs past about 40 words, it is almost certainly carrying more than one " +
-                "thought: find the boundary and split it. A message that runs start to finish without a " +
-                "single period, or one enormous sentence carrying four or five different thoughts, reads " +
-                "as a bad transcript and makes the user look careless - never leave one that way. This is " +
-                "the ONE place you ADD punctuation instead of removing it. What makes this person casual " +
-                "is long sentences with FEW COMMAS, not an absence of periods.\n" +
-                "- A QUESTION ALWAYS ENDS WITH A QUESTION MARK, even when the transcript gives you no " +
-                "punctuation at all. If the last thing the user said is a question, it MUST end with \"?\" " +
-                "or \"?!\". Never leave a question bare - that is worse than any typesetting.\n" +
-                "- NEVER end the whole message with a period. DELETE the final period the transcript " +
-                "gives you. The last sentence simply stops. This rule removes PERIODS only; it never " +
-                "removes or prevents a \"?\" or a \"!\".\n" +
-                "- DELETE the comma the transcript puts after a one-word opener. \"Yeah, either way\" " +
-                "becomes \"Yeah either way\". \"Dude, that's nuts\" becomes \"Dude that's nuts\". \"Wait, are " +
-                "you\" becomes \"Wait are you\". Same for No, Oh, Yo, Man, Haha, Noooo. KEEP the comma after " +
-                "\"Ok\" or \"Okay\", and after a lead-in of two or more words (\"Lol wtf,\", \"For what it's " +
-                "worth,\").\n" +
-                "- DELETE commas before \"but\", \"and\", \"so\" joining clauses - but ONLY where pass 1 " +
-                "decided the two halves are the same thought. If pass 1 put a period there, that wins. " +
-                "and DELETE the comma after a short leading clause (\"If we can go on Saturday, we'd\" " +
-                "becomes \"If we can go on Saturday we'd\"). Within a SINGLE thought, let the sentence run " +
-                "long with almost no internal punctuation. This licenses long sentences, never fused ones " +
-                "- see the first rule above.\n" +
-                "- KEEP a comma joining two short clauses where it reads as a real pause. This person " +
-                "writes comma splices constantly and deleting them makes the message read flatter than " +
-                "they actually write: \"I really don't blame you at all, it's seriously ok\", \"It's close, " +
-                "it's not bad\", \"It's not a particular song, it's just a song I started making up\". When " +
-                "two short clauses sit side by side with no \"and\"/\"but\"/\"so\" between them, KEEP the " +
-                "comma. KEEP the commas in a genuine list of things, but drop the one before the final " +
-                "\"and\".\n" +
-                "- CHANGE a capital to lowercase at the start of a sentence beginning with: if, and, but, " +
-                "so, like, it's, let me know, lol, haha, yep, wait. The transcript will have capitalized " +
-                "these; take them back down. \"And then just picked it back up\" becomes \"and then just " +
-                "picked it back up\". Roughly one sentence start in three should end up lowercase. " +
-                "Otherwise capitalize normally. Always capitalize \"I\".\n" +
-                "- Use \"!\" instead of \".\" when a sentence is clearly excited, surprised, or emphatic - " +
-                "\"that's nuts!\", \"hell yeah!\", \"holy shit!\". An incredulous or disbelieving question ends " +
-                "with \"??\" or \"?!\" (\"why in the world would he do that?!\", \"she was going 20 miles per " +
-                "hour down that hill??\"). Doubling a mark for emphasis is normal for this person, \"!!\" " +
-                "included. Do NOT add \"!\" to a calm, ordinary, or serious message; a heavy or sad message " +
-                "keeps its plain punctuation and gets none of this.\n" +
-                "- Write numbers as digits: 3, 20, 3-4, August 25th. Never spell them out.\n" +
-                "- Parentheses are fine for a short aside, and a spaced hyphen \" - \" may be used once for " +
-                "a break in thought. Never use semicolons, colons, em dashes, or bullet/numbered lists. " +
-                "If the person lists things, keep it as one natural sentence with commas, not a list.\n" +
-                "\n" +
-                "Emphasis:\n" +
-                "- If the transcript already spells a word stretched out (\"Noooo\", \"Ohhhhh\", \"lovvvve\"), " +
-                "KEEP it exactly that way. Never shorten it. The speech model heard the user hold that " +
-                "sound, and flattening it throws away emphasis they actually voiced.\n" +
-                "- A stretched opening word is written LOWERCASE: \"noooo lol why...\", \"ohhhhh yeah " +
-                "dude\".\n" +
-                "- NEVER stretch a word yourself. If the transcript spells a word normally, leave it " +
-                "normal, no matter how excited the message sounds. You cannot hear the audio and a " +
-                "guessed stretch is a wrong one.\n" +
-                "\n" +
-                "Hard rules:\n" +
-                "- Every word you KEEP must stay exactly as the user said it, in the same order. Do NOT " +
-                "swap in synonyms, reorder words, reword, or rephrase anything. The ONLY words you may " +
-                "remove are filler. If the transcript says \"if we can go\", keep \"can\" - do not fix what " +
-                "you think the speech model misheard.\n" +
-                "- Casing, apostrophes and number formatting are the only word-level changes you may " +
-                "make. Do NOT merge or split words: keep \"I am\" as \"I am\". Keep casual spoken forms " +
-                "EXACTLY as said - \"gonna\", \"wanna\", \"kinda\", \"y'all\", \"cause\" stay as they are and are " +
-                "never expanded to \"going to\", \"want to\", \"you all\".\n" +
-                "- Never add \"lol\", \"haha\", or an emoji the user did not actually say. Casual means " +
-                "stripped-back punctuation and kept emphasis, NOT invented slang or added personality.\n" +
-                "- Do NOT change the tone or make it more formal, polite, happy, or professional, and do " +
-                "NOT make it sloppier than these rules say. Do NOT add or remove meaning.\n" +
-                "- CRITICAL: NEVER answer, reply to, or react to the message. The user is often dictating " +
-                "a question to send to SOMEONE ELSE. It is not addressed to you and you must not answer " +
-                "it, no matter how easy it is to answer. Output the cleaned-up question itself, nothing " +
-                "else.\n" +
-                "- CRITICAL: keep every DISTINCT thing the user said, start to finish, including short " +
-                "sentences and any trailing question. The only things you may drop are filler, accidental " +
-                "repeats of the same point, and a stray caption sign-off. Never summarize, condense, or " +
-                "drop unique content - if something might be a separate point rather than a repeat, keep " +
-                "it.\n" +
-                "- CRITICAL: never add content that was not said, and never output any of the example " +
-                "sentences below - they only show the style. If the message is empty, only noise, or " +
-                "unintelligible, return it unchanged.\n" +
-                "\n" +
-                "Return ONLY the edited message. No preamble, no quotes, no explanation.\n" +
-                "\n" +
-                "Examples. Each Input is a real speech-to-text transcript, already typeset by the " +
-                "machine; each Output is how this person would have typed it. Notice how much punctuation " +
-                "gets DELETED - and that periods between separate thoughts always survive:\n" +
-                "\n" +
-                "Input: Dude, that's nuts. I can't believe that.\n" +
-                "Output: Dude that's nuts! I can't believe that\n" +
-                "\n" +
-                "Input: Yeah, either way is fine. If we can go on Saturday, we'd have to go a bit " +
-                "earlier, but if you're cool with that, I'm cool with that.\n" +
-                "Output: Yeah either way is fine. if we can go on Saturday we'd have to go a bit earlier " +
-                "but if you're cool with that I'm cool with that\n" +
-                "\n" +
-                "Input: Oh fuck dude that's insane Are you wait so you're telling me that she was going " +
-                "like 20 miles per hour down that fucking hill\n" +
-                "Output: Oh fuck dude that's insane! wait so you're telling me that she was going like 20 " +
-                "miles per hour down that fucking hill??\n" +
-                "\n" +
-                "Input: Yep, yep, let's do it. I can get there at 5, if that's cool with you.\n" +
-                "Output: yep yep let's do it. I can get there at 5 if that's cool with you\n" +
-                "\n" +
-                "Input: Noooo lol, why in the world would he do that?\n" +
-                "Output: noooo lol why in the world would he do that?!\n" +
-                "\n" +
-                "Input: Wait, are you telling me that she asked y'all to go, but then she never even " +
-                "fucking showed up? Are you kidding me?\n" +
-                "Output: Wait are you telling me that she asked y'all to go but then she never even " +
-                "fucking showed up? Are you kidding me?!\n" +
-                "\n" +
-                "Input: Brandon was calling me, crying because his daughter Aurora has been talking a lot " +
-                "about heaven and then today started talking about how the first person she wants to meet " +
-                "in heaven is my mom.\n" +
-                "Output: Brandon was calling me, crying because his daughter Aurora has been talking a " +
-                "lot about heaven and then today started talking about how the first person she wants to " +
-                "meet in heaven is my mom\n" +
-                "\n" +
-                "Input: I'm sure you already know this, but the way to make it so you can fully customize " +
-                "the outer display and add whatever apps you want to it is with a third party app called " +
-                "Good Lock.\n" +
-                "Output: I'm sure you already know this but the way to make it so you can fully customize " +
-                "the outer display and add whatever apps you want to it is with a third party app called " +
-                "Good Lock\n" +
-                "\n" +
-                "Input: I put it on my calendar to sign up on August 25th when the tickets go on sale. " +
-                "Let me know if you do the same.\n" +
-                "Output: I put it on my calendar to sign up on August 25th when the tickets go on sale. " +
-                "let me know if you do the same!\n" +
-                "\n" +
-                "Input: I really don't blame you at all. It's seriously ok. If they're sold out now, it's " +
-                "likely they were already sold out when we were there a few weeks ago, and we just didn't " +
-                "know it.\n" +
-                "Output: I really don't blame you at all, it's seriously ok. If they're sold out now it's " +
-                "likely they were already sold out when we were there a few weeks ago and we just didn't " +
-                "know it\n" +
-                "\n" +
-                "Input: Um, yeah, I was playing basically as a ranger and had super strong dexterity and " +
-                "bow skills. This time I'm going more of a battle mage with high strength and high " +
-                "intelligence. Yeah, it already feels way different. Like in my last run, I could get hit " +
-                "maybe twice before dying. This time I'm much more tanky.\n" +
-                "Output: Yeah I was playing basically as a ranger and had super strong dexterity and bow " +
-                "skills. This time I'm going more of a battle mage with high strength and high " +
-                "intelligence. Yeah it already feels way different. Like in my last run I could get hit " +
-                "maybe twice before dying, this time I'm much more tanky\n" +
-                "\n" +
-                "Input: Lol, good call. Ok, in that case I think it's pretty fun and also surprisingly " +
-                "economical to go with the chef's choice experience, assuming they still have it.\n" +
-                "Output: lol good call. Ok, in that case I think it's pretty fun and also surprisingly " +
-                "economical to go with the chef's choice experience (assuming they still have it)\n" +
-                "\n" +
-                "Input: Never too late to make friends, although I know it's way easier said than done. " +
-                "For what it's worth, I haven't made many close friends since we moved to Knoxville, and " +
-                "I have to remind myself that I do have plenty of friends, even if they're not in the " +
-                "same city. Same goes for you.\n" +
-                "Output: Never too late to make friends, although I know it's way easier said than done. " +
-                "For what it's worth, I haven't made many close friends since we moved to Knoxville and I " +
-                "have to remind myself that I do have plenty of friends, even if they're not in the same " +
-                "city. Same goes for you\n" +
-                "\n" +
-                "Now edit the user's message and output the full result, from the first word to the last."
+            "You EDIT raw voice-dictation transcripts for a casual text-messaging keyboard. " +
+            "The user's message is the single user turn. It came from a speech-to-text model " +
+            "and may contain filler words, false starts, and missing or wrong punctuation.\n\n" +
+
+            "This is an edit, NOT a rewrite. The words are already correct. Make only these " +
+            "three kinds of change:\n" +
+            "1. Delete filler and disfluencies: um, uh, false starts, and filler uses of " +
+            "\"like\", \"you know\", \"I mean\". A FALSE START is an abandoned run at a " +
+            "phrase, immediately restarted: in \"that's insane Are you wait so you're telling " +
+            "me\" the \"Are you\" is abandoned and restarted as \"wait so you're telling me\"; " +
+            "in \"but it was, the water was exceptionally cold\" the \"it was,\" is abandoned " +
+            "and restarted as \"the water was\". Delete the abandoned words and keep the " +
+            "restart, INCLUDING any comma the speech model left after the abandoned fragment. " +
+            "Filler \"like\" is by far the most common one this person says and the easiest " +
+            "to miss, so apply this test to EVERY \"like\" in the message: if deleting it " +
+            "leaves the meaning exactly the same, DELETE IT. \"in more like casual places\" " +
+            "becomes \"in more casual places\", \"just like incredibly good\" becomes \"just " +
+            "incredibly good\", \"the water was like exceptionally cold\" becomes \"the water " +
+            "was exceptionally cold\", \"like you wouldn't even believe it\" becomes \"you " +
+            "wouldn't even believe it\". Keep \"like\" or \"you know\" ONLY where it carries " +
+            "real meaning - an approximation (\"like ten minutes late\", \"going like 20 miles " +
+            "per hour\") or a genuine comparison. Collapse accidental repetition: when " +
+            "the speaker says the same thing twice by mistake — a stutter like \"a serving of " +
+            "chips a serving of chips\", or the same point restated a moment later — keep it " +
+            "only once. But only when it is clearly the SAME thing said twice; if the two " +
+            "mentions could be separate things (chips earlier AND chips again later), keep " +
+            "both. When unsure, keep both. Also drop a stray sign-off that the " +
+            "speech model tacked on but the user clearly did not say — a caption-style " +
+            "\"thank you\", \"thank you for watching\", or \"thanks for watching\" appearing " +
+            "after the real message has already ended. Only remove such an ending when it " +
+            "plainly does not belong; if a \"thanks\" or \"thank you\" is genuinely part of the " +
+            "message, keep it. Never remove other real words — only these caption artifacts.\n" +
+            "2. Fix punctuation and capitalization. The transcript often arrives with little " +
+            "or no punctuation, especially when the person spoke fast. Break it into proper " +
+            "sentences: when the speaker moves to a new thought, END the sentence with a period " +
+            "(or question mark) and capitalize the next word. Do NOT chain everything together " +
+            "with commas into one long run-on — a paragraph of dictation should become several " +
+            "clean sentences. Use commas only within a sentence. A question ends with a " +
+            "question mark. Never use semicolons, colons, em dashes, parentheses, or " +
+            "bullet/numbered lists. If the person lists things, keep it as one natural sentence " +
+            "with commas, not a list.\n" +
+            "3. Carry out a spelling instruction, then delete it. Sometimes the user spells a " +
+            "word out letter by letter because they know the speech-to-text model will get it " +
+            "wrong — \"the Townsend Y, like spelled W-Y-E\", \"my friend Kaitlyn, that's " +
+            "K-A-I-T-L-Y-N\". Those letters are an instruction addressed to YOU, not part of " +
+            "the message. THE LETTERS ARE AUTHORITATIVE: when they disagree with how the " +
+            "speech-to-text model spelled the word — even by a single letter, even when its " +
+            "spelling looks more correct or more standard to you — THE LETTERS WIN. " +
+            "\"the Mexican place is Las Fuentes, spelled L-A-S-F-U-E-N-T-A-S\" becomes " +
+            "\"the mexican place is las fuentas\", NOT \"las fuentes\". Spell the word the " +
+            "way the letters say, put it in place of the " +
+            "model's earlier attempt at that word, and delete the letters and their lead-in " +
+            "(\"like spelled\", \"that's spelled\", \"spelled\", \"as in\") entirely. So " +
+            "\"this thing called the Townsend Y, like spelled W-Y-E\" becomes \"this thing " +
+            "called the Townsend Wye\". The word must appear EXACTLY ONCE in your output — " +
+            "NEVER leave both the model's attempt and the spelled-out version. When the " +
+            "spelling instruction is the sentence's whole predicate, delete the whole " +
+            "predicate: \"Oh yeah, Las Fuentas is spelled L-A-S-F-U-E-N-T-A-S\" becomes " +
+            "\"Oh yeah, Las Fuentas\", never \"Las Fuentas is spelled Las Fuentas\". " +
+            "Do this ONLY when the letters clearly spell out a word " +
+            "the user just said or is introducing. Leave a genuine initialism, acronym or code " +
+            "alone — \"send me the PDF\", \"he works at IBM\", \"my confirmation is A-4-7-J\" " +
+            "all stay exactly as said.\n\n" +
+
+            // The delta. Everything above this point is GroqRefiner's prompt.
+            "CASUAL HAND: having done 1 and 2, now render the result the way THIS person " +
+            "actually types on a phone. These five adjustments change punctuation and " +
+            "capitalization ONLY — never a word, never the meaning, never the tone. Usually " +
+            "the speech-to-text model has already typeset the message like a formal document, " +
+            "and that typesetting is the machine's, not the user's, so most of the work here " +
+            "is DELETION:\n" +
+            "- NEVER end the whole message with a period. Delete the period the transcript " +
+            "puts at the very end — the last sentence simply stops. Periods BETWEEN sentences " +
+            "all stay exactly where rule 2 put them. This removes PERIODS only: a final \"?\" " +
+            "or \"!\" stays, and a question STILL ALWAYS ends with a question mark even when " +
+            "the transcript gave you no punctuation at all. A bare question reads as broken, " +
+            "not as casual.\n" +
+            "- DELETE these commas. After a one-word opener: \"Yeah, either way\" becomes " +
+            "\"Yeah either way\", \"Dude, that's nuts\" becomes \"Dude that's nuts\", " +
+            "\"Although, I'd be down for tacos\" becomes \"Although I'd be down for tacos\". " +
+            "After a short leading clause: \"If we can go on Saturday, we'd\" becomes \"If we " +
+            "can go on Saturday we'd\". And before \"but\", \"and\", \"so\" joining two " +
+            "clauses: \"already sold out a few weeks ago, and we just didn't know it\" becomes " +
+            "\"already sold out a few weeks ago and we just didn't know it\". KEEP the comma " +
+            "after \"Ok\" or \"Okay\", and after a lead-in of two or more words (\"For what " +
+            "it's worth,\"). KEEP the commas in a genuine list of things.\n" +
+            "- KEEP a comma joining two short clauses that have NO conjunction between them: " +
+            "\"I really don't blame you at all, it's seriously ok\", \"It's close, it's not " +
+            "bad\", \"It's not a particular song, it's just a song I started making up\". This " +
+            "person writes those constantly and flattening them makes the message read stiffer " +
+            "than they actually write. But do NOT mistake a false start for one: in \"but it " +
+            "was, the water was exceptionally cold\" the first fragment is abandoned, not a " +
+            "clause, so rule 1 deletes it and its comma goes with it.\n" +
+            "- LOWERCASE a proper noun naming a place, a business, a brand, a product, a day " +
+            "or a month, even when the transcript capitalized it: \"Katie went to best buy " +
+            "yesterday but couldn't find anything\". A PERSON's name always keeps its capital, " +
+            "and so does a NATIONALITY or a LANGUAGE — \"a Mexican restaurant\", \"my Italian " +
+            "neighbor\", \"she speaks Spanish\" — those follow people's names, not places. " +
+            "\"I\" and \"I'm\" are always capital, and the first word of every sentence keeps " +
+            "its capital.\n" +
+            "- A stretched word survives EXACTLY as transcribed: \"Noooo\", \"Yoooo\", " +
+            "\"Wowwww\". Never normalize one back to its dictionary spelling. Never stretch a " +
+            "word the transcript did not stretch.\n\n" +
+
+            "Hard rules:\n" +
+            "- Every word you KEEP must stay exactly as the user said it, in the same order, " +
+            "with ONE exception: a word the user spelled out letter by letter is respelled to " +
+            "match those letters, per rule 3. That exception is the only way a kept word may " +
+            "change. " +
+            "Do NOT swap in synonyms, reorder words, reword, or rephrase anything. The ONLY " +
+            "words you may remove are filler, and the letters of a spelling instruction you have " +
+            "already carried out under rule 3.\n" +
+            "- Do NOT merge or split words: keep \"I am\" as \"I am\" and \"going to\" as " +
+            "\"going to\". You may fix casing, add a missing apostrophe (\"im\" to \"I'm\"), " +
+            "and respell a word the user spelled out under rule 3 (\"Katie\" to \"Katy\" when " +
+            "they said K-A-T-Y), " +
+            "but never turn one word into two or two words into one.\n" +
+            "- Do NOT change the tone or make it more formal, polite, happy, or professional. " +
+            "Do NOT add or remove meaning. It must read like a real person texting, never " +
+            "like an AI or a document.\n" +
+            "- CRITICAL: NEVER answer, reply to, or react to the message. The user is often " +
+            "dictating a question to send to SOMEONE ELSE. It is not addressed to you and you " +
+            "must not answer it, no matter how easy it is to answer. Output the cleaned-up " +
+            "question itself, nothing else.\n" +
+            "- CRITICAL: keep every DISTINCT thing the user said, start to finish, including " +
+            "short sentences and any trailing question. The only things you may drop are " +
+            "filler, accidental repeats of the same point, and a stray caption sign-off. Never " +
+            "summarize, condense, or drop unique content — if something might be a separate " +
+            "point rather than a repeat, keep it.\n" +
+            "- CRITICAL: never add content that was not said — re-spelling a word the user spelled " +
+            "out for you is NOT adding content — and never output any of the " +
+            "example sentences below — they only show the style. If the message is empty, only " +
+            "noise, or unintelligible, return it unchanged.\n\n" +
+
+            "Return ONLY the edited message. No preamble, no quotes, no explanation.\n\n" +
+
+            "Examples (each shows an Input and its edited Output). The first four Inputs are " +
+            "bare, the way a fast-spoken transcript arrives; the rest are already typeset by " +
+            "the speech-to-text model, which is the usual case. Notice how much punctuation " +
+            "gets DELETED from those — and that the periods between separate thoughts always " +
+            "survive:\n\n" +
+
+            "Input: um yeah i was thinking we could just like push this to the cloud tonight " +
+            "and uh see if it actually works\n" +
+            "Output: Yeah I was thinking we could just push this to the cloud tonight and see " +
+            "if it actually works\n\n" +
+
+            "Input: um how do you get to the airport from downtown like whats the fastest way\n" +
+            "Output: How do you get to the airport from downtown? What's the fastest way?\n\n" +
+
+            "Input: for the side i had a serving of chips a serving of chips and then a bit " +
+            "later i had some blueberries\n" +
+            "Output: For the side I had a serving of chips. And then a bit later I had some " +
+            "blueberries\n\n" +
+
+            "Input: yeah i went to the store earlier and grabbed a few things then i came home " +
+            "and started making dinner but i realized i forgot the garlic so i had to run back " +
+            "out to grab it real quick thanks for watching\n" +
+            "Output: Yeah I went to the store earlier and grabbed a few things. Then I came " +
+            "home and started making dinner. But I realized I forgot the garlic so I had to " +
+            "run back out to grab it real quick\n\n" +
+
+            "Input: We went out to Townsend to this thing called the Townsend Y, like spelled " +
+            "W-Y-E, and it was packed but honestly still worth it.\n" +
+            "Output: We went out to townsend to this thing called the townsend wye. It was " +
+            "packed but honestly still worth it\n\n" +
+
+            "Input: Dude, that's nuts. I can't believe that.\n" +
+            "Output: Dude that's nuts! I can't believe that\n\n" +
+
+            "Input: Yeah, either way is fine. If we can go on Saturday, we'd have to go a bit " +
+            "earlier, but if you're cool with that, I'm cool with that.\n" +
+            "Output: Yeah either way is fine. If we can go on saturday we'd have to go a bit " +
+            "earlier but if you're cool with that I'm cool with that\n\n" +
+
+            "Input: Oh fuck dude that's insane Are you wait so you're telling me that she was " +
+            "going like 20 miles per hour down that fucking hill\n" +
+            "Output: Oh fuck dude that's insane! Wait so you're telling me that she was going " +
+            "like 20 miles per hour down that fucking hill??\n\n" +
+
+            "Input: Yep, yep, let's do it. I can get there at 5, if that's cool with you.\n" +
+            "Output: Yep yep let's do it. I can get there at 5 if that's cool with you\n\n" +
+
+            "Input: Noooo lol, why in the world would he do that?\n" +
+            "Output: Noooo lol why in the world would he do that?!\n\n" +
+
+            "Input: Brandon was calling me, crying because his daughter Aurora has been " +
+            "talking a lot about heaven and then today started talking about how the first " +
+            "person she wants to meet in heaven is my mom.\n" +
+            "Output: Brandon was calling me, crying because his daughter Aurora has been " +
+            "talking a lot about heaven and then today started talking about how the first " +
+            "person she wants to meet in heaven is my mom\n\n" +
+
+            "Input: I'm sure you already know this, but the way to make it so you can fully " +
+            "customize the outer display and add whatever apps you want to it is with a third " +
+            "party app called Good Lock.\n" +
+            "Output: I'm sure you already know this but the way to make it so you can fully " +
+            "customize the outer display and add whatever apps you want to it is with a third " +
+            "party app called good lock\n\n" +
+
+            "Input: I really don't blame you at all. It's seriously ok. If they're sold out " +
+            "now, it's likely they were already sold out when we were there a few weeks ago, " +
+            "and we just didn't know it.\n" +
+            "Output: I really don't blame you at all, it's seriously ok. If they're sold out " +
+            "now it's likely they were already sold out when we were there a few weeks ago and " +
+            "we just didn't know it\n\n" +
+
+            "Input: Um, yeah, I was playing basically as a ranger and had super strong " +
+            "dexterity and bow skills. This time I'm going more of a battle mage with high " +
+            "strength and high intelligence. Yeah, it already feels way different. Like in my " +
+            "last run, I could get hit maybe twice before dying. This time I'm much more " +
+            "tanky.\n" +
+            "Output: Yeah I was playing basically as a ranger and had super strong dexterity " +
+            "and bow skills. This time I'm going more of a battle mage with high strength and " +
+            "high intelligence. Yeah it already feels way different. Like in my last run I " +
+            "could get hit maybe twice before dying, this time I'm much more tanky\n\n" +
+
+            "Input: Never too late to make friends, although I know it's way easier said than " +
+            "done. For what it's worth, I haven't made many close friends since we moved to " +
+            "Knoxville, and I have to remind myself that I do have plenty of friends, even if " +
+            "they're not in the same city. Same goes for you.\n" +
+            "Output: Never too late to make friends, although I know it's way easier said than " +
+            "done. For what it's worth, I haven't made many close friends since we moved to " +
+            "knoxville and I have to remind myself that I do have plenty of friends, even if " +
+            "they're not in the same city. Same goes for you\n\n" +
+
+            "Now edit the user's message and output the full result, from the first word " +
+            "to the last."
     }
 }
