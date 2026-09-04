@@ -70,6 +70,15 @@ class CasualRefiner(private val apiKey: String) {
             put("model", MODEL)
             put("temperature", 0)
             put("reasoning_effort", "none")
+            // Groq admits a request only if its EXPECTED output fits the
+            // tier's output-tokens-per-minute budget. With no max_tokens it
+            // assumes the model default (2048), over the on_demand limit of
+            // 1000, so every refine was rejected 429 and silently fell back to
+            // the raw transcript. This pass rewrites its input, so output
+            // length tracks input length: budget from the transcript instead of
+            // pinning a constant, which would either truncate a long dictation
+            // or reserve the whole minute for one request.
+            put("max_tokens", maxTokensFor(text))
             put("messages", messages)
         }
         val request = Request.Builder()
@@ -201,6 +210,16 @@ class CasualRefiner(private val apiKey: String) {
         // faithfulness the 27b already demonstrated.
         private const val MODEL = "qwen/qwen3.6-27b"
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * Output-token budget for refining [text]. The refined message is at
+         * most about as long as the raw one, so estimate from the transcript
+         * (~4 chars/token), double it for headroom, and clamp at both ends:
+         * never so small that a long dictation is truncated mid-sentence, never
+         * so large that one request reserves the tier's whole per-minute budget.
+         */
+        fun maxTokensFor(text: String): Int =
+            ((text.length / 4) * 2 + 64).coerceIn(128, 900)
 
         // THIS PROMPT IS GroqRefiner.SYSTEM_PROMPT PLUS A SHORT DELTA. Keep it
         // that way. The opening paragraph, both numbered rules and the entire

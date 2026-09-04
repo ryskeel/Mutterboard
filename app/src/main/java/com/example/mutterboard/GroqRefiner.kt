@@ -79,6 +79,15 @@ class GroqRefiner(private val apiKey: String) {
             // <think> block into the content and takes ~4.4s instead of ~0.4s,
             // which is fatal for a keyboard. "none" turns it off entirely.
             put("reasoning_effort", "none")
+            // Groq admits a request only if its EXPECTED output fits the
+            // tier's output-tokens-per-minute budget. With no max_tokens it
+            // assumes the model default (2048), over the on_demand limit of
+            // 1000, so every refine was rejected 429 and silently fell back to
+            // the raw transcript. This pass rewrites its input, so output
+            // length tracks input length: budget from the transcript instead of
+            // pinning a constant, which would either truncate a long dictation
+            // or reserve the whole minute for one request.
+            put("max_tokens", maxTokensFor(text))
             put("messages", messages)
         }
         val request = Request.Builder()
@@ -89,12 +98,20 @@ class GroqRefiner(private val apiKey: String) {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                // Both failure paths are silent by design at the product level -
+                // the caller commits the raw transcript so a message is never
+                // lost. That silence also hid a refiner that had stopped
+                // responding for weeks, so say WHY in debug builds.
+                if (BuildConfig.DEBUG) Log.i(TAG, "refine transport failure: $e")
                 onResult(null)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string()
                 if (!response.isSuccessful || body == null) {
+                    if (BuildConfig.DEBUG) {
+                        Log.i(TAG, "refine HTTP ${response.code}: ${body?.take(500)}")
+                    }
                     onResult(null)
                     return
                 }
@@ -259,6 +276,16 @@ class GroqRefiner(private val apiKey: String) {
         // sentences.
         private const val MODEL = "qwen/qwen3.6-27b"
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * Output-token budget for refining [text]. The refined message is at
+         * most about as long as the raw one, so estimate from the transcript
+         * (~4 chars/token), double it for headroom, and clamp at both ends:
+         * never so small that a long dictation is truncated mid-sentence, never
+         * so large that one request reserves the tier's whole per-minute budget.
+         */
+        fun maxTokensFor(text: String): Int =
+            ((text.length / 4) * 2 + 64).coerceIn(128, 900)
 
         // The examples are embedded here as labeled Input/Output pairs (see the
         // note in refine() for why they aren't sent as conversation turns). The
