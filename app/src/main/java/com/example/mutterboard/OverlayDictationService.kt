@@ -1,11 +1,13 @@
 package com.example.mutterboard
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
@@ -14,8 +16,11 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
@@ -32,6 +37,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.mutterboard.ui.theme.MutterboardTheme
+import kotlin.math.abs
 
 /**
  * Dictation that isn't tied to a text field.
@@ -54,11 +60,32 @@ class OverlayDictationService : Service(), DictationSession.Host {
     private var overlayView: View? = null
     private var viewHost: OverlayViewHost? = null
 
+    /**
+     * Whether the band has been collapsed to its puck. Held here rather than
+     * inside the composable because the window has to shrink with it: leaving a
+     * full-width window in place would go on swallowing every touch along the
+     * bottom of the screen, which is the whole thing being complained about.
+     */
+    private val minimized = mutableStateOf(false)
+
+    /**
+     * Where the puck was left, as insets from the bottom-right corner in px.
+     *
+     * Remembered across dictations because where the band is in the way is a fact
+     * about the user's screen, not about this one recording; making them drag it
+     * clear again every time would be the annoyance minimizing exists to remove.
+     */
+    private var puckX = 0
+    private var puckY = 0
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        val prefs = getSharedPreferences(MutterboardInputMethodService.PREFS, Context.MODE_PRIVATE)
+        puckX = prefs.getInt(KEY_PUCK_X, MINIMIZED_INSET_DP.dpToPx())
+        puckY = prefs.getInt(KEY_PUCK_Y, MINIMIZED_INSET_DP.dpToPx())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -96,9 +123,19 @@ class OverlayDictationService : Service(), DictationSession.Host {
     private fun createBandView(session: DictationSession): View {
         val host = OverlayViewHost().also { viewHost = it; it.create() }
         val snapshot = mutableStateOf(session.currentSnapshot())
-        session.onUpdate = { snapshot.value = it }
+        session.onUpdate = {
+            snapshot.value = it
+            // Anything that needs the user is worth un-minimizing for. A puck
+            // cannot carry "Mic permission needed", so a failure that happened
+            // while the band was out of the way would otherwise be invisible.
+            if (it.state != DictationSession.State.RECORDING &&
+                it.state != DictationSession.State.TRANSCRIBING
+            ) {
+                setMinimized(false)
+            }
+        }
 
-        return ComposeView(this).apply {
+        val band = ComposeView(this).apply {
             setViewTreeLifecycleOwner(host)
             setViewTreeViewModelStoreOwner(host)
             setViewTreeSavedStateRegistryOwner(host)
@@ -110,11 +147,113 @@ class OverlayDictationService : Service(), DictationSession.Host {
                         onAction = { session.micTapped() },
                         onCancel = { session.cancelTapped() },
                         onSettings = { session.settingsTapped() },
+                        minimized = minimized.value,
+                        onMinimizedChanged = { setMinimized(it) },
                         onModeChanged = { session.modeChanged(it) },
                     )
                 }
             }
         }
+        // The band goes inside a layer that can take the touch stream away from
+        // it, which is what makes the puck draggable. See PuckDragLayout.
+        //
+        // The owners go on this root rather than on the ComposeView: Compose
+        // resolves its recomposer from the root of the window, so with them one
+        // level down it finds nothing and throws the moment the view attaches.
+        return PuckDragLayout(this).apply {
+            setViewTreeLifecycleOwner(host)
+            setViewTreeViewModelStoreOwner(host)
+            setViewTreeSavedStateRegistryOwner(host)
+            addView(
+                band,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+    }
+
+    /**
+     * Lets the collapsed puck be dragged anywhere on the screen, and treats a
+     * press that never travelled as a tap to bring the band back.
+     *
+     * Done on raw screen coordinates rather than as a Compose gesture, because
+     * the thing being moved is the window itself. Compose only ever reports a
+     * position *within* that window, and a window that keeps jumping out from
+     * under the finger makes those numbers meaningless.
+     *
+     * It has to intercept rather than listen, too. A ViewGroup offers touches to
+     * its children first, so the puck's own clickable swallowed every press
+     * before an OnTouchListener on the ComposeView ever saw it.
+     *
+     * Expanded, every touch goes straight through to Compose as before.
+     */
+    private inner class PuckDragLayout(context: Context) : FrameLayout(context) {
+
+        private val slop = ViewConfiguration.get(context).scaledTouchSlop
+        private var downX = 0f
+        private var downY = 0f
+        private var startX = 0
+        private var startY = 0
+        private var dragging = false
+
+        override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = minimized.value
+
+        @SuppressLint("ClickableViewAccessibility")
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            if (!minimized.value) return false
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    startX = puckX
+                    startY = puckY
+                    dragging = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downX
+                    val dy = event.rawY - downY
+                    // Below the slop it is still a tap: a thumb never presses
+                    // perfectly still.
+                    if (!dragging && abs(dx) + abs(dy) > slop) dragging = true
+                    if (dragging) {
+                        val metrics = resources.displayMetrics
+                        // Insets from the bottom-right corner, so both axes run
+                        // against the finger.
+                        puckX = (startX - dx).toInt()
+                            .coerceIn(0, (metrics.widthPixels - width).coerceAtLeast(0))
+                        puckY = (startY - dy).toInt()
+                            .coerceIn(0, (metrics.heightPixels - height).coerceAtLeast(0))
+                        moveOverlay()
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (dragging) savePuckPosition() else setMinimized(false)
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    if (dragging) savePuckPosition()
+                }
+            }
+            return true
+        }
+    }
+
+    private fun moveOverlay() {
+        val view = overlayView ?: return
+        try {
+            windowManager?.updateViewLayout(view, overlayLayoutParams(minimized.value))
+        } catch (e: Throwable) {
+            Log.w(TAG, "could not move overlay", e)
+        }
+    }
+
+    private fun savePuckPosition() {
+        getSharedPreferences(MutterboardInputMethodService.PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_PUCK_X, puckX)
+            .putInt(KEY_PUCK_Y, puckY)
+            .apply()
     }
 
     /**
@@ -128,7 +267,17 @@ class OverlayDictationService : Service(), DictationSession.Host {
      * goes to the app underneath, which is what lets a dictation carry on while
      * the user moves around — a full-screen window would swallow all of it.
      */
-    private fun overlayLayoutParams(): WindowManager.LayoutParams {
+    /**
+     * Collapses the band to its puck, or brings it back, resizing the window to
+     * match. Cheap enough to call with the value it already holds.
+     */
+    private fun setMinimized(value: Boolean) {
+        if (minimized.value == value) return
+        minimized.value = value
+        moveOverlay()
+    }
+
+    private fun overlayLayoutParams(minimized: Boolean = false): WindowManager.LayoutParams {
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
@@ -136,7 +285,13 @@ class OverlayDictationService : Service(), DictationSession.Host {
             WindowManager.LayoutParams.TYPE_PHONE
         }
         return WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
+            // Minimized, the window is only as wide as the puck, so the rest of
+            // the bottom row of the screen is the app's again.
+            if (minimized) {
+                WindowManager.LayoutParams.WRAP_CONTENT
+            } else {
+                WindowManager.LayoutParams.MATCH_PARENT
+            },
             // The band measures itself. A fraction of the screen was either taller
             // than the controls needed or too short once a caption appeared.
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -145,9 +300,22 @@ class OverlayDictationService : Service(), DictationSession.Host {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT,
         ).apply {
-            gravity = Gravity.BOTTOM or Gravity.START
+            // The puck sits in the corner the minimize button was in, so it comes
+            // to rest where the thumb just left.
+            gravity = if (minimized) {
+                Gravity.BOTTOM or Gravity.END
+            } else {
+                Gravity.BOTTOM or Gravity.START
+            }
+            // Wherever the user last dragged the puck to.
+            if (minimized) {
+                x = puckX
+                y = puckY
+            }
         }
     }
+
+    private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()
 
     /**
      * Clipboard first, then paste — in that order, because the paste action reads
@@ -196,6 +364,7 @@ class OverlayDictationService : Service(), DictationSession.Host {
         session = null
         viewHost?.destroy()
         viewHost = null
+        minimized.value = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -263,6 +432,11 @@ class OverlayDictationService : Service(), DictationSession.Host {
         private const val CHANNEL_ID = "dictation_overlay"
         private const val NOTIFICATION_ID = 1
         private const val CLIP_LABEL = "Mutterboard transcript"
+
+        /** Where the puck starts out: clear of the gesture bar, not sitting on it. */
+        private const val MINIMIZED_INSET_DP = 24
+        private const val KEY_PUCK_X = "overlay_puck_x"
+        private const val KEY_PUCK_Y = "overlay_puck_y"
     }
 }
 

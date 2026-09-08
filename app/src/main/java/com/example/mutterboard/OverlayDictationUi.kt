@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
@@ -34,6 +35,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
@@ -49,16 +51,30 @@ import androidx.compose.ui.unit.dp
  *
  * The band is translucent rather than the near-solid surface Checkr uses, for the
  * same reason: it is admitting that it is on top of something.
+ *
+ * [minimized] collapses all of that to a single puck. The band is deliberately
+ * cheap to get out of the way because it still covers the bottom of the screen,
+ * which is where the thing you wanted to tap usually is.
  */
 @Composable
 fun OverlayDictationBand(
     snapshot: DictationSession.Snapshot,
     amplitude: () -> Float,
+    minimized: Boolean,
     onAction: () -> Unit,
     onCancel: () -> Unit,
     onSettings: () -> Unit,
+    onMinimizedChanged: (Boolean) -> Unit,
     onModeChanged: (Boolean) -> Unit,
 ) {
+    if (minimized) {
+        MinimizedPuck(
+            posture = snapshot.state.posture(),
+            amplitude = amplitude,
+            onExpand = { onMinimizedChanged(false) },
+        )
+        return
+    }
     val surface = MaterialTheme.colorScheme.surface
     // Height comes from the content rather than a fraction of the screen. A fixed
     // fraction is either taller than the controls need or too short to hold them
@@ -109,10 +125,27 @@ fun OverlayDictationBand(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Hidden whenever no refiner exists, exactly as on the keyboard: a
-            // toggle naming a mode that isn't running would be lying.
-            if (snapshot.showModeToggle) {
-                ModePill(casual = snapshot.casual, onChange = onModeChanged)
+            // The band's top line: the mode pill centred, minimize off to the
+            // right of it. Minimize is not a step in a dictation — it is a way to
+            // get the band off whatever it is covering — so it sits up here
+            // rather than in the row where a mis-tap is expensive.
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                // Hidden whenever no refiner exists, exactly as on the keyboard: a
+                // toggle naming a mode that isn't running would be lying.
+                if (snapshot.showModeToggle) {
+                    ModePill(casual = snapshot.casual, onChange = onModeChanged)
+                }
+                CircleButton(
+                    icon = Icons.Outlined.KeyboardArrowDown,
+                    description = "Minimize",
+                    diameter = 36.dp,
+                    container = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                    content = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // No label and small enough that the usual 42% glyph reads as a smudge.
+                    iconScale = 0.62f,
+                    onClick = { onMinimizedChanged(true) },
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
             }
             DictationWave(
                 posture = snapshot.state.posture(),
@@ -133,15 +166,20 @@ fun OverlayDictationBand(
                     textAlign = TextAlign.Center,
                 )
             }
+            // Pushed out to the band's edges rather than clustered in the middle.
+            // Stop and Cancel next to each other is the one misfire that costs you
+            // the whole dictation, so the two are as far apart as the band allows
+            // and Stop is the only large target in the middle of the sweep a thumb
+            // actually makes.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 CircleButton(
                     icon = Icons.Outlined.Close,
                     description = "Cancel",
-                    diameter = 44.dp,
+                    diameter = 52.dp,
                     container = MaterialTheme.colorScheme.secondaryContainer,
                     content = MaterialTheme.colorScheme.onSecondaryContainer,
                     onClick = onCancel,
@@ -149,7 +187,7 @@ fun OverlayDictationBand(
                 CircleButton(
                     icon = snapshot.state.actionIcon(),
                     description = snapshot.actionDescription,
-                    diameter = 56.dp,
+                    diameter = 72.dp,
                     container = MaterialTheme.colorScheme.primary,
                     content = MaterialTheme.colorScheme.onPrimary,
                     onClick = onAction,
@@ -157,13 +195,46 @@ fun OverlayDictationBand(
                 CircleButton(
                     icon = Icons.Outlined.Settings,
                     description = "Settings",
-                    diameter = 44.dp,
+                    diameter = 52.dp,
                     container = MaterialTheme.colorScheme.secondaryContainer,
                     content = MaterialTheme.colorScheme.onSecondaryContainer,
                     onClick = onSettings,
                 )
             }
         }
+    }
+}
+
+/**
+ * What is left of the band once it is out of the way: a small pill in the bottom
+ * corner with the same wave still running in it.
+ *
+ * The wave rather than a mic glyph, because a mic reads as a button that would
+ * *start* something. The point of the collapsed state is the opposite — the
+ * dictation is already running, you just moved it out of the way — and the wave
+ * is the one thing in this app that already says "still listening".
+ */
+@Composable
+private fun MinimizedPuck(
+    posture: WavePosture,
+    amplitude: () -> Float,
+    onExpand: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(width = 78.dp, height = 46.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            .clickable(onClickLabel = "Expand Mutterboard", onClick = onExpand),
+        contentAlignment = Alignment.Center,
+    ) {
+        DictationWave(
+            posture = posture,
+            amplitude = amplitude,
+            color = MaterialTheme.colorScheme.onPrimary,
+            strokeWidth = 2.5.dp,
+            modifier = Modifier.size(width = 54.dp, height = 22.dp),
+        )
     }
 }
 
@@ -196,13 +267,15 @@ private fun DictationSession.State.posture(): WavePosture = when (this) {
 private fun CircleButton(
     icon: ImageVector,
     description: String,
-    diameter: androidx.compose.ui.unit.Dp,
+    diameter: Dp,
     container: Color,
     content: Color,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    iconScale: Float = 0.42f,
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(diameter)
             .clip(CircleShape)
             .background(container)
@@ -213,19 +286,25 @@ private fun CircleButton(
             imageVector = icon,
             contentDescription = description,
             tint = content,
-            modifier = Modifier.size(diameter * 0.42f),
+            modifier = Modifier.size(diameter * iconScale),
         )
     }
 }
 
-/** The Default/Casual refine toggle, as a compact segmented pill. */
+/**
+ * The Default/Casual refine toggle, as a compact segmented pill.
+ *
+ * Kept deliberately quiet. It was the loudest thing in the band, which is exactly
+ * backwards: it is a setting you change once in a while, not part of dictating.
+ * So it is small, and the selected side is a lift rather than a filled accent.
+ */
 @Composable
 private fun ModePill(casual: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f))
-            .padding(3.dp),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .padding(2.dp),
     ) {
         ModeChip("Default", selected = !casual) { onChange(false) }
         ModeChip("Casual", selected = casual) { onChange(true) }
@@ -238,19 +317,23 @@ private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .clip(CircleShape)
             .background(
-                if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                if (selected) {
+                    MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
+                } else {
+                    Color.Transparent
+                },
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 7.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             color = if (selected) {
-                MaterialTheme.colorScheme.onPrimary
+                MaterialTheme.colorScheme.onSurface
             } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
             },
         )
     }

@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.exp
@@ -42,6 +43,8 @@ fun DictationWave(
     amplitude: () -> Float,
     modifier: Modifier = Modifier,
     color: Color = LocalContentColor.current,
+    /** Thinner when the wave is drawn small, or it fills in and reads as a blob. */
+    strokeWidth: Dp = 4.dp,
 ) {
     val postureNow = rememberUpdatedState(posture)
     val ampNow = rememberUpdatedState(amplitude)
@@ -81,7 +84,7 @@ fun DictationWave(
     }
 
     Canvas(modifier) {
-        val stroke = 4.dp.toPx()
+        val stroke = strokeWidth.toPx()
         val centreY = size.height / 2f
         val room = (size.height - stroke) / 2f
         val reach = peak.floatValue * room
