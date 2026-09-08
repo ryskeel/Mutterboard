@@ -7,6 +7,14 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Dictation overlay. The overlay window needs SYSTEM_ALERT_WINDOW; the
+         microphone keeps working while it's up only because the recording runs
+         in a foreground service, which an overlay alone does not make us. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -30,6 +38,25 @@
             </intent-filter>
         </activity>
 
+        <!-- Starts the dictation overlay and finishes. Carries a LAUNCHER filter
+             so OEM side-button mappers (which only list launchable apps) can see
+             it, and ships disabled so that second icon appears only once the
+             user turns the overlay on. -->
+        <activity
+            android:name=".OverlayLauncherActivity"
+            android:enabled="false"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/overlay_launcher_label"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".MutterboardInputMethodService"
             android:label="@string/ime_label"
@@ -41,6 +68,24 @@
             <meta-data
                 android:name="android.view.im"
                 android:resource="@xml/method" />
+        </service>
+
+        <service
+            android:name=".OverlayDictationService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <service
+            android:name=".MutterboardAccessibilityService"
+            android:exported="true"
+            android:label="@string/overlay_launcher_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
         </service>
 
         <provider

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -117,7 +118,10 @@ class MainActivity : ComponentActivity() {
             MutterboardTheme {
                 SetupScreen(
                     onRequestMic = { requestMicPermission() },
-                    onOpenImeSettings = { openImeSettings() }
+                    onOpenImeSettings = { openImeSettings() },
+                    onOpenOverlaySettings = { openOverlaySettings() },
+                    onOpenAccessibilitySettings = { openAccessibilitySettings() },
+                    onRequestNotifications = { requestNotificationPermission() }
                 )
             }
         }
@@ -130,12 +134,39 @@ class MainActivity : ComponentActivity() {
     private fun openImeSettings() {
         startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
     }
+
+    private fun openOverlaySettings() {
+        startActivity(
+            Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+        )
+    }
+
+    private fun openAccessibilitySettings() {
+        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
+    /**
+     * The overlay runs as a foreground service, which posts an ongoing
+     * notification. Without this grant that notification is silently hidden, so
+     * ask at the moment the user turns the overlay on.
+     */
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissionsLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+        }
+    }
 }
 
 @Composable
 private fun SetupScreen(
     onRequestMic: () -> Unit,
-    onOpenImeSettings: () -> Unit
+    onOpenImeSettings: () -> Unit,
+    onOpenOverlaySettings: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
+    onRequestNotifications: () -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -155,6 +186,9 @@ private fun SetupScreen(
     var showPrivacy by remember { mutableStateOf(false) }
     var hasMic by remember { mutableStateOf(false) }
     var imeEnabled by remember { mutableStateOf(false) }
+    var overlayEnabled by remember { mutableStateOf(false) }
+    var canDrawOverlays by remember { mutableStateOf(false) }
+    var accessibilityEnabled by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
 
     val currentVersion = remember {
@@ -217,6 +251,11 @@ private fun SetupScreen(
         hasMic = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                 android.content.pm.PackageManager.PERMISSION_GRANTED
         imeEnabled = isImeEnabled(context)
+        // All three are granted on screens outside this app, so they can only be
+        // re-read on resume; refreshTick already fires there.
+        overlayEnabled = isOverlayLauncherEnabled(context)
+        canDrawOverlays = Settings.canDrawOverlays(context)
+        accessibilityEnabled = isAccessibilityEnabled(context)
     }
 
     LaunchedEffect(updateCheckTick) {
@@ -334,6 +373,23 @@ private fun SetupScreen(
             VocabularyCard(
                 words = customWords,
                 onEdit = { showVocabEditor = true }
+            )
+
+            Spacer(Modifier.height(40.dp))
+
+            SectionHeader("Dictate anywhere")
+            Spacer(Modifier.height(12.dp))
+            OverlayCard(
+                enabled = overlayEnabled,
+                canDrawOverlays = canDrawOverlays,
+                accessibilityEnabled = accessibilityEnabled,
+                onToggle = { on ->
+                    setOverlayLauncherEnabled(context, on)
+                    overlayEnabled = on
+                    if (on) onRequestNotifications()
+                },
+                onOpenOverlaySettings = onOpenOverlaySettings,
+                onOpenAccessibilitySettings = onOpenAccessibilitySettings
             )
 
             Spacer(Modifier.height(40.dp))
@@ -978,7 +1034,8 @@ private fun StepRow(
     label: String,
     done: Boolean,
     actionLabel: String,
-    onAction: () -> Unit
+    onAction: () -> Unit,
+    optional: Boolean = false
 ) {
     val haptic = rememberTapHaptic()
     Row(
@@ -994,15 +1051,87 @@ private fun StepRow(
             // When done, the checkmark says it all — no "Granted/Enabled" subtext.
             if (!done) {
                 Text(
-                    "Required",
+                    if (optional) "Optional" else "Required",
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.error
+                    color = if (optional) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.error
                 )
             }
         }
         if (!done) {
             Spacer(Modifier.width(12.dp))
             Button(onClick = { haptic(); onAction() }) { Text(actionLabel) }
+        }
+    }
+}
+
+@Composable
+private fun OverlayCard(
+    enabled: Boolean,
+    canDrawOverlays: Boolean,
+    accessibilityEnabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onOpenOverlaySettings: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit
+) {
+    val haptic = rememberTapHaptic()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Dictation overlay", fontWeight = FontWeight.Medium)
+                Text(
+                    "Adds a second app icon you can map to a side button. " +
+                        "Dictate over any app, without switching keyboards.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(
+                checked = enabled,
+                onCheckedChange = { haptic(); onToggle(it) }
+            )
+        }
+        // The grants only make sense once the feature is on, and listing two
+        // permission rows against a switch nobody has flipped reads like the app
+        // is asking for them unprompted.
+        if (enabled) {
+            HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+            StepRow(
+                label = "Display over other apps",
+                done = canDrawOverlays,
+                actionLabel = "Allow",
+                onAction = onOpenOverlaySettings
+            )
+            HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
+            StepRow(
+                label = "Paste into the field you are in",
+                done = accessibilityEnabled,
+                actionLabel = "Enable",
+                onAction = onOpenAccessibilitySettings,
+                // Genuinely optional: without it the transcript still lands on
+                // the clipboard, it just does not paste itself.
+                optional = true
+            )
+            if (!accessibilityEnabled) {
+                Text(
+                    "Without this, transcripts are copied to your clipboard and you paste them yourself.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 52.dp, end = 16.dp, bottom = 14.dp)
+                )
+            }
         }
     }
 }
@@ -1387,6 +1516,36 @@ private fun launchInstall(context: Context, file: File) {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
     )
+}
+
+/**
+ * Whether the overlay's launcher activity is turned on. It ships disabled, so
+ * this doubles as "has the user opted into the overlay at all" — there is no
+ * separate preference to drift out of sync with it.
+ */
+private fun isOverlayLauncherEnabled(context: Context): Boolean {
+    val component = ComponentName(context, OverlayLauncherActivity::class.java)
+    return context.packageManager.getComponentEnabledSetting(component) ==
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+}
+
+private fun setOverlayLauncherEnabled(context: Context, enabled: Boolean) {
+    val component = ComponentName(context, OverlayLauncherActivity::class.java)
+    context.packageManager.setComponentEnabledSetting(
+        component,
+        if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+        PackageManager.DONT_KILL_APP
+    )
+}
+
+private fun isAccessibilityEnabled(context: Context): Boolean {
+    val target = ComponentName(context, MutterboardAccessibilityService::class.java)
+    val enabled = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    ) ?: return false
+    return enabled.split(':').any { ComponentName.unflattenFromString(it) == target }
 }
 
 private fun isImeEnabled(context: Context): Boolean {
