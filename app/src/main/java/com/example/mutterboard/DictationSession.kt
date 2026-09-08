@@ -53,7 +53,41 @@ class DictationSession(
         fun dismiss()
     }
 
-    private enum class State { IDLE, RECORDING, TRANSCRIBING, ERROR, NO_PERMISSION, NO_API_KEY, NO_MODEL, NO_NETWORK, NO_SPEECH }
+    enum class State { IDLE, RECORDING, TRANSCRIBING, ERROR, NO_PERMISSION, NO_API_KEY, NO_MODEL, NO_NETWORK, NO_SPEECH }
+
+    /**
+     * Everything a UI needs to draw one moment of a dictation, worked out once so
+     * the keyboard's views and the overlay's Compose band can never disagree about
+     * what the session is doing.
+     */
+    data class Snapshot(
+        val state: State,
+        /** Caption, or null when the UI should show none. */
+        val message: String?,
+        val actionLabel: String,
+        val actionDescription: String,
+        val casual: Boolean,
+        /** False whenever no refiner exists, so a mode toggle would be lying. */
+        val showModeToggle: Boolean,
+    )
+
+    /** Notified on every state change, for hosts that draw themselves. */
+    var onUpdate: ((Snapshot) -> Unit)? = null
+        set(value) {
+            field = value
+            // A host attaching mid-dictation needs the current state, not the next one.
+            value?.invoke(snapshot())
+        }
+
+    /** The state right now, for a host building its UI before anything has changed. */
+    fun currentSnapshot(): Snapshot = snapshot()
+
+    /** Live mic level, 0..1, for a UI that visualizes it. */
+    fun micLevel(): Float {
+        if (state != State.RECORDING) return 0f
+        val normalized = recorder.currentPeak() / 32767f
+        return sqrt((normalized * WAVEFORM_GAIN).coerceIn(0f, 1f))
+    }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val recorder: WavRecorder = WavRecorder(context.cacheDir)
@@ -249,6 +283,17 @@ class DictationSession(
             state = State.ERROR
             renderState()
         }
+    }
+
+    fun micTapped() = onMicTapped()
+
+    fun cancelTapped() = onCancelTapped()
+
+    fun settingsTapped() = onSettingsTapped()
+
+    fun modeChanged(casual: Boolean) {
+        onModeChanged(casual)
+        renderState()
     }
 
     private fun onMicTapped() {
@@ -451,77 +496,81 @@ class DictationSession(
         waveform?.setLevel(0f)
     }
 
+    /**
+     * What the UI should be showing right now. The captions and button labels are
+     * carried over unchanged from when this was painted straight onto the
+     * keyboard's views; both hosts read them from here.
+     */
+    private fun snapshot(): Snapshot {
+        val message: String?
+        val label: String
+        val description: String
+        when (state) {
+            State.IDLE -> {
+                message = "Tap Start"; label = "Start"; description = "Start recording"
+            }
+            State.RECORDING -> {
+                // A cloud user silently switched to the on-device engine should
+                // know: no polish pass will run, and accuracy may differ.
+                message = if (offlineFallback) "Offline mode" else null
+                label = "Stop"; description = "Stop recording"
+            }
+            State.TRANSCRIBING -> {
+                message = "Transcribing…"; label = "Stop"; description = "Transcribing"
+            }
+            State.ERROR -> {
+                message = "Something went wrong"; label = "Retry"; description = "Retry"
+            }
+            State.NO_PERMISSION -> {
+                message = "Mic permission needed"
+                label = "Open app"; description = "Open app to grant permission"
+            }
+            State.NO_API_KEY -> {
+                message = "Set Groq API key"
+                label = "Open app"; description = "Open app to set API key"
+            }
+            State.NO_MODEL -> {
+                message = "Download model in app"
+                label = "Open app"; description = "Open app to download the on-device model"
+            }
+            State.NO_NETWORK -> {
+                message = "No internet. Offline model not downloaded"
+                label = "Retry"; description = "Retry after reconnecting"
+            }
+            State.NO_SPEECH -> {
+                message = "Didn't catch any audio"; label = "Retry"; description = "Retry recording"
+            }
+        }
+        return Snapshot(
+            state = state,
+            message = message,
+            actionLabel = label,
+            actionDescription = description,
+            casual = refineMode == RefineMode.CASUAL,
+            showModeToggle = refiner != null || casualRefiner != null,
+        )
+    }
+
     private fun renderState() {
+        val snapshot = snapshot()
+        onUpdate?.invoke(snapshot)
+        renderXmlViews(snapshot)
+    }
+
+    /** Paints the keyboard's inflated views. A no-op for a host that drew its own. */
+    private fun renderXmlViews(snapshot: Snapshot) {
         renderMode()
         val status = statusText ?: return
         val mic = micButton ?: return
         // While transcribing, swap the listening waveform for an indeterminate
         // progress bar so it's clear we're working, not still recording.
-        val transcribing = state == State.TRANSCRIBING
+        val transcribing = snapshot.state == State.TRANSCRIBING
         waveform?.visibility = if (transcribing) View.GONE else View.VISIBLE
         progress?.visibility = if (transcribing) View.VISIBLE else View.GONE
-        when (state) {
-            State.IDLE -> {
-                status.text = "Tap Start"
-                status.visibility = View.VISIBLE
-                mic.text = "Start"
-                mic.contentDescription = "Start recording"
-            }
-            State.RECORDING -> {
-                // A cloud user silently switched to the on-device engine should
-                // know: no polish pass will run, and accuracy may differ.
-                if (offlineFallback) {
-                    status.text = "Offline mode"
-                    status.visibility = View.VISIBLE
-                } else {
-                    status.visibility = View.GONE
-                }
-                mic.text = "Stop"
-                mic.contentDescription = "Stop recording"
-            }
-            State.TRANSCRIBING -> {
-                status.text = "Transcribing…"
-                status.visibility = View.VISIBLE
-                mic.text = "Stop"
-                mic.contentDescription = "Transcribing"
-            }
-            State.ERROR -> {
-                status.text = "Something went wrong"
-                status.visibility = View.VISIBLE
-                mic.text = "Retry"
-                mic.contentDescription = "Retry"
-            }
-            State.NO_PERMISSION -> {
-                status.text = "Mic permission needed"
-                status.visibility = View.VISIBLE
-                mic.text = "Open app"
-                mic.contentDescription = "Open app to grant permission"
-            }
-            State.NO_API_KEY -> {
-                status.text = "Set Groq API key"
-                status.visibility = View.VISIBLE
-                mic.text = "Open app"
-                mic.contentDescription = "Open app to set API key"
-            }
-            State.NO_MODEL -> {
-                status.text = "Download model in app"
-                status.visibility = View.VISIBLE
-                mic.text = "Open app"
-                mic.contentDescription = "Open app to download the on-device model"
-            }
-            State.NO_NETWORK -> {
-                status.text = "No internet. Offline model not downloaded"
-                status.visibility = View.VISIBLE
-                mic.text = "Retry"
-                mic.contentDescription = "Retry after reconnecting"
-            }
-            State.NO_SPEECH -> {
-                status.text = "Didn't catch any audio"
-                status.visibility = View.VISIBLE
-                mic.text = "Retry"
-                mic.contentDescription = "Retry recording"
-            }
-        }
+        status.text = snapshot.message.orEmpty()
+        status.visibility = if (snapshot.message == null) View.GONE else View.VISIBLE
+        mic.text = snapshot.actionLabel
+        mic.contentDescription = snapshot.actionDescription
     }
 
     /**

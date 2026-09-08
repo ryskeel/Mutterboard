@@ -17,7 +17,21 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.example.mutterboard.ui.theme.MutterboardTheme
 
 /**
  * Dictation that isn't tied to a text field.
@@ -38,6 +52,7 @@ class OverlayDictationService : Service(), DictationSession.Host {
     private var session: DictationSession? = null
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
+    private var viewHost: OverlayViewHost? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -54,7 +69,7 @@ class OverlayDictationService : Service(), DictationSession.Host {
 
         val s = DictationSession(this, this)
         session = s
-        val view = s.createView()
+        val view = createBandView(s)
         overlayView = view
         windowManager = getSystemService(WindowManager::class.java)
         try {
@@ -73,11 +88,45 @@ class OverlayDictationService : Service(), DictationSession.Host {
     }
 
     /**
+     * Builds the Compose band and gives it the owners it needs to run outside an
+     * Activity. A ComposeView added straight to the window manager has no
+     * lifecycle, no ViewModel store and no saved-state registry to inherit, and
+     * refuses to compose without all three.
+     */
+    private fun createBandView(session: DictationSession): View {
+        val host = OverlayViewHost().also { viewHost = it; it.create() }
+        val snapshot = mutableStateOf(session.currentSnapshot())
+        session.onUpdate = { snapshot.value = it }
+
+        return ComposeView(this).apply {
+            setViewTreeLifecycleOwner(host)
+            setViewTreeViewModelStoreOwner(host)
+            setViewTreeSavedStateRegistryOwner(host)
+            setContent {
+                MutterboardTheme {
+                    OverlayDictationBand(
+                        snapshot = snapshot.value,
+                        amplitude = rememberMicAmplitude { session.micLevel() },
+                        onAction = { session.micTapped() },
+                        onCancel = { session.cancelTapped() },
+                        onSettings = { session.settingsTapped() },
+                        onModeChanged = { session.modeChanged(it) },
+                    )
+                }
+            }
+        }
+    }
+
+    /**
      * Floats the dictation UI along the bottom edge, where the keyboard would be.
      *
      * FLAG_NOT_FOCUSABLE is the whole trick: without focus the text field you were
      * in stays focused and keeps its cursor, so there is something to paste into
      * when the transcript arrives. Touches still reach the buttons.
+     *
+     * Sized to the band rather than the screen on purpose. Every touch above it
+     * goes to the app underneath, which is what lets a dictation carry on while
+     * the user moves around — a full-screen window would swallow all of it.
      */
     private fun overlayLayoutParams(): WindowManager.LayoutParams {
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -86,9 +135,10 @@ class OverlayDictationService : Service(), DictationSession.Host {
             @Suppress("DEPRECATION")
             WindowManager.LayoutParams.TYPE_PHONE
         }
+        val bandHeight = (resources.displayMetrics.heightPixels * BAND_FRACTION).toInt()
         return WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            bandHeight,
             type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -140,8 +190,11 @@ class OverlayDictationService : Service(), DictationSession.Host {
             }
         }
         overlayView = null
+        session?.onUpdate = null
         session?.destroy()
         session = null
+        viewHost?.destroy()
+        viewHost = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -155,8 +208,11 @@ class OverlayDictationService : Service(), DictationSession.Host {
             }
         }
         overlayView = null
+        session?.onUpdate = null
         session?.destroy()
         session = null
+        viewHost?.destroy()
+        viewHost = null
         super.onDestroy()
     }
 
@@ -206,5 +262,33 @@ class OverlayDictationService : Service(), DictationSession.Host {
         private const val CHANNEL_ID = "dictation_overlay"
         private const val NOTIFICATION_ID = 1
         private const val CLIP_LABEL = "Mutterboard transcript"
+        // How much of the screen the band takes. The rest stays visible, and
+        // stays touchable.
+        private const val BAND_FRACTION = 0.42f
+    }
+}
+
+/**
+ * The three owners Compose insists on, for a view that belongs to a window rather
+ * than to an Activity. Held RESUMED for as long as the overlay is up, because
+ * there is nothing else that could ever pause it.
+ */
+private class OverlayViewHost : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
+    private val registry = LifecycleRegistry(this)
+    private val store = ViewModelStore()
+    private val savedState = SavedStateRegistryController.create(this)
+
+    override val lifecycle: Lifecycle get() = registry
+    override val viewModelStore: ViewModelStore get() = store
+    override val savedStateRegistry: SavedStateRegistry get() = savedState.savedStateRegistry
+
+    fun create() {
+        savedState.performRestore(null)
+        registry.currentState = Lifecycle.State.RESUMED
+    }
+
+    fun destroy() {
+        registry.currentState = Lifecycle.State.DESTROYED
+        store.clear()
     }
 }

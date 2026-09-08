@@ -1055,7 +1055,7 @@ private fun SectionHeader(text: String) {
 }
 
 @Composable
-private fun StepBadge(done: Boolean) {
+private fun StepBadge(done: Boolean, step: Int? = null) {
     val base = Modifier.size(20.dp).clip(CircleShape)
     val styled = if (done) {
         base.background(successColor)
@@ -1063,13 +1063,24 @@ private fun StepBadge(done: Boolean) {
         base.border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape)
     }
     Box(modifier = styled, contentAlignment = Alignment.Center) {
-        Icon(
-            imageVector = Icons.Rounded.Check,
-            contentDescription = if (done) "Done" else "Not done",
-            tint = if (done) onSuccessColor
-            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.size(12.dp)
-        )
+        // An unfinished step in an ordered list shows its number, so the card
+        // reads as a sequence to work through rather than a list of failures.
+        if (!done && step != null) {
+            Text(
+                step.toString(),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Rounded.Check,
+                contentDescription = if (done) "Done" else "Not done",
+                tint = if (done) onSuccessColor
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                modifier = Modifier.size(12.dp)
+            )
+        }
     }
 }
 
@@ -1079,7 +1090,9 @@ private fun StepRow(
     done: Boolean,
     actionLabel: String,
     onAction: () -> Unit,
-    optional: Boolean = false
+    optional: Boolean = false,
+    step: Int? = null,
+    note: String? = null
 ) {
     val haptic = rememberTapHaptic()
     Row(
@@ -1088,17 +1101,23 @@ private fun StepRow(
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        StepBadge(done)
+        StepBadge(done, step)
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(label, fontWeight = FontWeight.Medium)
             // When done, the checkmark says it all — no "Granted/Enabled" subtext.
             if (!done) {
                 Text(
-                    if (optional) "Optional" else "Required",
+                    note ?: if (optional) "Optional" else "Required",
                     fontSize = 12.sp,
-                    color = if (optional) MaterialTheme.colorScheme.onSurfaceVariant
-                    else MaterialTheme.colorScheme.error
+                    // Only a genuinely missing requirement is worth alarming
+                    // about. A step that simply has not been reached yet reads
+                    // as breakage in red.
+                    color = if (optional || note != null) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
                 )
             }
         }
@@ -1107,6 +1126,25 @@ private fun StepRow(
             Button(onClick = { haptic(); onAction() }) { Text(actionLabel) }
         }
     }
+}
+
+/**
+ * Turning on the accessibility service makes Android attach its own shortcut,
+ * which parks a button on screen that Mutterboard never uses and cannot remove
+ * itself. Presented as the next step in the sequence rather than as a warning:
+ * it is a normal consequence of the previous step, not something the user got
+ * wrong.
+ */
+@Composable
+private fun ShortcutStepRow(done: Boolean, step: Int?, onAction: () -> Unit) {
+    StepRow(
+        label = "Turn off Android's shortcut button",
+        done = done,
+        actionLabel = "Turn off",
+        onAction = onAction,
+        step = step,
+        note = "Android adds this on its own. Mutterboard never uses it."
+    )
 }
 
 @Composable
@@ -1150,43 +1188,15 @@ private fun OverlayCard(
                 onCheckedChange = { haptic(); onToggle(it) }
             )
         }
-        // Deliberately outside the enabled check below. Android attaches this
-        // shortcut when the accessibility service goes on, and that outlives the
-        // overlay being switched back off - so a button nobody asked for could
-        // otherwise sit on screen with nothing in the app admitting to it.
-        if (shortcutAttached) {
+        // Leftover case: the overlay switched back off while the accessibility
+        // service, and the shortcut Android attached to it, are still on. Without
+        // this the button would sit on screen with nothing in the app admitting
+        // to it, since the numbered flow below is hidden when the feature is off.
+        if (!enabled && shortcutAttached) {
             HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.errorContainer)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Android added a shortcut button",
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Text(
-                        "It sits on your screen and Mutterboard never uses it. " +
-                            "Tap Remove, then turn the Mutterboard shortcut off.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Button(
-                    onClick = { haptic(); onRemoveShortcut() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError
-                    )
-                ) { Text("Remove") }
-            }
+            ShortcutStepRow(done = false, step = null, onAction = onRemoveShortcut)
         }
-        // The grants only make sense once the feature is on, and listing two
+        // The grants only make sense once the feature is on, and listing
         // permission rows against a switch nobody has flipped reads like the app
         // is asking for them unprompted.
         if (enabled) {
@@ -1195,7 +1205,8 @@ private fun OverlayCard(
                 label = "Display over other apps",
                 done = canDrawOverlays,
                 actionLabel = "Allow",
-                onAction = onOpenOverlaySettings
+                onAction = onOpenOverlaySettings,
+                step = 1
             )
             HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
             StepRow(
@@ -1205,7 +1216,8 @@ private fun OverlayCard(
                 onAction = onOpenAccessibilitySettings,
                 // Genuinely optional: without it the transcript still lands on
                 // the clipboard, it just does not paste itself.
-                optional = true
+                optional = true,
+                step = 2
             )
             if (!accessibilityEnabled) {
                 Text(
@@ -1213,6 +1225,18 @@ private fun OverlayCard(
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 52.dp, end = 16.dp, bottom = 14.dp)
+                )
+            }
+            // Only reachable once step 2 is done, because Android attaches the
+            // shortcut when the service goes on. Shown even when already clear so
+            // it reads as a step that is finished rather than a warning that
+            // appears out of nowhere.
+            if (accessibilityEnabled) {
+                HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
+                ShortcutStepRow(
+                    done = !shortcutAttached,
+                    step = 3,
+                    onAction = onRemoveShortcut
                 )
             }
             HorizontalDivider(modifier = Modifier.padding(start = 16.dp))

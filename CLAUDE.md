@@ -29,9 +29,14 @@ interface.
 
 - **`MutterboardInputMethodService`** (the keyboard). Commits through the
   InputConnection, dismisses by switching back to the previous IME.
-- **`OverlayDictationService`** (the overlay). Floats the same UI over any app,
-  started either from a launcher activity you can map to a side button or from
-  the Quick Settings tile. Dismisses by removing its own window.
+- **`OverlayDictationService`** (the overlay). Floats over any app, started
+  either from a launcher activity you can map to a side button or from the Quick
+  Settings tile. Dismisses by removing its own window.
+
+The two draw themselves differently and that is deliberate. The keyboard keeps
+`keyboard_view.xml`, because it has to look like a keyboard. The overlay is
+Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
+`DictationSession.Snapshot`, so captions and button states cannot drift apart.
 
 ### Rules that are not obvious from the code
 
@@ -69,6 +74,14 @@ interface.
   microphone foreground service cannot be started from the background. The
   activity is the one path already allowed to start it, so both entry points go
   through it.
+
+- **The band is a band, not a screen.** The look is ported from Checkr's
+  `VoiceOverlay`, which fills the screen and treats a tap outside its band as
+  cancel. That is wrong here: the point of the overlay is that a dictation
+  survives you moving around while you talk, and a full-screen window would
+  swallow every touch. The window is sized to the band so everything above it
+  reaches the app underneath. The translucency is the same argument made
+  visually - the band admits it is sitting on top of something.
 
 - **The accessibility service is optional and must stay optional.** Without it
   the overlay still works, it just stops pasting for you. That is what keeps the
