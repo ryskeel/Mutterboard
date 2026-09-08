@@ -14,6 +14,7 @@ import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
@@ -69,6 +70,15 @@ class OverlayDictationService : Service(), DictationSession.Host {
      * bottom of the screen, which is the whole thing being complained about.
      */
     private val minimized = mutableStateOf(false)
+
+    /**
+     * Whether the band is standing in for a paste that could not happen because
+     * the accessibility service is no longer running.
+     *
+     * Held here, not in the session: the session's job ends when the text is
+     * delivered, and this is a fact about where it could be delivered to.
+     */
+    private val pasteWarning = mutableStateOf(false)
 
     /**
      * Where the puck was left, as insets from the bottom-right corner in px.
@@ -154,8 +164,11 @@ class OverlayDictationService : Service(), DictationSession.Host {
                         onSettings = { session.settingsTapped() },
                         minimized = minimized.value,
                         bottomInset = (bottomInsetPx() / resources.displayMetrics.density).dp,
+                        pasteWarning = pasteWarning.value,
                         onMinimizedChanged = { setMinimized(it) },
                         onModeChanged = { session.modeChanged(it) },
+                        onFixPaste = { openAccessibilitySettings() },
+                        onDismissPasteWarning = { dismissPasteWarning() },
                     )
                 }
             }
@@ -371,16 +384,62 @@ class OverlayDictationService : Service(), DictationSession.Host {
             Toast.makeText(this, "Couldn't save the transcript", Toast.LENGTH_LONG).show()
             return
         }
-        val pasted = MutterboardAccessibilityService.instance?.insertIntoFocusedField(text) ?: false
+        val service = MutterboardAccessibilityService.instance
+        val pasted = service?.insertIntoFocusedField(text) ?: false
         Log.d(TAG, "commit pasted=$pasted")
+        // The service being gone entirely is the case worth speaking up about.
+        // A running service that simply found no editable field is the designed
+        // behaviour - you dictated with nowhere to put it yet - and warning about
+        // that would be warning about the feature.
+        // Stays until it is answered. It had a timeout, and the timeout ate the
+        // one press that fixes the problem: the band was gone before a hand had
+        // finished moving to it. A notice with a repair in it is worth the bottom
+        // of the screen for as long as it takes to read.
+        if (service == null && accessibilityWasSeen()) pasteWarning.value = true
         // No "copied" toast on the clipboard-only path: Android already shows its
         // own clipboard confirmation on every write, and two notices for one
         // event is worse than none.
     }
 
+    /**
+     * The dictation is over, and normally that means the window goes.
+     *
+     * Except when there is something to say about where the text ended up. The
+     * band is the only place the user is looking at that moment, and a warning
+     * they have to go and find in settings is a warning nobody reads, so the
+     * window outlives the session it was showing.
+     */
     override fun dismiss() {
+        if (pasteWarning.value) return
         teardown()
     }
+
+    /** Sends the user to the switch, and gets out of the way behind them. */
+    private fun openAccessibilitySettings() {
+        startActivity(
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+        teardown()
+    }
+
+    /**
+     * Take the warning at its word: they know, and they are not turning it back
+     * on. Forgetting that the service was ever seen is what stops this becoming
+     * a notice at the end of every dictation for someone who removed it on
+     * purpose. Turning it on again sets the flag afresh.
+     */
+    private fun dismissPasteWarning() {
+        getSharedPreferences(MutterboardInputMethodService.PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(MutterboardInputMethodService.KEY_ACCESSIBILITY_SEEN, false)
+            .apply()
+        teardown()
+    }
+
+    private fun accessibilityWasSeen(): Boolean =
+        getSharedPreferences(MutterboardInputMethodService.PREFS, Context.MODE_PRIVATE)
+            .getBoolean(MutterboardInputMethodService.KEY_ACCESSIBILITY_SEEN, false)
 
     private fun teardown() {
         overlayView?.let { view ->
@@ -397,6 +456,7 @@ class OverlayDictationService : Service(), DictationSession.Host {
         viewHost?.destroy()
         viewHost = null
         minimized.value = false
+        pasteWarning.value = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

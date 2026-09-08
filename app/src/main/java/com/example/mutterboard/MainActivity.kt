@@ -1281,22 +1281,28 @@ private fun ShortcutLeftoverRow(onAction: () -> Unit) {
 }
 
 /**
- * What to do when Android refuses the overlay permission outright.
+ * What to do when Android blocks a permission for being sideloaded.
  *
- * Written to be readable by someone who has not hit the wall yet and useless to
- * nobody if they never do, because the app cannot tell in advance: whether the
- * block appears depends on how the APK arrived, and the "denied access" dialog
- * only shows up after the user has already tried the switch.
+ * The block wears a different face on each of the two steps it affects, which is
+ * why the symptom is a parameter: the overlay permission puts up a dialog saying
+ * the app was denied access, while the accessibility service simply has no switch
+ * on its settings page at all. Naming the symptom is the whole value of the note -
+ * someone who has not recognised what they are looking at cannot search for the
+ * remedy, and both faces of it are silent about the cause.
+ *
+ * Shown to everyone on the step, not only to those it has happened to, because
+ * the app cannot tell: whether the block is armed depends on how the APK arrived
+ * and how recently it was updated, and neither is legible from in here.
  */
 @Composable
-private fun RestrictedSettingsNote(onOpenAppInfo: () -> Unit) {
+private fun RestrictedSettingsNote(symptom: String, onOpenAppInfo: () -> Unit) {
     val haptic = rememberTapHaptic()
     Column(modifier = Modifier.padding(start = 36.dp, end = 16.dp, bottom = 14.dp)) {
         Text(
-            "If Android says the app was denied access, it is blocking this " +
-                "permission because Mutterboard was installed outside the Play " +
-                "Store. Open App info, tap the three dots at the top right, and " +
-                "choose Allow restricted settings. Then come back and try again.",
+            symptom + " Android is blocking it because Mutterboard was installed " +
+                "outside the Play Store. Open App info, tap the three dots at the " +
+                "top right, and choose Allow restricted settings. Then come back " +
+                "and try again.",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1388,7 +1394,10 @@ private fun DictationModeCard(
                 // menu on App info - so the most the app can do is name the three
                 // taps and land the user on the right screen.
                 if (!canDrawOverlays) {
-                    RestrictedSettingsNote(onOpenAppInfo = onOpenAppInfo)
+                    RestrictedSettingsNote(
+                        symptom = "If Android says the app was denied access,",
+                        onOpenAppInfo = onOpenAppInfo
+                    )
                 }
                 HorizontalDivider(modifier = Modifier.padding(start = 36.dp))
                 StepRow(
@@ -1409,6 +1418,17 @@ private fun DictationModeCard(
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 36.dp, end = 16.dp, bottom = 14.dp)
+                    )
+                    // The same block, wearing a different face. Here the page
+                    // does not argue with you - the switch that turns Mutterboard
+                    // Dictate on is simply not drawn, which reads as the app
+                    // being broken rather than as a permission being withheld.
+                    // Worth saying on this step in particular: updating a
+                    // sideloaded app re-arms the block, so this is the one that
+                    // comes back after a release.
+                    RestrictedSettingsNote(
+                        symptom = "If that screen has no switch for Mutterboard Dictate,",
+                        onOpenAppInfo = onOpenAppInfo
                     )
                 }
                 // Only reachable once step 2 is done: the button belongs to the

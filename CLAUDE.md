@@ -120,6 +120,15 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   `OverlayLauncherActivity` rather than the service, same foreground-service
   reason as the tile, and it does nothing while the keyboard is the chosen mode.
 
+- **"Allow restricted settings" comes back on every update, not just the first
+  install.** A sideloaded app has the block re-armed each time it is updated, and
+  it hides the accessibility service's enable switch entirely rather than arguing
+  with you - the settings page just has no toggle on it, which reads as the app
+  being broken. Seen on both a Pixel 9a and a Titan II
+  (`appops get <pkg> ACCESS_RESTRICTED_SETTINGS` shows the reject). Combined with
+  the rule below, a release that touches the service config costs the user two
+  unlocks, not one, so setup names the symptom on both steps it affects.
+
 - **Touching `accessibility_service_config.xml` switches the service off on
   every phone that has it.** Android treats a service that redeclares itself as
   one the user has not consented to, drops it from the enabled list, and says

@@ -105,6 +105,15 @@ class MutterboardInputMethodService : InputMethodService(), DictationSession.Hos
         // Custom vocabulary, stored as a newline-separated list of words/phrases.
         const val KEY_CUSTOM_WORDS = "custom_words"
 
+        /**
+         * Set the first time the accessibility service is seen running, and only
+         * cleared when the user says they do not want it. It is what lets the
+         * overlay tell "never set this up" apart from "had this and lost it",
+         * which look identical from inside a dictation and want opposite
+         * treatment: silence for the first, a warning for the second.
+         */
+        const val KEY_ACCESSIBILITY_SEEN = "accessibility_seen"
+
         /** Parses the stored custom-words blob into a clean, de-duplicated list. */
         fun parseCustomWords(raw: String?): List<String> =
             raw.orEmpty()

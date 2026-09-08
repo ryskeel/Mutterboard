@@ -2,6 +2,7 @@ package com.example.mutterboard
 
 import android.accessibilityservice.AccessibilityButtonController
 import android.accessibilityservice.AccessibilityService
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -27,6 +28,14 @@ class MutterboardAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         registerShortcutButton()
+        // Remember that this was once running. Android drops the user's grant
+        // whenever this service redeclares itself in an update and says nothing
+        // about it, so the overlay needs a way to know that a dictation which
+        // could not paste is a regression rather than a setup the user never did.
+        getSharedPreferences(MutterboardInputMethodService.PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(MutterboardInputMethodService.KEY_ACCESSIBILITY_SEEN, true)
+            .apply()
         Log.d(TAG, "connected")
     }
 

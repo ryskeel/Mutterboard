@@ -64,12 +64,25 @@ fun OverlayDictationBand(
     amplitude: () -> Float,
     minimized: Boolean,
     bottomInset: Dp,
+    pasteWarning: Boolean,
     onAction: () -> Unit,
     onCancel: () -> Unit,
     onSettings: () -> Unit,
     onMinimizedChanged: (Boolean) -> Unit,
     onModeChanged: (Boolean) -> Unit,
+    onFixPaste: () -> Unit,
+    onDismissPasteWarning: () -> Unit,
 ) {
+    // Checked before minimized: the warning replaces the dictation that has just
+    // finished, and there is no dictation left to be out of the way of.
+    if (pasteWarning) {
+        PasteWarningBand(
+            bottomInset = bottomInset,
+            onFix = onFixPaste,
+            onDismiss = onDismissPasteWarning,
+        )
+        return
+    }
     if (minimized) {
         MinimizedPuck(
             posture = snapshot.state.posture(),
@@ -219,6 +232,114 @@ fun OverlayDictationBand(
             }
         }
     }
+}
+
+/**
+ * What the band says when the transcript went to the clipboard because the
+ * accessibility service is gone.
+ *
+ * It stays where the dictation was, at the moment the paste did not happen,
+ * because that is the only place the user is looking. The settings screen knows
+ * this too, but nobody opens settings to find out why something they were not
+ * told about did not occur - they conclude the app broke.
+ *
+ * Only ever shown to someone who had the service running before (see
+ * KEY_ACCESSIBILITY_SEEN). A user who never turned it on is not owed a warning:
+ * for them the clipboard is the design, not a failure.
+ */
+@Composable
+private fun PasteWarningBand(
+    bottomInset: Dp,
+    onFix: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val surface = MaterialTheme.colorScheme.surface
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // The dictation band can afford to be translucent: it is a wave and three
+        // circles, and admitting what is behind it is the point. This one is two
+        // paragraphs, and the same ramp put grey text on whatever the user
+        // happened to be looking at - the message was unreadable on a light app.
+        // So the feather stays, because it is what makes this look like the same
+        // surface, but it reaches opaque well above the first line of text.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.14f to surface.copy(alpha = 0.72f),
+                        0.32f to surface,
+                        1f to surface,
+                    ),
+                ),
+        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                // Top padding is deeper than the dictation band's because the
+                // first line has to clear the part of the ramp that is still
+                // see-through.
+                .padding(start = 24.dp, end = 24.dp, top = 30.dp, bottom = 18.dp + bottomInset),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = "Your dictation is on the clipboard",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+            )
+            // Names Android as the one that did it. The user changed nothing, and
+            // an app that says only "permission missing" is letting itself be
+            // blamed for a switch it did not touch.
+            Text(
+                text = "Android turned Mutterboard's accessibility permission off " +
+                    "during the last update, so it could not paste for you.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PillButton(
+                    label = "Not now",
+                    container = MaterialTheme.colorScheme.secondaryContainer,
+                    content = MaterialTheme.colorScheme.onSecondaryContainer,
+                    onClick = onDismiss,
+                )
+                PillButton(
+                    label = "Turn it back on",
+                    container = MaterialTheme.colorScheme.primary,
+                    content = MaterialTheme.colorScheme.onPrimary,
+                    onClick = onFix,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PillButton(
+    label: String,
+    container: Color,
+    content: Color,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        color = content,
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(container)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+    )
 }
 
 /** How much of the screen the band covers when its content does not need more. */
