@@ -70,6 +70,21 @@
                 android:resource="@xml/method" />
         </service>
 
+        <!-- Quick Settings tile. Ships disabled alongside the launcher activity
+             so the tile does not sit in the Quick Settings editor for people who
+             have not turned the overlay on. -->
+        <service
+            android:name=".MutterboardTileService"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@drawable/ic_mutterboard_mark"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".OverlayDictationService"
             android:exported="false"

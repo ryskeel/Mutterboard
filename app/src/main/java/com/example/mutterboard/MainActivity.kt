@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.app.StatusBarManager
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -121,7 +123,8 @@ class MainActivity : ComponentActivity() {
                     onOpenImeSettings = { openImeSettings() },
                     onOpenOverlaySettings = { openOverlaySettings() },
                     onOpenAccessibilitySettings = { openAccessibilitySettings() },
-                    onRequestNotifications = { requestNotificationPermission() }
+                    onRequestNotifications = { requestNotificationPermission() },
+                    onAddTile = { addQuickSettingsTile() }
                 )
             }
         }
@@ -158,6 +161,22 @@ class MainActivity : ComponentActivity() {
             requestPermissionsLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
         }
     }
+
+    /**
+     * Offers to drop the tile straight into Quick Settings. Only Android 13
+     * onward can ask; below that the tile still exists and has to be dragged in
+     * from the Quick Settings editor by hand.
+     */
+    private fun addQuickSettingsTile() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val statusBar = getSystemService(StatusBarManager::class.java) ?: return
+        statusBar.requestAddTileService(
+            ComponentName(this, MutterboardTileService::class.java),
+            getString(R.string.tile_label),
+            Icon.createWithResource(this, R.drawable.ic_mutterboard_mark),
+            mainExecutor
+        ) { /* the system already tells the user how it went */ }
+    }
 }
 
 @Composable
@@ -166,7 +185,8 @@ private fun SetupScreen(
     onOpenImeSettings: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
-    onRequestNotifications: () -> Unit
+    onRequestNotifications: () -> Unit,
+    onAddTile: () -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -389,7 +409,8 @@ private fun SetupScreen(
                     if (on) onRequestNotifications()
                 },
                 onOpenOverlaySettings = onOpenOverlaySettings,
-                onOpenAccessibilitySettings = onOpenAccessibilitySettings
+                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+                onAddTile = onAddTile
             )
 
             Spacer(Modifier.height(40.dp))
@@ -1072,7 +1093,8 @@ private fun OverlayCard(
     accessibilityEnabled: Boolean,
     onToggle: (Boolean) -> Unit,
     onOpenOverlaySettings: () -> Unit,
-    onOpenAccessibilitySettings: () -> Unit
+    onOpenAccessibilitySettings: () -> Unit,
+    onAddTile: () -> Unit
 ) {
     val haptic = rememberTapHaptic()
     Card(
@@ -1131,6 +1153,30 @@ private fun OverlayCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 52.dp, end = 16.dp, bottom = 14.dp)
                 )
+            }
+            HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Quick Settings tile", fontWeight = FontWeight.Medium)
+                    Text(
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            "Start dictating without leaving the app you are in."
+                        } else {
+                            "Available in the Quick Settings editor as \"Dictate\"."
+                        },
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    Spacer(Modifier.width(12.dp))
+                    Button(onClick = { haptic(); onAddTile() }) { Text("Add") }
+                }
             }
         }
     }
@@ -1529,14 +1575,24 @@ private fun isOverlayLauncherEnabled(context: Context): Boolean {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED
 }
 
+/**
+ * Turns both ways into the overlay on or off together: the launcher icon a side
+ * button can be mapped to, and the Quick Settings tile for phones with nothing
+ * to map. Neither should exist while the feature is off.
+ */
 private fun setOverlayLauncherEnabled(context: Context, enabled: Boolean) {
-    val component = ComponentName(context, OverlayLauncherActivity::class.java)
-    context.packageManager.setComponentEnabledSetting(
-        component,
-        if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-        else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-        PackageManager.DONT_KILL_APP
-    )
+    val state = if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+    else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+    for (component in listOf(
+        ComponentName(context, OverlayLauncherActivity::class.java),
+        ComponentName(context, MutterboardTileService::class.java)
+    )) {
+        context.packageManager.setComponentEnabledSetting(
+            component,
+            state,
+            PackageManager.DONT_KILL_APP
+        )
+    }
 }
 
 private fun isAccessibilityEnabled(context: Context): Boolean {

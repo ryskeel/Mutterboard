@@ -29,9 +29,9 @@ interface.
 
 - **`MutterboardInputMethodService`** (the keyboard). Commits through the
   InputConnection, dismisses by switching back to the previous IME.
-- **`OverlayDictationService`** (the overlay). Floats the same UI over any app
-  from a launcher activity you can map to a side button. Dismisses by removing
-  its own window.
+- **`OverlayDictationService`** (the overlay). Floats the same UI over any app,
+  started either from a launcher activity you can map to a side button or from
+  the Quick Settings tile. Dismisses by removing its own window.
 
 ### Rules that are not obvious from the code
 
@@ -61,7 +61,14 @@ interface.
 - **The launcher activity ships disabled.** It carries a LAUNCHER filter so OEM
   side-button mappers can see it, which would otherwise mean a second app icon
   for everyone. The settings toggle enables the component; there is no separate
-  preference, so nothing can drift out of sync with it.
+  preference, so nothing can drift out of sync with it. `MutterboardTileService`
+  is disabled and enabled by the same toggle, for the same reason.
+
+- **The Quick Settings tile routes through the launcher activity, not straight
+  to the service.** A tile click does not make the app foreground, and a
+  microphone foreground service cannot be started from the background. The
+  activity is the one path already allowed to start it, so both entry points go
+  through it.
 
 - **The accessibility service is optional and must stay optional.** Without it
   the overlay still works, it just stops pasting for you. That is what keeps the
