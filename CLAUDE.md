@@ -79,6 +79,13 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   `syncLauncherIcons` repairs installs that predate this, because component
   states survive an update and both icons would otherwise stay enabled forever.
 
+- **Never change a component's enabled state while an activity is running on
+  it.** Android destroys that activity, which from the user's side is the app
+  vanishing to the home screen - it reads exactly like a crash, and there is no
+  stack trace to find afterwards. The settings screen runs on the
+  `SettingsLauncher` alias it disables, so the swap happens in `onStop`.
+  `DONT_KILL_APP` does not help: the process survives, the activity does not.
+
 - **Nothing may reach settings through `getLaunchIntentForPackage`.** With the
   overlay on, the package's launch intent *is* the overlay launcher, so asking
   for it to answer "take me to settings" starts another dictation instead.
@@ -119,14 +126,18 @@ Enable keyboard" and treats the overlay as an extra further down the page.
 
 All of this lives on `feature/dictation-overlay`, unmerged.
 
-- **The settings experience is the thing to nail before shipping.** It needs
-  walking end to end as a new user would: nothing enabled, no key, no grants.
-  Ry reported "a little bit of bugginess in the settings" on 2026-09-07 without
-  pinning it down, so start by reproducing that rather than assuming it is the
-  overlay card. The card was rebuilt that day from a red warning block into
-  numbered steps, which is the most likely place for something to be off.
-- **The setup order still tells the old story.** If the overlay is the default
-  way in, "Enable keyboard" being step 2 of Device setup is wrong.
+- **The settings experience was walked end to end on 2026-09-08** from a real
+  fresh install, and rebuilt around the walk. `scripts/fresh-setup.sh` is how
+  that is done again: save, reset, restore. Reset uninstalls rather than
+  `pm clear`, because clearing leaves the component states the overlay choice
+  sets and the shell user is not allowed to put those back.
+- **Setup is now a choice, not a checklist.** Device setup asks for the
+  microphone, Transcription asks for the key, and "How you dictate" offers
+  Overlay or Keyboard as radio options with each one's setup nested under it.
+  They are alternatives: nothing in the app arbitrates between an overlay and a
+  keyboard both live at once, so it never offers both. The overlay's component
+  state IS the choice - no second preference to drift - and a fresh install is
+  written to Overlay once, on first launch.
 - **Band height** was cut from 269dp to about 168dp and may want to go smaller.
   The wave and the top padding are what is left to trim.
 - **The silence trim constants want tuning against real recordings.**
