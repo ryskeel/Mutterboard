@@ -120,6 +120,16 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   `OverlayLauncherActivity` rather than the service, same foreground-service
   reason as the tile, and it does nothing while the keyboard is the chosen mode.
 
+- **Touching `accessibility_service_config.xml` switches the service off on
+  every phone that has it.** Android treats a service that redeclares itself as
+  one the user has not consented to, drops it from the enabled list, and says
+  nothing; the overlay carries on and quietly stops pasting, which is what a
+  user notices. Adding `flagRequestAccessibilityButton` in v1.19.0 did exactly
+  that. Verified either way on a Titan II: an update carrying only a version bump
+  left the grant alone. So a release that edits that file has to tell people to
+  turn the service back on - and on a sideloaded install they may have to walk
+  the "Allow restricted settings" unlock a second time to do it.
+
 - **"Message pasted from your clipboard" is Android's, not ours.** It fires
   because ACTION_PASTE makes the *target* app read a clip it did not write, and
   the only way to stop it is to stop pasting through the clipboard - which is the
