@@ -135,10 +135,11 @@ class OverlayDictationService : Service(), DictationSession.Host {
             @Suppress("DEPRECATION")
             WindowManager.LayoutParams.TYPE_PHONE
         }
-        val bandHeight = (resources.displayMetrics.heightPixels * BAND_FRACTION).toInt()
         return WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
-            bandHeight,
+            // The band measures itself. A fraction of the screen was either taller
+            // than the controls needed or too short once a caption appeared.
+            WindowManager.LayoutParams.WRAP_CONTENT,
             type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -262,9 +263,6 @@ class OverlayDictationService : Service(), DictationSession.Host {
         private const val CHANNEL_ID = "dictation_overlay"
         private const val NOTIFICATION_ID = 1
         private const val CLIP_LABEL = "Mutterboard transcript"
-        // How much of the screen the band takes. The rest stays visible, and
-        // stays touchable.
-        private const val BAND_FRACTION = 0.42f
     }
 }
 

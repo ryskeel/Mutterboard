@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -61,18 +60,22 @@ fun OverlayDictationBand(
     onModeChanged: (Boolean) -> Unit,
 ) {
     val surface = MaterialTheme.colorScheme.surface
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Height comes from the content rather than a fraction of the screen. A fixed
+    // fraction is either taller than the controls need or too short to hold them
+    // once a caption appears, and the band should never be either.
+    Box(modifier = Modifier.fillMaxWidth()) {
         // The band's own surface. It comes up from nothing at the top edge so
         // there is no hard boundary — the band ends in a feather, not a seam —
         // and it stops short of opaque so what is behind stays faintly readable.
+        // The ramp is proportional, so it still feathers at any height.
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .matchParentSize()
                 .background(
                     Brush.verticalGradient(
                         0f to Color.Transparent,
-                        0.18f to surface.copy(alpha = 0.50f),
-                        0.42f to surface.copy(alpha = 0.78f),
+                        0.22f to surface.copy(alpha = 0.50f),
+                        0.50f to surface.copy(alpha = 0.78f),
                         1f to surface.copy(alpha = 0.88f),
                     ),
                 ),
@@ -82,7 +85,7 @@ fun OverlayDictationBand(
         // the top so it cannot outrun the surface beneath it.
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .matchParentSize()
                 .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                 .drawWithContent {
                     drawContent()
@@ -102,9 +105,9 @@ fun OverlayDictationBand(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(start = 24.dp, end = 24.dp, bottom = 40.dp),
+                .padding(start = 24.dp, end = 24.dp, top = 18.dp, bottom = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Hidden whenever no refiner exists, exactly as on the keyboard: a
             // toggle naming a mode that isn't running would be lying.
@@ -117,33 +120,28 @@ fun OverlayDictationBand(
                 color = MaterialTheme.colorScheme.primary,
                 // Held in from the edges — running the full width made it read as
                 // a divider across the screen.
-                modifier = Modifier.fillMaxWidth(0.72f).height(56.dp),
+                modifier = Modifier.fillMaxWidth(0.72f).height(30.dp),
             )
             // Recording needs no caption, the wave says it. Every other state is
             // telling you something you cannot see, so it speaks. Fixed minimum
             // height so the controls never shift underneath.
-            Box(
-                modifier = Modifier.heightIn(min = 24.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                snapshot.message?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
-                }
+            snapshot.message?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterHorizontally),
+                horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 CircleButton(
                     icon = Icons.Outlined.Close,
                     description = "Cancel",
-                    diameter = 52.dp,
+                    diameter = 44.dp,
                     container = MaterialTheme.colorScheme.secondaryContainer,
                     content = MaterialTheme.colorScheme.onSecondaryContainer,
                     onClick = onCancel,
@@ -151,7 +149,7 @@ fun OverlayDictationBand(
                 CircleButton(
                     icon = snapshot.state.actionIcon(),
                     description = snapshot.actionDescription,
-                    diameter = 72.dp,
+                    diameter = 56.dp,
                     container = MaterialTheme.colorScheme.primary,
                     content = MaterialTheme.colorScheme.onPrimary,
                     onClick = onAction,
@@ -159,7 +157,7 @@ fun OverlayDictationBand(
                 CircleButton(
                     icon = Icons.Outlined.Settings,
                     description = "Settings",
-                    diameter = 52.dp,
+                    diameter = 44.dp,
                     container = MaterialTheme.colorScheme.secondaryContainer,
                     content = MaterialTheme.colorScheme.onSecondaryContainer,
                     onClick = onSettings,
