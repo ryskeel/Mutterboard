@@ -1,7 +1,9 @@
 # Mutterboard
 
-Android voice-dictation keyboard (IME). Record, transcribe, commit text into
-whatever field the user is in.
+Android voice dictation. Record, transcribe, commit the text. Two entry points:
+a keyboard (IME) that commits into the field you are in, and an overlay you can
+launch from a side button that dictates over any app and puts the result on the
+clipboard.
 
 Two transcription engines, chosen in the app: **Default** (cloud — Groq
 Whisper V3 Turbo) and **Offline** (on-device Parakeet). On the cloud path only, a
@@ -16,6 +18,54 @@ Both prompts also carry **rule 3**: when the user spells a word out letter by
 letter mid-sentence ("Las Fuentas, spelled L-A-S-F-U-E-N-T-A-S"), those letters
 are an instruction addressed to the model. It respells the word, deletes the
 instruction, and the letters outrank the transcript.
+
+## Two ways in: the keyboard and the overlay
+
+`DictationSession` owns a dictation end to end - engines, refiners, recording,
+the transcribe-then-refine pipeline, the UI. It deliberately does not know where
+the text goes or how the UI disappears, because those are the only two things
+the two entry points disagree about. They are the `DictationSession.Host`
+interface.
+
+- **`MutterboardInputMethodService`** (the keyboard). Commits through the
+  InputConnection, dismisses by switching back to the previous IME.
+- **`OverlayDictationService`** (the overlay). Floats the same UI over any app
+  from a launcher activity you can map to a side button. Dismisses by removing
+  its own window.
+
+### Rules that are not obvious from the code
+
+- **The overlay writes the clipboard every time, not just when pasting fails.**
+  Dictation there often has no destination yet: you start talking, move between
+  apps, and only then go find a field. A transcript that landed nowhere is the
+  failure worth engineering against, so the clipboard is the destination and the
+  paste is the bonus.
+
+- **Paste, not `ACTION_SET_TEXT`.** SET_TEXT replaces the entire field, so
+  matching the keyboard's insert-at-cursor behavior would mean reading the node,
+  splicing at the selection and restoring the cursor - the exact sequence that
+  breaks in Compose and WebView fields. `ACTION_PASTE` already has commitText's
+  semantics.
+
+- **The foreground service is not bureaucracy.** An overlay window does not make
+  the app foreground, and Android cuts the microphone to apps that aren't. It
+  must also come up *untyped* when RECORD_AUDIO is missing: declaring the
+  microphone type without the grant is a hard error on Android 14+, and the
+  overlay is reachable before the user has finished setup.
+
+- **`FLAG_NOT_FOCUSABLE` is load-bearing in two places** - on the overlay window
+  and on the launcher activity. Either one taking focus closes the keyboard and
+  drops the cursor in the field being pasted into, which is the entire point of
+  the design.
+
+- **The launcher activity ships disabled.** It carries a LAUNCHER filter so OEM
+  side-button mappers can see it, which would otherwise mean a second app icon
+  for everyone. The settings toggle enables the component; there is no separate
+  preference, so nothing can drift out of sync with it.
+
+- **The accessibility service is optional and must stay optional.** Without it
+  the overlay still works, it just stops pasting for you. That is what keeps the
+  "Allow restricted settings" unlock off the critical path for a new user.
 
 ## The refiners are the heart of this app
 
