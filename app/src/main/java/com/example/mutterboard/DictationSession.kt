@@ -621,8 +621,11 @@ class DictationSession(
         context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     private fun openSetupActivity() {
-        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
-        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Explicitly MainActivity, not the package's launch intent: with the
+        // overlay on, the launch intent IS the overlay launcher, so asking for it
+        // here would answer "take me to settings" by starting another dictation.
+        val intent = android.content.Intent(context, MainActivity::class.java)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }
 

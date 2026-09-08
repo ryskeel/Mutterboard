@@ -115,6 +115,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Cheap, and the only place an install that predates the icon changing
+        // hands can be put right. See syncLauncherIcons.
+        syncLauncherIcons(this)
         enableEdgeToEdge()
         setContent {
             MutterboardTheme {
@@ -1176,8 +1179,10 @@ private fun OverlayCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text("Dictation overlay", fontWeight = FontWeight.Medium)
                 Text(
-                    "Adds a second app icon you can map to a side button. " +
-                        "Dictate over any app, without switching keyboards.",
+                    "The app icon starts a dictation instead of opening settings, " +
+                        "and can be mapped to a side button. Dictate over any app, " +
+                        "without switching keyboards. Settings stays on the icon's " +
+                        "long press.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1661,9 +1666,15 @@ private fun isOverlayLauncherEnabled(context: Context): Boolean {
 }
 
 /**
- * Turns both ways into the overlay on or off together: the launcher icon a side
- * button can be mapped to, and the Quick Settings tile for phones with nothing
- * to map. Neither should exist while the feature is off.
+ * Turns both ways into the overlay on or off together: the launcher activity a
+ * side button can be mapped to, and the Quick Settings tile for phones with
+ * nothing to map. Neither should exist while the feature is off.
+ *
+ * The app icon goes with them. Both entry points need a LAUNCHER activity — the
+ * mappers only list launchable apps — so leaving both enabled put two Mutterboard
+ * icons in the drawer, which is not a thing apps do. Instead the icon changes
+ * hands: with the overlay on, tapping Mutterboard starts talking, and settings
+ * lives on the icon's long-press shortcut and the band's own settings button.
  */
 private fun setOverlayLauncherEnabled(context: Context, enabled: Boolean) {
     val state = if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
@@ -1678,6 +1689,34 @@ private fun setOverlayLauncherEnabled(context: Context, enabled: Boolean) {
             PackageManager.DONT_KILL_APP
         )
     }
+    context.packageManager.setComponentEnabledSetting(
+        settingsLauncherComponent(context),
+        if (enabled) PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        else PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+        PackageManager.DONT_KILL_APP
+    )
+}
+
+/** The alias that puts a settings icon in the drawer. */
+private fun settingsLauncherComponent(context: Context) =
+    ComponentName(context.packageName, "${context.packageName}.SettingsLauncher")
+
+/**
+ * Makes sure exactly one app icon exists, whichever way the overlay is set.
+ *
+ * Needed because component states survive an app update: anyone who had the
+ * overlay on before the icon started changing hands would come out the other
+ * side with both icons enabled, and nothing would ever fix it unless they
+ * happened to toggle the switch off and on again.
+ */
+internal fun syncLauncherIcons(context: Context) {
+    val overlayOn = isOverlayLauncherEnabled(context)
+    val settingsState = context.packageManager
+        .getComponentEnabledSetting(settingsLauncherComponent(context))
+    // DEFAULT means "as the manifest declares it", which for the alias is on.
+    val settingsOn = settingsState != PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+    if (settingsOn != overlayOn) return
+    setOverlayLauncherEnabled(context, overlayOn)
 }
 
 /**

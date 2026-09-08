@@ -26,28 +26,45 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Mutterboard">
 
+        <!-- Settings. Reached through the alias below rather than a filter of
+             its own, because which of the two entry points owns the app icon is
+             something the overlay toggle switches at runtime. -->
         <activity
             android:name=".MainActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="@string/app_name"
             android:theme="@style/Theme.Mutterboard"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- The app icon while the overlay is off: opens settings. Disabled the
+             moment the overlay is turned on, because the two of them are the
+             same icon wearing different hats and only one may exist at a time.
+             An alias rather than a filter on MainActivity so it can be disabled
+             without disabling the activity everything else starts directly. -->
+        <activity-alias
+            android:name=".SettingsLauncher"
+            android:enabled="true"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
-        <!-- Starts the dictation overlay and finishes. Carries a LAUNCHER filter
-             so OEM side-button mappers (which only list launchable apps) can see
-             it, and ships disabled so that second icon appears only once the
-             user turns the overlay on. -->
+        <!-- The app icon while the overlay is on: starts a dictation and
+             finishes. It has to be a LAUNCHER activity because OEM side-button
+             mappers only list launchable apps, and it takes over the icon rather
+             than adding one beside it — two icons for one app is nobody's idea
+             of an app. Settings stays reachable from the band's own button and
+             from the icon's long-press shortcut. -->
         <activity
             android:name=".OverlayLauncherActivity"
             android:enabled="false"
             android:excludeFromRecents="true"
             android:exported="true"
-            android:label="@string/overlay_launcher_label"
+            android:label="@string/app_name"
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
@@ -55,6 +72,9 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <service

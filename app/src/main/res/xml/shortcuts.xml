@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-pressing the app icon while it is the dictation launcher. Tapping the
+     icon starts talking, so this is the only way back into settings from the
+     home screen. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="settings"
+        android:enabled="true"
+        android:icon="@drawable/ic_settings_gear"
+        android:shortcutShortLabel="@string/shortcut_settings_short"
+        android:shortcutLongLabel="@string/shortcut_settings_long">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.example.mutterboard"
+            android:targetClass="com.example.mutterboard.MainActivity" />
+    </shortcut>
+</shortcuts>

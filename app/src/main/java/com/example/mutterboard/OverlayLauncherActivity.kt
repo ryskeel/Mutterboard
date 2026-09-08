@@ -29,6 +29,11 @@ class OverlayLauncherActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Both icons can be enabled at once on an install that predates the icon
+        // changing hands, and this is the entry point such a user actually
+        // presses, so it is the first chance to put that right.
+        syncLauncherIcons(this)
+
         // Launching an activity normally takes input focus, which would close the
         // keyboard and drop the cursor in the field we are about to paste into —
         // the one thing this whole design exists to avoid. Coming up unfocusable

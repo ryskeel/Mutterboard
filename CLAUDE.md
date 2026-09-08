@@ -69,6 +69,21 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   preference, so nothing can drift out of sync with it. `MutterboardTileService`
   is disabled and enabled by the same toggle, for the same reason.
 
+- **There is only ever one app icon, and the two entry points take turns
+  holding it.** Both need a LAUNCHER activity - the mappers only list launchable
+  apps - so leaving both enabled put two Mutterboard icons in the drawer, which
+  is not a thing apps do. The overlay toggle enables `OverlayLauncherActivity`
+  and disables the `SettingsLauncher` alias, and back again. With the overlay on,
+  tapping the icon starts talking; settings is on the icon's long-press shortcut
+  (`res/xml/shortcuts.xml`) and on the band's own settings button.
+  `syncLauncherIcons` repairs installs that predate this, because component
+  states survive an update and both icons would otherwise stay enabled forever.
+
+- **Nothing may reach settings through `getLaunchIntentForPackage`.** With the
+  overlay on, the package's launch intent *is* the overlay launcher, so asking
+  for it to answer "take me to settings" starts another dictation instead.
+  `DictationSession.openSetupActivity` names `MainActivity` explicitly.
+
 - **The Quick Settings tile routes through the launcher activity, not straight
   to the service.** A tile click does not make the app foreground, and a
   microphone foreground service cannot be started from the background. The
