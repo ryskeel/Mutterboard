@@ -1249,26 +1249,28 @@ private fun ModeChoiceRow(
 }
 
 /**
- * Turning on the accessibility service makes Android attach its own shortcut,
- * which parks a button on screen that Mutterboard never uses and cannot remove
- * itself. Presented as the next step in the sequence rather than as a warning:
- * it is a normal consequence of the previous step, not something the user got
- * wrong.
+ * The floating button Android parks on screen when the accessibility service is
+ * turned on, offered as something to remove.
  *
- * v1.19.0 tried to make the button start a dictation instead of asking people to
- * remove it. Claiming it costs the "Use Mutterboard Dictate" switch on the
- * service's settings page, which is the switch that turns pasting on, so the
- * button went back to being litter. See accessibility_service_config.xml.
+ * Only ever shown when the button is actually attached. v1.19.0 made it a
+ * numbered step in the overlay's setup, which told people who did not have the
+ * button to go and turn it off, and put a tidy-up in a list of things that have
+ * to be done before the app works.
+ *
+ * There is nothing alarming to say about it. Pressing it does nothing at all -
+ * tested - because the service does not claim the press, and claiming it costs
+ * the switch that turns pasting on (see accessibility_service_config.xml). So
+ * this is housekeeping, and it says so.
  */
 @Composable
-private fun ShortcutStepRow(done: Boolean, step: Int?, onAction: () -> Unit) {
+private fun ShortcutStepRow(onAction: () -> Unit) {
     StepRow(
-        label = "Turn off Android's shortcut button",
-        done = done,
+        label = "Android's floating button",
+        done = false,
         actionLabel = "Turn off",
         onAction = onAction,
-        step = step,
-        note = "Android adds this on its own. Mutterboard never uses it."
+        note = "Android added this when you turned the service on. Nothing uses " +
+            "it - turn it off if it is in your way."
     )
 }
 
@@ -1422,18 +1424,6 @@ private fun DictationModeCard(
                         onOpenAppInfo = onOpenAppInfo
                     )
                 }
-                // Only reachable once step 2 is done, because Android attaches
-                // the shortcut when the service goes on. Shown even when already
-                // clear so it reads as a step that is finished rather than a
-                // warning that appears out of nowhere.
-                if (accessibilityEnabled) {
-                    HorizontalDivider(modifier = Modifier.padding(start = 36.dp))
-                    ShortcutStepRow(
-                        done = !shortcutAttached,
-                        step = 3,
-                        onAction = onOpenShortcutSettings
-                    )
-                }
             }
         }
         HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
@@ -1457,12 +1447,13 @@ private fun DictationModeCard(
                 )
             }
         }
-        // Leftover case: the overlay is off while the accessibility service, and
-        // the shortcut Android attached to it, are still on. It belongs to
-        // neither option - it is something to clean up - so it sits below both.
-        if (!overlayChosen && shortcutAttached) {
+        // Sits below both options because it belongs to neither, and only when
+        // the button is actually there. It was a numbered step for a while,
+        // which put "turn this off" in front of people who did not have it and
+        // made a tidy-up look like part of setup.
+        if (shortcutAttached) {
             HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
-            ShortcutStepRow(done = false, step = null, onAction = onOpenShortcutSettings)
+            ShortcutStepRow(onAction = onOpenShortcutSettings)
         }
     }
 }

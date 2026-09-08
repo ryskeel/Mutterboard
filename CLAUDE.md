@@ -109,6 +109,15 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   the overlay still works, it just stops pasting for you. That is what keeps the
   "Allow restricted settings" unlock off the critical path for a new user.
 
+- **Android's floating button is inert, and setup treats it as housekeeping.**
+  Turning the accessibility service on makes Android attach its shortcut; the app
+  cannot detach it (WRITE_SECURE_SETTINGS) and cannot use it either. Pressing it
+  does nothing at all - tested on a Titan II with the button assigned - so there
+  is nothing to warn about. The row that offers to remove it appears only when
+  the button is actually attached, below both options rather than inside either.
+  It was briefly a numbered step, which told people who did not have the button
+  to go and turn it off.
+
 - **Never ask for the accessibility button.** `flagRequestAccessibilityButton`
   looks like free real estate - Android attaches its shortcut to any service the
   user enables anyway, so claiming the press turns litter into an entry point,
