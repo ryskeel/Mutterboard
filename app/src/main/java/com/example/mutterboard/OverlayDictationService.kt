@@ -120,7 +120,7 @@ class OverlayDictationService : Service(), DictationSession.Host {
             Toast.makeText(this, "Couldn't save the transcript", Toast.LENGTH_LONG).show()
             return
         }
-        val pasted = MutterboardAccessibilityService.instance?.pasteIntoFocusedField() ?: false
+        val pasted = MutterboardAccessibilityService.instance?.insertIntoFocusedField(text) ?: false
         Log.d(TAG, "commit pasted=$pasted")
         // Nothing visibly happened when there was no field to paste into, so say
         // where the text went. Only on that path — a successful paste speaks for

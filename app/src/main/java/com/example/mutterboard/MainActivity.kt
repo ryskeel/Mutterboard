@@ -124,7 +124,8 @@ class MainActivity : ComponentActivity() {
                     onOpenOverlaySettings = { openOverlaySettings() },
                     onOpenAccessibilitySettings = { openAccessibilitySettings() },
                     onRequestNotifications = { requestNotificationPermission() },
-                    onAddTile = { addQuickSettingsTile() }
+                    onAddTile = { addQuickSettingsTile() },
+                    onRemoveShortcut = { openAccessibilityShortcutSettings() }
                 )
             }
         }
@@ -149,6 +150,23 @@ class MainActivity : ComponentActivity() {
 
     private fun openAccessibilitySettings() {
         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
+    /**
+     * Opens the shortcuts screen, where the accessibility button can be taken off
+     * Mutterboard. The app cannot flip that toggle itself - the setting behind it
+     * is signature-level - so landing the user on the right screen is the most it
+     * can do.
+     *
+     * The per-service detail page would be one step closer, but it is gated
+     * behind OPEN_ACCESSIBILITY_DETAILS_SETTINGS (signature|installer). This
+     * action is a plain exported intent with no such gate.
+     */
+    private fun openAccessibilityShortcutSettings() {
+        val intent = Intent("android.settings.ACCESSIBILITY_SHORTCUT_SETTINGS")
+        runCatching { startActivity(intent) }.onFailure {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
     }
 
     /**
@@ -186,7 +204,8 @@ private fun SetupScreen(
     onOpenOverlaySettings: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onRequestNotifications: () -> Unit,
-    onAddTile: () -> Unit
+    onAddTile: () -> Unit,
+    onRemoveShortcut: () -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -209,6 +228,7 @@ private fun SetupScreen(
     var overlayEnabled by remember { mutableStateOf(false) }
     var canDrawOverlays by remember { mutableStateOf(false) }
     var accessibilityEnabled by remember { mutableStateOf(false) }
+    var shortcutAttached by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
 
     val currentVersion = remember {
@@ -276,6 +296,7 @@ private fun SetupScreen(
         overlayEnabled = isOverlayLauncherEnabled(context)
         canDrawOverlays = Settings.canDrawOverlays(context)
         accessibilityEnabled = isAccessibilityEnabled(context)
+        shortcutAttached = hasAccessibilityShortcut(context)
     }
 
     LaunchedEffect(updateCheckTick) {
@@ -410,7 +431,9 @@ private fun SetupScreen(
                 },
                 onOpenOverlaySettings = onOpenOverlaySettings,
                 onOpenAccessibilitySettings = onOpenAccessibilitySettings,
-                onAddTile = onAddTile
+                onAddTile = onAddTile,
+                shortcutAttached = shortcutAttached,
+                onRemoveShortcut = onRemoveShortcut
             )
 
             Spacer(Modifier.height(40.dp))
@@ -1094,7 +1117,9 @@ private fun OverlayCard(
     onToggle: (Boolean) -> Unit,
     onOpenOverlaySettings: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
-    onAddTile: () -> Unit
+    onAddTile: () -> Unit,
+    shortcutAttached: Boolean,
+    onRemoveShortcut: () -> Unit
 ) {
     val haptic = rememberTapHaptic()
     Card(
@@ -1124,6 +1149,42 @@ private fun OverlayCard(
                 checked = enabled,
                 onCheckedChange = { haptic(); onToggle(it) }
             )
+        }
+        // Deliberately outside the enabled check below. Android attaches this
+        // shortcut when the accessibility service goes on, and that outlives the
+        // overlay being switched back off - so a button nobody asked for could
+        // otherwise sit on screen with nothing in the app admitting to it.
+        if (shortcutAttached) {
+            HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Android added a shortcut button",
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        "It sits on your screen and Mutterboard never uses it. " +
+                            "Tap Remove, then turn the Mutterboard shortcut off.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Button(
+                    onClick = { haptic(); onRemoveShortcut() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) { Text("Remove") }
+            }
         }
         // The grants only make sense once the feature is on, and listing two
         // permission rows against a switch nobody has flipped reads like the app
@@ -1593,6 +1654,26 @@ private fun setOverlayLauncherEnabled(context: Context, enabled: Boolean) {
             PackageManager.DONT_KILL_APP
         )
     }
+}
+
+/**
+ * Whether Android has wired its accessibility shortcut (the floating button, or
+ * the one in the navigation bar) to our service.
+ *
+ * It does this by itself when the user enables the service - our service never
+ * asks for it, and dumpsys confirms requestA11yBtn=false. An app cannot undo it
+ * either: that setting is only writable with WRITE_SECURE_SETTINGS, which is
+ * signature-level. Reading it is allowed, so the most the app can do is notice
+ * and hand the user the switch. Which is worth doing: an unexplained button
+ * parked on your screen is exactly what this app exists to not be.
+ */
+private fun hasAccessibilityShortcut(context: Context): Boolean {
+    val target = ComponentName(context, MutterboardAccessibilityService::class.java)
+    val targets = Settings.Secure.getString(
+        context.contentResolver,
+        "accessibility_button_targets"
+    ) ?: return false
+    return targets.split(':').any { ComponentName.unflattenFromString(it) == target }
 }
 
 private fun isAccessibilityEnabled(context: Context): Boolean {
