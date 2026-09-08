@@ -4,11 +4,18 @@
   (needed to find the focused text field) but subscribes to almost no events,
   because nothing here is event-driven: the overlay calls in on demand when a
   transcript is ready.
+
+  flagRequestAccessibilityButton is the exception, and it is not about
+  accessibility at all. Android attaches its shortcut to any service the user
+  enables whether it asks or not, so the floating button appears regardless; this
+  flag is what makes a press on it reach us instead of doing nothing. On a phone
+  with no remappable side button that button is the best way into the overlay
+  there is.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeViewFocused"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagRetrieveInteractiveWindows"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagRequestAccessibilityButton"
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_service_description"
     android:notificationTimeout="100" />

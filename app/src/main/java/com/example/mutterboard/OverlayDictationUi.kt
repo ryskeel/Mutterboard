@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -61,6 +63,7 @@ fun OverlayDictationBand(
     snapshot: DictationSession.Snapshot,
     amplitude: () -> Float,
     minimized: Boolean,
+    bottomInset: Dp,
     onAction: () -> Unit,
     onCancel: () -> Unit,
     onSettings: () -> Unit,
@@ -76,10 +79,20 @@ fun OverlayDictationBand(
         return
     }
     val surface = MaterialTheme.colorScheme.surface
-    // Height comes from the content rather than a fraction of the screen. A fixed
-    // fraction is either taller than the controls need or too short to hold them
-    // once a caption appears, and the band should never be either.
-    Box(modifier = Modifier.fillMaxWidth()) {
+    // The content sets the floor: a fixed fraction alone is too short to hold the
+    // controls once a caption appears, and the band should never be that.
+    //
+    // But content alone was wrong too. The band was measured on a small square
+    // phone, where the controls happen to come out about as tall as a keyboard;
+    // on a full-size display the same content is a fifth of the screen and the
+    // keyboard it is standing in front of goes on showing underneath it, which
+    // reads as a widget floating on a keyboard rather than as the thing that
+    // replaced it. So the band also claims a share of the screen, and the two
+    // rules take whichever is larger. The cap is for tablets, where a third of
+    // the screen is a wall.
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val minHeight = (screenHeight * BAND_SCREEN_FRACTION).coerceAtMost(BAND_MAX_HEIGHT)
+    Box(modifier = Modifier.fillMaxWidth().heightIn(min = minHeight)) {
         // The band's own surface. It comes up from nothing at the top edge so
         // there is no hard boundary — the band ends in a feather, not a seam —
         // and it stops short of opaque so what is behind stays faintly readable.
@@ -121,7 +134,10 @@ fun OverlayDictationBand(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(start = 24.dp, end = 24.dp, top = 18.dp, bottom = 18.dp),
+                // The window itself now runs to the bottom edge of the screen so
+                // the band has no seam above the navigation bar; the inset is
+                // paid back here, so no control sits under the gesture pill.
+                .padding(start = 24.dp, end = 24.dp, top = 18.dp, bottom = 18.dp + bottomInset),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -204,6 +220,12 @@ fun OverlayDictationBand(
         }
     }
 }
+
+/** How much of the screen the band covers when its content does not need more. */
+private const val BAND_SCREEN_FRACTION = 0.34f
+
+/** Above this the fraction stops being a band and starts being a wall. */
+private val BAND_MAX_HEIGHT = 340.dp
 
 /**
  * What is left of the band once it is out of the way: a small pill in the bottom

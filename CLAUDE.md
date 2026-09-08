@@ -109,6 +109,22 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   the overlay still works, it just stops pasting for you. That is what keeps the
   "Allow restricted settings" unlock off the critical path for a new user.
 
+- **Android's floating shortcut button is a third way in, not litter.** Android
+  attaches its accessibility shortcut to any service the user enables, asked for
+  or not, and the app cannot detach it - that setting needs WRITE_SECURE_SETTINGS.
+  Setup used to tell people to go and turn it off. On a Pixel there is no side
+  button to map and Quick Tap is unreliable, which leaves that button as the only
+  press-anywhere way in, so the service claims it instead
+  (`flagRequestAccessibilityButton` plus an `AccessibilityButtonCallback` - there
+  is no override to hook). It starts
+  `OverlayLauncherActivity` rather than the service, same foreground-service
+  reason as the tile, and it does nothing while the keyboard is the chosen mode.
+
+- **"Message pasted from your clipboard" is Android's, not ours.** It fires
+  because ACTION_PASTE makes the *target* app read a clip it did not write, and
+  the only way to stop it is to stop pasting through the clipboard - which is the
+  design. Do not go hunting for a Toast in this codebase.
+
 ## Where this is going (picked up 2026-09-08)
 
 **The overlay is meant to become the default way to use Mutterboard.** Not a
@@ -137,9 +153,23 @@ All of this lives on `feature/dictation-overlay`, unmerged.
   They are alternatives: nothing in the app arbitrates between an overlay and a
   keyboard both live at once, so it never offers both. The overlay's component
   state IS the choice - no second preference to drift - and a fresh install is
-  written to Overlay once, on first launch.
-- **Band height** was cut from 269dp to about 168dp and may want to go smaller.
-  The wave and the top padding are what is left to trim.
+  written to Overlay once, on first launch. **A fresh install only**: an update
+  keeps the keyboard, because someone arriving through an update has never been
+  asked the question and switching how their phone works behind an update is not
+  an answer they gave. `firstInstallTime == lastUpdateTime` is the test; the
+  preference cannot be, since its absence describes both kinds of user.
+- **The radio group cannot enforce itself alone.** Choosing Overlay does not turn
+  the keyboard off - no app may disable an IME on the user's behalf - so the
+  overlay's steps carry a "Turn off the Mutterboard keyboard" row whenever the IME
+  is still enabled. Without it the Pixel sat with both live at once, which is the
+  state the card exists to prevent.
+- **Band height is a fraction of the screen with the content as a floor.** It was
+  measured on the Titan II, where the controls happen to come out about as tall as
+  a keyboard; the same content on a Pixel is a fifth of the screen and the
+  keyboard goes on showing underneath. `BAND_SCREEN_FRACTION` is the knob.
+  The window also opts out of being fitted above the navigation bar
+  (`fitInsetsTypes = 0`), which is what removes the hard edge and the strip of
+  keyboard below the band, and pays the inset back as padding inside the band.
 - **The silence trim constants want tuning against real recordings.**
   `SILENCE_PEAK_PERCENT` and `SILENCE_FLOOR` were picked from one measured
   failure; the debug log prints `peak=` and `threshold=` on every stop.
