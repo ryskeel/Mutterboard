@@ -87,6 +87,44 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   the overlay still works, it just stops pasting for you. That is what keeps the
   "Allow restricted settings" unlock off the critical path for a new user.
 
+## Where this is going (picked up 2026-09-08)
+
+**The overlay is meant to become the default way to use Mutterboard.** Not a
+second entry point bolted onto a keyboard: the way you are expected to use it is
+to map it to a button or a Quick Settings tile and run it from anywhere. Ry's
+call on 2026-09-07, after living with it for an afternoon.
+
+The keyboard is **not** being removed. It stays a real IME, and everything under
+"The refiners are the heart of this app" still applies to it unchanged. What
+changes is which one is the front door, which is a question about setup copy and
+ordering far more than about code: today the app opens on "Device setup ->
+Enable keyboard" and treats the overlay as an extra further down the page.
+
+### What is unfinished
+
+All of this lives on `feature/dictation-overlay`, unmerged.
+
+- **The settings experience is the thing to nail before shipping.** It needs
+  walking end to end as a new user would: nothing enabled, no key, no grants.
+  Ry reported "a little bit of bugginess in the settings" on 2026-09-07 without
+  pinning it down, so start by reproducing that rather than assuming it is the
+  overlay card. The card was rebuilt that day from a red warning block into
+  numbered steps, which is the most likely place for something to be off.
+- **The setup order still tells the old story.** If the overlay is the default
+  way in, "Enable keyboard" being step 2 of Device setup is wrong.
+- **Band height** was cut from 269dp to about 168dp and may want to go smaller.
+  The wave and the top padding are what is left to trim.
+- **The silence trim constants want tuning against real recordings.**
+  `SILENCE_PEAK_PERCENT` and `SILENCE_FLOOR` were picked from one measured
+  failure; the debug log prints `peak=` and `threshold=` on every stop.
+- **Niagara's search box (`bitpit.launcher`) refuses both ACTION_PASTE and
+  ACTION_SET_TEXT.** Falls back to the clipboard, which is the designed
+  behaviour, but it is the one field seen doing this.
+- **Pastiera's bar went missing once right after closing the overlay** and came
+  back on its own. Never reproduced, and the IME config was verified intact at
+  the time. If it recurs, suspect `OverlayLauncherActivity` coming up
+  FLAG_NOT_FOCUSABLE and the field never re-requesting the keyboard.
+
 ## The refiners are the heart of this app
 
 The dictation quality is the product, and it comes from the system prompts in
