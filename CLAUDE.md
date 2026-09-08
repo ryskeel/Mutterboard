@@ -116,7 +116,11 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   is nothing to warn about. The row that offers to remove it appears only when
   the button is actually attached, below both options rather than inside either.
   It was briefly a numbered step, which told people who did not have the button
-  to go and turn it off.
+  to go and turn it off. The step that *causes* it warns first, because a button
+  that appears on your screen unannounced and does nothing is a new user's first
+  impression of the app, and the app has no way to stop it appearing. Both phones this was
+  built against attached it on their own, and the button was the first thing the
+  user noticed about the accessibility step on each of them.
 
 - **Never ask for the accessibility button.** `flagRequestAccessibilityButton`
   looks like free real estate - Android attaches its shortcut to any service the

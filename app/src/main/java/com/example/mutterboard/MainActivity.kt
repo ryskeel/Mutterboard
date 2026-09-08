@@ -1409,7 +1409,13 @@ private fun DictationModeCard(
                 )
                 if (!accessibilityEnabled) {
                     Text(
-                        "Without this, transcripts are copied to your clipboard and you paste them yourself.",
+                        "Without this, transcripts are copied to your clipboard and " +
+                            "you paste them yourself.\n\nAndroid adds a small " +
+                            "floating button to the edge of your screen when you turn " +
+                            "this on. Mutterboard cannot use it or remove it, and it " +
+                            "does nothing when pressed. You can turn it off in " +
+                            "Accessibility settings, and this page will offer to take " +
+                            "you there.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 36.dp, end = 16.dp, bottom = 14.dp)
