@@ -19,11 +19,13 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -85,7 +87,10 @@ class OverlayDictationService : Service(), DictationSession.Host {
         createNotificationChannel()
         val prefs = getSharedPreferences(MutterboardInputMethodService.PREFS, Context.MODE_PRIVATE)
         puckX = prefs.getInt(KEY_PUCK_X, MINIMIZED_INSET_DP.dpToPx())
-        puckY = prefs.getInt(KEY_PUCK_Y, MINIMIZED_INSET_DP.dpToPx())
+        // Clear of the navigation bar as well as the screen edge: the overlay
+        // window now runs to the bottom of the display, so an inset measured from
+        // the edge alone would park the puck on top of the gesture pill.
+        puckY = prefs.getInt(KEY_PUCK_Y, MINIMIZED_INSET_DP.dpToPx() + bottomInsetPx())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -148,6 +153,7 @@ class OverlayDictationService : Service(), DictationSession.Host {
                         onCancel = { session.cancelTapped() },
                         onSettings = { session.settingsTapped() },
                         minimized = minimized.value,
+                        bottomInset = (bottomInsetPx() / resources.displayMetrics.density).dp,
                         onMinimizedChanged = { setMinimized(it) },
                         onModeChanged = { session.modeChanged(it) },
                     )
@@ -300,6 +306,15 @@ class OverlayDictationService : Service(), DictationSession.Host {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT,
         ).apply {
+            // Reach the actual bottom of the screen. Without this the window is
+            // fitted above the navigation bar, which left a strip of the app
+            // underneath showing below the band - a hard edge across the bottom
+            // of the phone with the keyboard's white background in it. The band
+            // pads its own content back out of that strip instead (see
+            // navigationBarInsetDp), so nothing lands under the gesture pill.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                fitInsetsTypes = 0
+            }
             // The puck sits in the corner the minimize button was in, so it comes
             // to rest where the thumb just left.
             gravity = if (minimized) {
@@ -316,6 +331,23 @@ class OverlayDictationService : Service(), DictationSession.Host {
     }
 
     private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()
+
+    /**
+     * How much of the bottom of the screen belongs to the navigation bar.
+     *
+     * The band's window deliberately opts out of being fitted above it (see
+     * fitInsetsTypes), which is what removes the seam across the bottom of the
+     * screen. The price is that the band has to keep its own controls out of that
+     * strip, so the number has to be read rather than assumed - it is 0 on a phone
+     * with hardware keys and around 48dp on three-button navigation.
+     */
+    private fun bottomInsetPx(): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return 0
+        val metrics = getSystemService(WindowManager::class.java).currentWindowMetrics
+        return metrics.windowInsets
+            .getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars())
+            .bottom
+    }
 
     /**
      * Clipboard first, then paste — in that order, because the paste action reads

@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        chooseOverlayByDefault()
+        chooseDefaultMode()
         enableEdgeToEdge()
         setContent {
             MutterboardTheme {
@@ -126,8 +126,9 @@ class MainActivity : ComponentActivity() {
                     onOpenImeSettings = { openImeSettings() },
                     onOpenOverlaySettings = { openOverlaySettings() },
                     onOpenAccessibilitySettings = { openAccessibilitySettings() },
+                    onOpenAppInfo = { openAppInfo() },
                     onRequestNotifications = { requestNotificationPermission() },
-                    onRemoveShortcut = { openAccessibilityShortcutSettings() }
+                    onOpenShortcutSettings = { openAccessibilityShortcutSettings() }
                 )
             }
         }
@@ -152,6 +153,22 @@ class MainActivity : ComponentActivity() {
 
     private fun openAccessibilitySettings() {
         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
+    /**
+     * The app's own page in Settings, which is where the "Allow restricted
+     * settings" unlock lives on the phones that block a sideloaded app from
+     * taking the overlay permission. The unlock itself is in an overflow menu
+     * with no intent of its own, so this gets the user as close as an app is
+     * allowed to.
+     */
+    private fun openAppInfo() {
+        startActivity(
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:$packageName")
+            )
+        )
     }
 
     /**
@@ -183,13 +200,38 @@ class MainActivity : ComponentActivity() {
      * Written once, on first launch, and then it is the user's: the component
      * states are the choice, so a default that kept re-asserting itself would
      * quietly undo someone who picked the keyboard.
+     *
+     * **Only a genuinely new install.** Someone updating has been dictating with
+     * the keyboard, possibly for months, and the choice they are being shown for
+     * the first time is one they have never made. Defaulting them onto the
+     * overlay answers it on their behalf and switches how their phone works
+     * behind an update - which is exactly what it did on the first Pixel to take
+     * this build. An upgrade keeps the keyboard and lets them move when they
+     * decide to.
      */
-    private fun chooseOverlayByDefault() {
+    private fun chooseDefaultMode() {
         val prefs = getSharedPreferences(MutterboardInputMethodService.PREFS, Context.MODE_PRIVATE)
         if (prefs.contains(KEY_MODE_CHOSEN)) return
+        if (!isFirstInstall()) {
+            // Nothing to enable: the overlay's components ship disabled, so
+            // recording the choice is all that is needed to leave them alone.
+            prefs.edit().putBoolean(KEY_MODE_CHOSEN, true).apply()
+            return
+        }
         setOverlayLauncherEnabled(this, true)
         prefs.edit().putBoolean(KEY_MODE_CHOSEN, true).apply()
     }
+
+    /**
+     * Whether this install has never been updated, which is the only reliable way
+     * to tell a new user from one arriving through an update. The preference that
+     * records the choice cannot: it did not exist in the version they are coming
+     * from, so its absence describes both of them.
+     */
+    private fun isFirstInstall(): Boolean = runCatching {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        info.firstInstallTime == info.lastUpdateTime
+    }.getOrDefault(true)
 
     /**
      * The app icon changes hands here rather than the moment the switch moves,
@@ -219,8 +261,9 @@ private fun SetupScreen(
     onOpenImeSettings: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
+    onOpenAppInfo: () -> Unit,
     onRequestNotifications: () -> Unit,
-    onRemoveShortcut: () -> Unit
+    onOpenShortcutSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -436,8 +479,9 @@ private fun SetupScreen(
                 onOpenImeSettings = onOpenImeSettings,
                 onOpenOverlaySettings = onOpenOverlaySettings,
                 onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+                onOpenAppInfo = onOpenAppInfo,
                 shortcutAttached = shortcutAttached,
-                onRemoveShortcut = onRemoveShortcut
+                onOpenShortcutSettings = onOpenShortcutSettings
             )
 
 
@@ -1196,22 +1240,75 @@ private fun ModeChoiceRow(
 }
 
 /**
- * Turning on the accessibility service makes Android attach its own shortcut,
- * which parks a button on screen that Mutterboard never uses and cannot remove
- * itself. Presented as the next step in the sequence rather than as a warning:
- * it is a normal consequence of the previous step, not something the user got
- * wrong.
+ * Android's floating shortcut button, offered as a way into the overlay.
+ *
+ * It used to be presented as litter to remove, because the service ignored it and
+ * a button that does nothing is worse than no button. It starts a dictation now
+ * (see MutterboardAccessibilityService.registerShortcutButton), and on a phone
+ * with nothing remappable it is the only press-anywhere way in there is, so the
+ * step is the opposite of what it was: turn it on.
+ *
+ * The app can only open the screen, never flip the switch - the setting behind it
+ * needs WRITE_SECURE_SETTINGS. Android usually attaches it by itself when the
+ * service goes on, in which case this arrives already done.
  */
 @Composable
-private fun ShortcutStepRow(done: Boolean, step: Int?, onAction: () -> Unit) {
+private fun ShortcutEntryRow(done: Boolean, step: Int?, onAction: () -> Unit) {
     StepRow(
-        label = "Turn off Android's shortcut button",
+        label = "Start from the floating button",
         done = done,
-        actionLabel = "Turn off",
+        actionLabel = "Set up",
         onAction = onAction,
         step = step,
-        note = "Android adds this on its own. Mutterboard never uses it."
+        note = "Android's accessibility button, if you want a way in from any screen."
     )
+}
+
+/**
+ * The same button once the user has chosen the keyboard, where it is litter
+ * again: the service stays enabled, so Android keeps the button on screen, and
+ * pressing it is ignored because the overlay is off.
+ */
+@Composable
+private fun ShortcutLeftoverRow(onAction: () -> Unit) {
+    StepRow(
+        label = "Turn off Android's shortcut button",
+        done = false,
+        actionLabel = "Turn off",
+        onAction = onAction,
+        note = "Android added this for the overlay. It does nothing in keyboard mode."
+    )
+}
+
+/**
+ * What to do when Android refuses the overlay permission outright.
+ *
+ * Written to be readable by someone who has not hit the wall yet and useless to
+ * nobody if they never do, because the app cannot tell in advance: whether the
+ * block appears depends on how the APK arrived, and the "denied access" dialog
+ * only shows up after the user has already tried the switch.
+ */
+@Composable
+private fun RestrictedSettingsNote(onOpenAppInfo: () -> Unit) {
+    val haptic = rememberTapHaptic()
+    Column(modifier = Modifier.padding(start = 36.dp, end = 16.dp, bottom = 14.dp)) {
+        Text(
+            "If Android says the app was denied access, it is blocking this " +
+                "permission because Mutterboard was installed outside the Play " +
+                "Store. Open App info, tap the three dots at the top right, and " +
+                "choose Allow restricted settings. Then come back and try again.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Open App info",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { haptic(); onOpenAppInfo() }
+        )
+    }
 }
 
 /**
@@ -1236,8 +1333,9 @@ private fun DictationModeCard(
     onOpenImeSettings: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
+    onOpenAppInfo: () -> Unit,
     shortcutAttached: Boolean,
-    onRemoveShortcut: () -> Unit
+    onOpenShortcutSettings: () -> Unit
 ) {
     val haptic = rememberTapHaptic()
     Card(
@@ -1262,6 +1360,20 @@ private fun DictationModeCard(
         // appeared under the word "Keyboard".
         if (overlayChosen) {
             OptionSteps {
+                // The keyboard is the other option, not an extra: leaving it on
+                // is the one state this card is a radio group to prevent, and
+                // Android will not let the app turn an IME off on the user's
+                // behalf. So it becomes the first thing the overlay asks of you.
+                if (imeEnabled) {
+                    StepRow(
+                        label = "Turn off the Mutterboard keyboard",
+                        done = false,
+                        actionLabel = "Turn off",
+                        onAction = onOpenImeSettings,
+                        note = "You picked the overlay. Leaving the keyboard on runs both at once."
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 36.dp))
+                }
                 StepRow(
                     label = "Display over other apps",
                     done = canDrawOverlays,
@@ -1269,6 +1381,15 @@ private fun DictationModeCard(
                     onAction = onOpenOverlaySettings,
                     step = 1
                 )
+                // Sideloaded apps hit "restricted settings" on Pixel and Samsung
+                // for exactly this permission: the switch is there, and flipping
+                // it puts up a dialog saying the app was denied access. There is
+                // no intent that opens the unlock - it lives behind the overflow
+                // menu on App info - so the most the app can do is name the three
+                // taps and land the user on the right screen.
+                if (!canDrawOverlays) {
+                    RestrictedSettingsNote(onOpenAppInfo = onOpenAppInfo)
+                }
                 HorizontalDivider(modifier = Modifier.padding(start = 36.dp))
                 StepRow(
                     label = "Paste into the field you are in",
@@ -1290,16 +1411,17 @@ private fun DictationModeCard(
                         modifier = Modifier.padding(start = 36.dp, end = 16.dp, bottom = 14.dp)
                     )
                 }
-                // Only reachable once step 2 is done, because Android attaches
-                // the shortcut when the service goes on. Shown even when already
-                // clear so it reads as a step that is finished rather than a
-                // warning that appears out of nowhere.
+                // Only reachable once step 2 is done: the button belongs to the
+                // accessibility service, so there is nothing to attach it to
+                // until that is on. Usually already attached by then, which is
+                // why it is shown rather than hidden - it reads as a step that
+                // is finished rather than a button that appeared from nowhere.
                 if (accessibilityEnabled) {
                     HorizontalDivider(modifier = Modifier.padding(start = 36.dp))
-                    ShortcutStepRow(
-                        done = !shortcutAttached,
+                    ShortcutEntryRow(
+                        done = shortcutAttached,
                         step = 3,
-                        onAction = onRemoveShortcut
+                        onAction = onOpenShortcutSettings
                     )
                 }
             }
@@ -1330,7 +1452,7 @@ private fun DictationModeCard(
         // neither option - it is something to clean up - so it sits below both.
         if (!overlayChosen && shortcutAttached) {
             HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
-            ShortcutStepRow(done = false, step = null, onAction = onRemoveShortcut)
+            ShortcutLeftoverRow(onAction = onOpenShortcutSettings)
         }
     }
 }
@@ -1747,7 +1869,7 @@ private fun launchInstall(context: Context, file: File) {
  * this doubles as "has the user opted into the overlay at all" — there is no
  * separate preference to drift out of sync with it.
  */
-private fun isOverlayLauncherEnabled(context: Context): Boolean {
+internal fun isOverlayLauncherEnabled(context: Context): Boolean {
     val component = ComponentName(context, OverlayLauncherActivity::class.java)
     return context.packageManager.getComponentEnabledSetting(component) ==
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED
@@ -1765,19 +1887,34 @@ private fun isOverlayLauncherEnabled(context: Context): Boolean {
  * lives on the icon's long-press shortcut and the band's own settings button.
  */
 private fun setOverlayLauncherEnabled(context: Context, enabled: Boolean) {
-    val state = if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-    else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
     for (component in listOf(
         ComponentName(context, OverlayLauncherActivity::class.java),
         ComponentName(context, MutterboardTileService::class.java)
     )) {
-        context.packageManager.setComponentEnabledSetting(
-            component,
-            state,
-            PackageManager.DONT_KILL_APP
-        )
+        setComponentEnabled(context, component, enabled)
     }
     // The settings alias is deliberately NOT touched here. See syncLauncherIcons.
+}
+
+/**
+ * Writes a component's enabled state, and only when it is actually changing.
+ *
+ * The guard is not an optimisation. Disabling a component finishes any activity
+ * running on it, and the settings screen runs on one of these; a write that
+ * changes nothing still costs that, so the state that is already right is left
+ * alone rather than re-asserted on every visit to the settings screen.
+ */
+private fun setComponentEnabled(context: Context, component: ComponentName, enabled: Boolean) {
+    val state = if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+    else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+    // DEFAULT is never equal to either, so the first call makes the state
+    // explicit and every identical call after it does nothing.
+    if (context.packageManager.getComponentEnabledSetting(component) == state) return
+    context.packageManager.setComponentEnabledSetting(
+        component,
+        state,
+        PackageManager.DONT_KILL_APP
+    )
 }
 
 /** The alias that puts a settings icon in the drawer. */
@@ -1798,15 +1935,19 @@ private fun settingsLauncherComponent(context: Context) =
  * It also repairs installs that predate the icon changing hands: component
  * states survive an update, so anyone who had the overlay on already would come
  * out with both icons enabled and nothing to ever fix it.
+ *
+ * This is the only place the settings alias is ever written. An earlier version
+ * asked whether the two components disagreed and, if they did not, called
+ * [setOverlayLauncherEnabled] to fix it - which sets the overlay's components
+ * and pointedly leaves the alias alone. So the one case it existed to repair,
+ * both icons on at once, was the case it did nothing about: with the overlay on,
+ * the Pixel launcher listed two Mutterboards in the drawer and Quick Tap offered
+ * two to map. It went unnoticed because the launcher it was developed against
+ * did not show the second one.
  */
 internal fun syncLauncherIcons(context: Context) {
-    val overlayOn = isOverlayLauncherEnabled(context)
-    val settingsState = context.packageManager
-        .getComponentEnabledSetting(settingsLauncherComponent(context))
-    // DEFAULT means "as the manifest declares it", which for the alias is on.
-    val settingsOn = settingsState != PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-    if (settingsOn != overlayOn) return
-    setOverlayLauncherEnabled(context, overlayOn)
+    // Exactly one icon: the alias is the icon whenever the overlay is not.
+    setComponentEnabled(context, settingsLauncherComponent(context), !isOverlayLauncherEnabled(context))
 }
 
 /**
