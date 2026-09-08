@@ -1169,7 +1169,7 @@ private fun StepRow(
     done: Boolean,
     actionLabel: String,
     onAction: () -> Unit,
-    optional: Boolean = false,
+    required: Boolean = true,
     step: Int? = null,
     note: String? = null
 ) {
@@ -1185,14 +1185,18 @@ private fun StepRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(label, fontWeight = FontWeight.Medium)
             // When done, the checkmark says it all — no "Granted/Enabled" subtext.
-            if (!done) {
+            // Undone, a step says why it matters or says nothing: "Optional" under
+            // a step whose label already reads as an offer is a line that exists
+            // to fill the space under the other steps.
+            val subtitle = note ?: "Required".takeIf { required }
+            if (!done && subtitle != null) {
                 Text(
-                    note ?: if (optional) "Optional" else "Required",
+                    subtitle,
                     fontSize = 12.sp,
                     // Only a genuinely missing requirement is worth alarming
                     // about. A step that simply has not been reached yet reads
                     // as breakage in red.
-                    color = if (optional || note != null) {
+                    color = if (note != null) {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     } else {
                         MaterialTheme.colorScheme.error
@@ -1249,55 +1253,42 @@ private fun ModeChoiceRow(
 }
 
 /**
- * The floating button Android parks on screen when the accessibility service is
- * turned on, offered as something to remove.
+ * Android attaches its accessibility shortcut when the service is turned on,
+ * asked for or not, and the app can neither remove it (WRITE_SECURE_SETTINGS)
+ * nor make it do anything (see accessibility_service_config.xml - claiming the
+ * press costs the switch that turns pasting on). So a button appears on the edge
+ * of the screen and does nothing when pressed.
  *
- * Only ever shown when the button is actually attached. v1.19.0 made it a
- * numbered step in the overlay's setup, which told people who did not have the
- * button to go and turn it off, and put a tidy-up in a list of things that have
- * to be done before the app works.
- *
- * There is nothing alarming to say about it. Pressing it does nothing at all -
- * tested - because the service does not claim the press, and claiming it costs
- * the switch that turns pasting on (see accessibility_service_config.xml). So
- * this is housekeeping, and it says so.
+ * This row is the only warning a user gets about that, and it works by being in
+ * the list: a step named "Turn off shortcut" directly under the step that caused
+ * it explains the button without a paragraph about it.
  */
 @Composable
-private fun ShortcutStepRow(onAction: () -> Unit) {
+private fun ShortcutStepRow(done: Boolean, step: Int?, onAction: () -> Unit) {
     StepRow(
-        label = "Android's floating button",
-        done = false,
+        label = "Turn off shortcut",
+        done = done,
         actionLabel = "Turn off",
         onAction = onAction,
-        note = "Android added this when you turned the service on. Nothing uses " +
-            "it - turn it off if it is in your way."
+        step = step,
+        note = "Android adds a floating button. Nothing uses it."
     )
 }
 
 /**
- * What to do when Android blocks a permission for being sideloaded.
+ * The one line worth saying when Android refuses the overlay permission for
+ * being sideloaded.
  *
- * The block wears a different face on each of the two steps it affects, which is
- * why the symptom is a parameter: the overlay permission puts up a dialog saying
- * the app was denied access, while the accessibility service simply has no switch
- * on its settings page at all. Naming the symptom is the whole value of the note -
- * someone who has not recognised what they are looking at cannot search for the
- * remedy, and both faces of it are silent about the cause.
- *
- * Shown to everyone on the step, not only to those it has happened to, because
- * the app cannot tell: whether the block is armed depends on how the APK arrived
- * and how recently it was updated, and neither is legible from in here.
+ * The dialog it puts up says the app was denied access and names neither the
+ * cause nor the cure, and the cure is buried in an overflow menu with no intent
+ * of its own. Everything else that could be said about it went unread.
  */
 @Composable
-private fun RestrictedSettingsNote(symptom: String, onOpenAppInfo: () -> Unit) {
+private fun RestrictedSettingsNote(onOpenAppInfo: () -> Unit) {
     val haptic = rememberTapHaptic()
     Column(modifier = Modifier.padding(start = 36.dp, end = 16.dp, bottom = 14.dp)) {
         Text(
-            symptom + " Android is blocking it because Mutterboard was installed " +
-                "outside the Play Store. The unlock is called Allow restricted " +
-                "settings and it lives on the App info page, usually in a menu at " +
-                "the top right. Not every phone has it in the same place, and some " +
-                "do not offer it at all.",
+            "Denied? Allow restricted settings in App info.",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1371,9 +1362,8 @@ private fun DictationModeCard(
                         done = false,
                         actionLabel = "Turn off",
                         onAction = onOpenImeSettings,
-                        note = "You picked the overlay. Leaving the keyboard on runs both at once."
+                        note = "Otherwise you are running both at once."
                     )
-                    HorizontalDivider(modifier = Modifier.padding(start = 36.dp))
                 }
                 StepRow(
                     label = "Display over other apps",
@@ -1383,51 +1373,33 @@ private fun DictationModeCard(
                     step = 1
                 )
                 // Sideloaded apps hit "restricted settings" on Pixel and Samsung
-                // for exactly this permission: the switch is there, and flipping
-                // it puts up a dialog saying the app was denied access. There is
-                // no intent that opens the unlock - it lives behind the overflow
-                // menu on App info - so the most the app can do is name the three
-                // taps and land the user on the right screen.
+                // for exactly this permission, and the dialog they get names
+                // neither the cause nor the cure. One line, because someone
+                // stuck on a refused switch will read one line.
                 if (!canDrawOverlays) {
-                    RestrictedSettingsNote(
-                        symptom = "If Android says the app was denied access,",
-                        onOpenAppInfo = onOpenAppInfo
-                    )
+                    RestrictedSettingsNote(onOpenAppInfo = onOpenAppInfo)
                 }
-                HorizontalDivider(modifier = Modifier.padding(start = 36.dp))
                 StepRow(
-                    label = "Paste into the field you are in",
+                    label = "Auto-paste into text fields",
                     done = accessibilityEnabled,
                     actionLabel = "Enable",
                     onAction = onOpenAccessibilitySettings,
-                    // Still genuinely optional - the transcript lands on the
-                    // clipboard either way - but "Optional" as a status line
-                    // reads like a warning about the step rather than a
-                    // description of it. The sentence below says what you give up.
-                    note = "Lets Mutterboard paste for you.",
+                    // No status line. The label is the description, and this
+                    // step is neither required nor worth a word about it.
+                    required = false,
                     step = 2
                 )
-                if (!accessibilityEnabled) {
-                    Text(
-                        "Without this, transcripts are copied to your clipboard and " +
-                            "you paste them yourself.\n\nAndroid adds a small " +
-                            "floating button to the edge of your screen when you turn " +
-                            "this on. Mutterboard cannot use it or remove it, and it " +
-                            "does nothing when pressed. You can turn it off in " +
-                            "Accessibility settings, and this page will offer to take " +
-                            "you there.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 36.dp, end = 16.dp, bottom = 14.dp)
-                    )
-                    // The same block, on the step where it bites hardest. It
-                    // shows up here as a switch you cannot move rather than as a
-                    // dialog, and updating a sideloaded app re-arms it, so this
-                    // is the one that comes back after a release.
-                    RestrictedSettingsNote(
-                        symptom = "If the switch is greyed out, or says it is " +
-                            "controlled by a restricted setting,",
-                        onOpenAppInfo = onOpenAppInfo
+                // Android attaches its shortcut when the service goes on, and the
+                // app can neither use it nor remove it. Listing it as the step
+                // after the one that causes it is the whole explanation a new
+                // user needs for the button that just appeared on their screen -
+                // which is why it stays in the sequence, ticked, for people who
+                // have already dealt with it.
+                if (accessibilityEnabled) {
+                    ShortcutStepRow(
+                        done = !shortcutAttached,
+                        step = 3,
+                        onAction = onOpenShortcutSettings
                     )
                 }
             }
@@ -1457,9 +1429,9 @@ private fun DictationModeCard(
         // the button is actually there. It was a numbered step for a while,
         // which put "turn this off" in front of people who did not have it and
         // made a tidy-up look like part of setup.
-        if (shortcutAttached) {
+        if (!overlayChosen && shortcutAttached) {
             HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
-            ShortcutStepRow(onAction = onOpenShortcutSettings)
+            ShortcutStepRow(done = false, step = null, onAction = onOpenShortcutSettings)
         }
     }
 }
