@@ -7,6 +7,14 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Dictation overlay. The overlay window needs SYSTEM_ALERT_WINDOW; the
+         microphone keeps working while it's up only because the recording runs
+         in a foreground service, which an overlay alone does not make us. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -18,16 +26,55 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Mutterboard">
 
+        <!-- Settings. Reached through the alias below rather than a filter of
+             its own, because which of the two entry points owns the app icon is
+             something the overlay toggle switches at runtime. -->
         <activity
             android:name=".MainActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="@string/app_name"
             android:theme="@style/Theme.Mutterboard"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- The app icon while the overlay is off: opens settings. Disabled the
+             moment the overlay is turned on, because the two of them are the
+             same icon wearing different hats and only one may exist at a time.
+             An alias rather than a filter on MainActivity so it can be disabled
+             without disabling the activity everything else starts directly. -->
+        <activity-alias
+            android:name=".SettingsLauncher"
+            android:enabled="true"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity-alias>
+
+        <!-- The app icon while the overlay is on: starts a dictation and
+             finishes. It has to be a LAUNCHER activity because OEM side-button
+             mappers only list launchable apps, and it takes over the icon rather
+             than adding one beside it — two icons for one app is nobody's idea
+             of an app. Settings stays reachable from the band's own button and
+             from the icon's long-press shortcut. -->
+        <activity
+            android:name=".OverlayLauncherActivity"
+            android:enabled="false"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <service
@@ -41,6 +88,39 @@
             <meta-data
                 android:name="android.view.im"
                 android:resource="@xml/method" />
+        </service>
+
+        <!-- Quick Settings tile. Ships disabled alongside the launcher activity
+             so the tile does not sit in the Quick Settings editor for people who
+             have not turned the overlay on. -->
+        <service
+            android:name=".MutterboardTileService"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@drawable/ic_mutterboard_mark"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".OverlayDictationService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <service
+            android:name=".MutterboardAccessibilityService"
+            android:exported="true"
+            android:label="@string/overlay_launcher_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
         </service>
 
         <provider

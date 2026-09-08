@@ -85,13 +85,17 @@ class WavRecorder(private val cacheDir: File) {
             // threshold — the live counterpart of trimmedLength()'s backward
             // scan, driving how far the streaming encoder may advance.
             var lastLoud = -1L
+            // Running loudest sample of the whole recording, which the silence
+            // threshold is derived from. Only grows, so the threshold only
+            // tightens - and a frontier that lagged is harmless, since finish()
+            // lets the encoder drain to the final trim point anyway.
+            var runningPeak = 0
             FileOutputStream(outputFile).use { out ->
                 while (capturing) {
                     val read = record.read(buffer, 0, buffer.size)
                     if (read > 0) {
                         out.write(buffer, 0, read)
                         var localPeak = 0
-                        var lastLoudInBuf = -1
                         var i = 0
                         while (i < read - 1) {
                             val lo = buffer[i].toInt() and 0xFF
@@ -100,7 +104,21 @@ class WavRecorder(private val cacheDir: File) {
                             val signed = if (sample > 32767) sample - 65536 else sample
                             val abs = if (signed < 0) -signed else signed
                             if (abs > localPeak) localPeak = abs
-                            if (abs > SILENCE_THRESHOLD) lastLoudInBuf = i
+                            i += 2
+                        }
+                        if (localPeak > runningPeak) runningPeak = localPeak
+                        // Second pass, because the threshold depends on the peak
+                        // this buffer may have just raised.
+                        val threshold = silenceThreshold(runningPeak)
+                        var lastLoudInBuf = -1
+                        i = 0
+                        while (i < read - 1) {
+                            val lo = buffer[i].toInt() and 0xFF
+                            val hi = buffer[i + 1].toInt()
+                            val sample = (hi shl 8) or lo
+                            val signed = if (sample > 32767) sample - 65536 else sample
+                            val abs = if (signed < 0) -signed else signed
+                            if (abs > threshold) lastLoudInBuf = i
                             i += 2
                         }
                         peakAmplitude = localPeak
@@ -154,7 +172,12 @@ class WavRecorder(private val cacheDir: File) {
         pcm.delete()
         if (BuildConfig.DEBUG) {
             fun ms(bytes: Int) = bytes * 1000 / (SAMPLE_RATE * 2)
-            Log.i(TAG, "trimmed trailing silence: ${ms(pcmBytes.size)}ms -> ${ms(dataSize)}ms")
+            val peak = peakOf(pcmBytes)
+            Log.i(
+                TAG,
+                "trimmed trailing silence: ${ms(pcmBytes.size)}ms -> ${ms(dataSize)}ms " +
+                    "(peak=$peak threshold=${silenceThreshold(peak)})"
+            )
         }
         // Seal the streamed Opus at the same trim point. Normally only the
         // ~150ms margin is left to encode, so this returns almost immediately.
@@ -197,6 +220,7 @@ class WavRecorder(private val cacheDir: File) {
      */
     private fun trimmedLength(pcm: ByteArray): Int {
         val marginBytes = SAMPLE_RATE * TRIM_MARGIN_MS / 1000 * 2
+        val threshold = silenceThreshold(peakOf(pcm))
         // Even index of the last sample; step down two bytes (one sample) at a time.
         var i = (pcm.size and 1.inv()) - 2
         while (i >= 0) {
@@ -204,7 +228,7 @@ class WavRecorder(private val cacheDir: File) {
             val hi = pcm[i + 1].toInt()
             val sample = (hi shl 8) or lo
             val signed = if (sample > 32767) sample - 65536 else sample
-            if ((if (signed < 0) -signed else signed) > SILENCE_THRESHOLD) {
+            if ((if (signed < 0) -signed else signed) > threshold) {
                 // Keep through this sample plus the run-off margin, clamped to size.
                 return minOf(pcm.size, i + 2 + marginBytes)
             }
@@ -212,6 +236,40 @@ class WavRecorder(private val cacheDir: File) {
         }
         return pcm.size
     }
+
+    /** Loudest absolute sample in [pcm], the scale the trim threshold is set against. */
+    private fun peakOf(pcm: ByteArray): Int {
+        var peak = 0
+        var i = 0
+        while (i < pcm.size - 1) {
+            val lo = pcm[i].toInt() and 0xFF
+            val hi = pcm[i + 1].toInt()
+            val sample = (hi shl 8) or lo
+            val signed = if (sample > 32767) sample - 65536 else sample
+            val abs = if (signed < 0) -signed else signed
+            if (abs > peak) peak = abs
+            i += 2
+        }
+        return peak
+    }
+
+    /**
+     * Where speech stops and room tone starts, for THIS recording.
+     *
+     * A fixed threshold assumes a fixed speaking volume, and that assumption
+     * failed in the wild: held at arm's length and talking quietly, a whole
+     * dictation can sit near the old flat 350, so the backward scan found its
+     * last "loud" sample seconds before the user actually stopped and deleted
+     * the rest as silence. One measured case lost 3.2s of a 4.5s recording and
+     * left Whisper hallucinating on the fragment.
+     *
+     * Scaling to the recording's own peak tracks the speaker instead: loud audio
+     * lands near the old threshold, quiet audio gets a quiet threshold. The floor
+     * stops a recording of pure room tone from setting a threshold so low that
+     * nothing is ever trimmed, which is the failure the trim exists to prevent.
+     */
+    private fun silenceThreshold(peak: Int): Int =
+        maxOf(SILENCE_FLOOR, peak * SILENCE_PEAK_PERCENT / 100)
 
     private fun wavHeader(pcmSize: Int, sampleRate: Int, channels: Int, bitsPerSample: Int): ByteArray {
         val byteRate = sampleRate * channels * bitsPerSample / 8
@@ -238,11 +296,16 @@ class WavRecorder(private val cacheDir: File) {
         // isn't clipped. Replaces the old 500ms of appended zero-silence, which
         // was a Whisper hallucination trigger.
         private const val TRIM_MARGIN_MS = 150
-        // 16-bit amplitude (0..32767) a sample must clear to count as speech
-        // rather than room tone. Low enough to keep soft trailing consonants,
-        // high enough to trim the ambient tail the VOICE_RECOGNITION source lets
-        // through. Tune against the "trimmed trailing silence" debug log.
-        private const val SILENCE_THRESHOLD = 350
+        // The silence threshold is a percentage of the recording's own peak
+        // rather than a flat amplitude, so it follows how loudly the user
+        // actually spoke. 2% puts a normal close-mic dictation (peak ~20000)
+        // near the old flat 350 this replaced.
+        private const val SILENCE_PEAK_PERCENT = 2
+        // Absolute floor on that threshold (0..32767), so a recording with no
+        // speech in it can still be trimmed. Below the room tone the
+        // VOICE_RECOGNITION source lets through, well below soft speech.
+        // Tune both against the "trimmed trailing silence" debug log.
+        private const val SILENCE_FLOOR = 150
         private const val SAMPLE_RATE = 16000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT

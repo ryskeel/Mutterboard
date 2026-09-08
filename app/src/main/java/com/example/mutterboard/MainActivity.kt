@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -41,12 +42,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -112,12 +117,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        chooseOverlayByDefault()
         enableEdgeToEdge()
         setContent {
             MutterboardTheme {
                 SetupScreen(
                     onRequestMic = { requestMicPermission() },
-                    onOpenImeSettings = { openImeSettings() }
+                    onOpenImeSettings = { openImeSettings() },
+                    onOpenOverlaySettings = { openOverlaySettings() },
+                    onOpenAccessibilitySettings = { openAccessibilitySettings() },
+                    onRequestNotifications = { requestNotificationPermission() },
+                    onRemoveShortcut = { openAccessibilityShortcutSettings() }
                 )
             }
         }
@@ -130,12 +140,87 @@ class MainActivity : ComponentActivity() {
     private fun openImeSettings() {
         startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
     }
+
+    private fun openOverlaySettings() {
+        startActivity(
+            Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+        )
+    }
+
+    private fun openAccessibilitySettings() {
+        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
+    /**
+     * Opens the shortcuts screen, where the accessibility button can be taken off
+     * Mutterboard. The app cannot flip that toggle itself - the setting behind it
+     * is signature-level - so landing the user on the right screen is the most it
+     * can do.
+     *
+     * The per-service detail page would be one step closer, but it is gated
+     * behind OPEN_ACCESSIBILITY_DETAILS_SETTINGS (signature|installer). This
+     * action is a plain exported intent with no such gate.
+     */
+    private fun openAccessibilityShortcutSettings() {
+        val intent = Intent("android.settings.ACCESSIBILITY_SHORTCUT_SETTINGS")
+        runCatching { startActivity(intent) }.onFailure {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+    }
+
+    /**
+     * The overlay runs as a foreground service, which posts an ongoing
+     * notification. Without this grant that notification is silently hidden, so
+     * ask at the moment the user turns the overlay on.
+     */
+    /**
+     * The overlay is how this app is meant to be used, so a fresh install starts
+     * on it rather than on the keyboard.
+     *
+     * Written once, on first launch, and then it is the user's: the component
+     * states are the choice, so a default that kept re-asserting itself would
+     * quietly undo someone who picked the keyboard.
+     */
+    private fun chooseOverlayByDefault() {
+        val prefs = getSharedPreferences(MutterboardInputMethodService.PREFS, Context.MODE_PRIVATE)
+        if (prefs.contains(KEY_MODE_CHOSEN)) return
+        setOverlayLauncherEnabled(this, true)
+        prefs.edit().putBoolean(KEY_MODE_CHOSEN, true).apply()
+    }
+
+    /**
+     * The app icon changes hands here rather than the moment the switch moves,
+     * because disabling the alias this screen is running on destroys it. See
+     * syncLauncherIcons.
+     */
+    override fun onStop() {
+        super.onStop()
+        syncLauncherIcons(this)
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissionsLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+        }
+    }
+
+    companion object {
+        /** Set once the app has picked, or the user has picked, a way to dictate. */
+        const val KEY_MODE_CHOSEN = "dictation_mode_chosen"
+    }
 }
 
 @Composable
 private fun SetupScreen(
     onRequestMic: () -> Unit,
-    onOpenImeSettings: () -> Unit
+    onOpenImeSettings: () -> Unit,
+    onOpenOverlaySettings: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
+    onRequestNotifications: () -> Unit,
+    onRemoveShortcut: () -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -155,6 +240,10 @@ private fun SetupScreen(
     var showPrivacy by remember { mutableStateOf(false) }
     var hasMic by remember { mutableStateOf(false) }
     var imeEnabled by remember { mutableStateOf(false) }
+    var overlayEnabled by remember { mutableStateOf(false) }
+    var canDrawOverlays by remember { mutableStateOf(false) }
+    var accessibilityEnabled by remember { mutableStateOf(false) }
+    var shortcutAttached by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
 
     val currentVersion = remember {
@@ -217,6 +306,12 @@ private fun SetupScreen(
         hasMic = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                 android.content.pm.PackageManager.PERMISSION_GRANTED
         imeEnabled = isImeEnabled(context)
+        // All three are granted on screens outside this app, so they can only be
+        // re-read on resume; refreshTick already fires there.
+        overlayEnabled = isOverlayLauncherEnabled(context)
+        canDrawOverlays = Settings.canDrawOverlays(context)
+        accessibilityEnabled = isAccessibilityEnabled(context)
+        shortcutAttached = hasAccessibilityShortcut(context)
     }
 
     LaunchedEffect(updateCheckTick) {
@@ -301,13 +396,6 @@ private fun SetupScreen(
                     actionLabel = "Grant",
                     onAction = onRequestMic
                 )
-                HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
-                StepRow(
-                    label = "Enable keyboard",
-                    done = imeEnabled,
-                    actionLabel = "Enable",
-                    onAction = onOpenImeSettings
-                )
             }
 
             Spacer(Modifier.height(40.dp))
@@ -326,6 +414,32 @@ private fun SetupScreen(
                 onLearnMore = { showEngineInfo = true },
                 onRequestDeleteModel = { showDeleteModel = true }
             )
+            Spacer(Modifier.height(40.dp))
+
+            // The two ways in are alternatives, not a checklist. Enabling the
+            // keyboard was step 2 of setup back when it was the only way to
+            // dictate; left there it reads as required, which it is not, and it
+            // invites having both running at once - which nobody wants and which
+            // nothing in here arbitrates.
+            SectionHeader("How you dictate")
+            Spacer(Modifier.height(12.dp))
+            DictationModeCard(
+                overlayChosen = overlayEnabled,
+                imeEnabled = imeEnabled,
+                canDrawOverlays = canDrawOverlays,
+                accessibilityEnabled = accessibilityEnabled,
+                onChoose = { overlay ->
+                    setOverlayLauncherEnabled(context, overlay)
+                    overlayEnabled = overlay
+                    if (overlay) onRequestNotifications()
+                },
+                onOpenImeSettings = onOpenImeSettings,
+                onOpenOverlaySettings = onOpenOverlaySettings,
+                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+                shortcutAttached = shortcutAttached,
+                onRemoveShortcut = onRemoveShortcut
+            )
+
 
             Spacer(Modifier.height(40.dp))
 
@@ -335,6 +449,7 @@ private fun SetupScreen(
                 words = customWords,
                 onEdit = { showVocabEditor = true }
             )
+
 
             Spacer(Modifier.height(40.dp))
 
@@ -955,7 +1070,7 @@ private fun SectionHeader(text: String) {
 }
 
 @Composable
-private fun StepBadge(done: Boolean) {
+private fun StepBadge(done: Boolean, step: Int? = null) {
     val base = Modifier.size(20.dp).clip(CircleShape)
     val styled = if (done) {
         base.background(successColor)
@@ -963,13 +1078,35 @@ private fun StepBadge(done: Boolean) {
         base.border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape)
     }
     Box(modifier = styled, contentAlignment = Alignment.Center) {
-        Icon(
-            imageVector = Icons.Rounded.Check,
-            contentDescription = if (done) "Done" else "Not done",
-            tint = if (done) onSuccessColor
-            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.size(12.dp)
-        )
+        // An unfinished step in an ordered list shows its number, so the card
+        // reads as a sequence to work through rather than a list of failures.
+        if (!done && step != null) {
+            Text(
+                step.toString(),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // Without this the glyph sits low in the circle: font padding
+                // and the default line height are both taller than the digit,
+                // and a 20dp badge has no room to hide either.
+                style = LocalTextStyle.current.merge(
+                    lineHeight = 11.sp,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                    lineHeightStyle = LineHeightStyle(
+                        alignment = LineHeightStyle.Alignment.Center,
+                        trim = LineHeightStyle.Trim.Both
+                    )
+                )
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Rounded.Check,
+                contentDescription = if (done) "Done" else "Not done",
+                tint = if (done) onSuccessColor
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                modifier = Modifier.size(12.dp)
+            )
+        }
     }
 }
 
@@ -978,7 +1115,10 @@ private fun StepRow(
     label: String,
     done: Boolean,
     actionLabel: String,
-    onAction: () -> Unit
+    onAction: () -> Unit,
+    optional: Boolean = false,
+    step: Int? = null,
+    note: String? = null
 ) {
     val haptic = rememberTapHaptic()
     Row(
@@ -987,16 +1127,23 @@ private fun StepRow(
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        StepBadge(done)
+        StepBadge(done, step)
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(label, fontWeight = FontWeight.Medium)
             // When done, the checkmark says it all — no "Granted/Enabled" subtext.
             if (!done) {
                 Text(
-                    "Required",
+                    note ?: if (optional) "Optional" else "Required",
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.error
+                    // Only a genuinely missing requirement is worth alarming
+                    // about. A step that simply has not been reached yet reads
+                    // as breakage in red.
+                    color = if (optional || note != null) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
                 )
             }
         }
@@ -1005,6 +1152,214 @@ private fun StepRow(
             Button(onClick = { haptic(); onAction() }) { Text(actionLabel) }
         }
     }
+}
+
+/**
+ * One of the two ways in, as a radio row. Tapping anywhere on the row picks it:
+ * the description is the part that tells you what you are choosing, so it should
+ * not be the one part that is not a target.
+ */
+@Composable
+private fun ModeChoiceRow(
+    label: String,
+    description: String,
+    selected: Boolean,
+    onSelect: () -> Unit
+) {
+    val haptic = rememberTapHaptic()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(
+                selected = selected,
+                role = Role.RadioButton,
+                onClick = { haptic(); onSelect() }
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        // The dot shares a row with the title and nothing else, so centring that
+        // row centres it on the title by construction. Boxing it to a guessed
+        // line height did not: the title's real line box is shorter than the
+        // 24dp the style nominates, which left the dot sitting high.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OptionRadio(selected)
+            Spacer(Modifier.width(OPTION_TEXT_INSET - RADIO_SIZE))
+            Text(label, fontWeight = FontWeight.SemiBold)
+        }
+        Text(
+            description,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = OPTION_TEXT_INSET)
+        )
+    }
+}
+
+/**
+ * Turning on the accessibility service makes Android attach its own shortcut,
+ * which parks a button on screen that Mutterboard never uses and cannot remove
+ * itself. Presented as the next step in the sequence rather than as a warning:
+ * it is a normal consequence of the previous step, not something the user got
+ * wrong.
+ */
+@Composable
+private fun ShortcutStepRow(done: Boolean, step: Int?, onAction: () -> Unit) {
+    StepRow(
+        label = "Turn off Android's shortcut button",
+        done = done,
+        actionLabel = "Turn off",
+        onAction = onAction,
+        step = step,
+        note = "Android adds this on its own. Mutterboard never uses it."
+    )
+}
+
+/**
+ * Which of the two ways into Mutterboard you are using, and the setup left for
+ * it.
+ *
+ * A choice rather than two switches. They are alternatives - the overlay floats
+ * over any app and the keyboard only runs inside a text field you switched to -
+ * and nothing in the app arbitrates between them if both are live, so offering
+ * both at once is offering a state nobody wants.
+ *
+ * The overlay's own state is the choice: there is no separate preference that
+ * could drift out of sync with which components are enabled.
+ */
+@Composable
+private fun DictationModeCard(
+    overlayChosen: Boolean,
+    imeEnabled: Boolean,
+    canDrawOverlays: Boolean,
+    accessibilityEnabled: Boolean,
+    onChoose: (Boolean) -> Unit,
+    onOpenImeSettings: () -> Unit,
+    onOpenOverlaySettings: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
+    shortcutAttached: Boolean,
+    onRemoveShortcut: () -> Unit
+) {
+    val haptic = rememberTapHaptic()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        ModeChoiceRow(
+            label = "Overlay",
+            description = "Dictate from anywhere, in a text field or not. The " +
+                "transcript goes to your clipboard, and pastes itself into the " +
+                "field if one is open.",
+            selected = overlayChosen,
+            onSelect = { onChoose(true) }
+        )
+        // Each option's setup sits directly under it, indented, with no divider
+        // between the two. A line there made the steps read as items in the same
+        // list as the options rather than as what the option above asks of you -
+        // and with both blocks collected at the bottom, the overlay's steps
+        // appeared under the word "Keyboard".
+        if (overlayChosen) {
+            OptionSteps {
+                StepRow(
+                    label = "Display over other apps",
+                    done = canDrawOverlays,
+                    actionLabel = "Allow",
+                    onAction = onOpenOverlaySettings,
+                    step = 1
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 36.dp))
+                StepRow(
+                    label = "Paste into the field you are in",
+                    done = accessibilityEnabled,
+                    actionLabel = "Enable",
+                    onAction = onOpenAccessibilitySettings,
+                    // Still genuinely optional - the transcript lands on the
+                    // clipboard either way - but "Optional" as a status line
+                    // reads like a warning about the step rather than a
+                    // description of it. The sentence below says what you give up.
+                    note = "Lets Mutterboard paste for you.",
+                    step = 2
+                )
+                if (!accessibilityEnabled) {
+                    Text(
+                        "Without this, transcripts are copied to your clipboard and you paste them yourself.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 36.dp, end = 16.dp, bottom = 14.dp)
+                    )
+                }
+                // Only reachable once step 2 is done, because Android attaches
+                // the shortcut when the service goes on. Shown even when already
+                // clear so it reads as a step that is finished rather than a
+                // warning that appears out of nowhere.
+                if (accessibilityEnabled) {
+                    HorizontalDivider(modifier = Modifier.padding(start = 36.dp))
+                    ShortcutStepRow(
+                        done = !shortcutAttached,
+                        step = 3,
+                        onAction = onRemoveShortcut
+                    )
+                }
+            }
+        }
+        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+        ModeChoiceRow(
+            label = "Keyboard",
+            description = "A normal keyboard you switch to from your usual one. " +
+                "It dictates, types the text in, then switches straight back. " +
+                "Worth choosing if your phone gives you no button to map the " +
+                "overlay to.",
+            selected = !overlayChosen,
+            onSelect = { onChoose(false) }
+        )
+        if (!overlayChosen) {
+            OptionSteps {
+                StepRow(
+                    label = "Enable keyboard",
+                    done = imeEnabled,
+                    actionLabel = "Enable",
+                    onAction = onOpenImeSettings,
+                    step = 1
+                )
+            }
+        }
+        // Leftover case: the overlay is off while the accessibility service, and
+        // the shortcut Android attached to it, are still on. It belongs to
+        // neither option - it is something to clean up - so it sits below both.
+        if (!overlayChosen && shortcutAttached) {
+            HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+            ShortcutStepRow(done = false, step = null, onAction = onRemoveShortcut)
+        }
+    }
+}
+
+/**
+ * The dot for an option row.
+ *
+ * requiredSize sheds the 48dp touch target RadioButton reserves, which otherwise
+ * floats the dot ~14dp in from where the step badges in the same card sit. The
+ * whole option row is the tap target, so nothing is lost.
+ */
+@Composable
+private fun OptionRadio(selected: Boolean) {
+    RadioButton(
+        selected = selected,
+        onClick = null,
+        modifier = Modifier.requiredSize(RADIO_SIZE)
+    )
+}
+
+private val RADIO_SIZE = 20.dp
+
+/** Where an option's text starts, matching the step rows' labels in the same card. */
+private val OPTION_TEXT_INSET = 36.dp
+
+/** The setup an option asks of you, indented so it reads as belonging to it. */
+@Composable
+private fun OptionSteps(content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier = Modifier.padding(start = 20.dp), content = content)
 }
 
 @Composable
@@ -1144,20 +1499,18 @@ private fun EngineOption(
     onSelect: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onSelect() }
-            // RadioButton reserves a 48dp touch target (≈14dp inset around the
-            // dot), so pull the row's left padding in to line the dot up with the
-            // device-setup badges at 16dp rather than floating ~14dp further right.
-            .padding(start = 4.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
-        verticalAlignment = Alignment.Top
+            .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
-        RadioButton(selected = selected, onClick = onSelect)
-        Spacer(Modifier.width(4.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, fontWeight = FontWeight.Medium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OptionRadio(selected)
+            Spacer(Modifier.width(OPTION_TEXT_INSET - RADIO_SIZE))
+            Text(label, fontWeight = FontWeight.SemiBold)
+        }
+        Column(modifier = Modifier.padding(start = OPTION_TEXT_INSET)) {
             Text(
                 subtitle,
                 fontSize = 12.sp,
@@ -1387,6 +1740,102 @@ private fun launchInstall(context: Context, file: File) {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
     )
+}
+
+/**
+ * Whether the overlay's launcher activity is turned on. It ships disabled, so
+ * this doubles as "has the user opted into the overlay at all" — there is no
+ * separate preference to drift out of sync with it.
+ */
+private fun isOverlayLauncherEnabled(context: Context): Boolean {
+    val component = ComponentName(context, OverlayLauncherActivity::class.java)
+    return context.packageManager.getComponentEnabledSetting(component) ==
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+}
+
+/**
+ * Turns both ways into the overlay on or off together: the launcher activity a
+ * side button can be mapped to, and the Quick Settings tile for phones with
+ * nothing to map. Neither should exist while the feature is off.
+ *
+ * The app icon goes with them. Both entry points need a LAUNCHER activity — the
+ * mappers only list launchable apps — so leaving both enabled put two Mutterboard
+ * icons in the drawer, which is not a thing apps do. Instead the icon changes
+ * hands: with the overlay on, tapping Mutterboard starts talking, and settings
+ * lives on the icon's long-press shortcut and the band's own settings button.
+ */
+private fun setOverlayLauncherEnabled(context: Context, enabled: Boolean) {
+    val state = if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+    else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+    for (component in listOf(
+        ComponentName(context, OverlayLauncherActivity::class.java),
+        ComponentName(context, MutterboardTileService::class.java)
+    )) {
+        context.packageManager.setComponentEnabledSetting(
+            component,
+            state,
+            PackageManager.DONT_KILL_APP
+        )
+    }
+    // The settings alias is deliberately NOT touched here. See syncLauncherIcons.
+}
+
+/** The alias that puts a settings icon in the drawer. */
+private fun settingsLauncherComponent(context: Context) =
+    ComponentName(context.packageName, "${context.packageName}.SettingsLauncher")
+
+/**
+ * Makes sure exactly one app icon exists, whichever way the overlay is set.
+ *
+ * **Only safe to call when the settings screen is not on screen.** Disabling a
+ * component destroys any activity currently running on it, and this screen is
+ * running on the alias it disables: called from the toggle, it took the whole
+ * app down as the switch animated, which reads exactly like a crash. So it runs
+ * from onStop instead, once the screen the user is looking at is not the thing
+ * being turned off. DONT_KILL_APP does not help - the process survives, the
+ * activity does not.
+ *
+ * It also repairs installs that predate the icon changing hands: component
+ * states survive an update, so anyone who had the overlay on already would come
+ * out with both icons enabled and nothing to ever fix it.
+ */
+internal fun syncLauncherIcons(context: Context) {
+    val overlayOn = isOverlayLauncherEnabled(context)
+    val settingsState = context.packageManager
+        .getComponentEnabledSetting(settingsLauncherComponent(context))
+    // DEFAULT means "as the manifest declares it", which for the alias is on.
+    val settingsOn = settingsState != PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+    if (settingsOn != overlayOn) return
+    setOverlayLauncherEnabled(context, overlayOn)
+}
+
+/**
+ * Whether Android has wired its accessibility shortcut (the floating button, or
+ * the one in the navigation bar) to our service.
+ *
+ * It does this by itself when the user enables the service - our service never
+ * asks for it, and dumpsys confirms requestA11yBtn=false. An app cannot undo it
+ * either: that setting is only writable with WRITE_SECURE_SETTINGS, which is
+ * signature-level. Reading it is allowed, so the most the app can do is notice
+ * and hand the user the switch. Which is worth doing: an unexplained button
+ * parked on your screen is exactly what this app exists to not be.
+ */
+private fun hasAccessibilityShortcut(context: Context): Boolean {
+    val target = ComponentName(context, MutterboardAccessibilityService::class.java)
+    val targets = Settings.Secure.getString(
+        context.contentResolver,
+        "accessibility_button_targets"
+    ) ?: return false
+    return targets.split(':').any { ComponentName.unflattenFromString(it) == target }
+}
+
+private fun isAccessibilityEnabled(context: Context): Boolean {
+    val target = ComponentName(context, MutterboardAccessibilityService::class.java)
+    val enabled = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    ) ?: return false
+    return enabled.split(':').any { ComponentName.unflattenFromString(it) == target }
 }
 
 private fun isImeEnabled(context: Context): Boolean {

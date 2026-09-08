@@ -25,3 +25,4 @@ out/
 
 # sherpa-onnx prebuilt AAR — fetched via scripts/fetch-sherpa.sh (too large for git)
 /app/libs/*.aar
+scripts/.setup-backup/

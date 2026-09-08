@@ -1,7 +1,9 @@
 # Mutterboard
 
-Android voice-dictation keyboard (IME). Record, transcribe, commit text into
-whatever field the user is in.
+Android voice dictation. Record, transcribe, commit the text. Two entry points:
+a keyboard (IME) that commits into the field you are in, and an overlay you can
+launch from a side button that dictates over any app and puts the result on the
+clipboard.
 
 Two transcription engines, chosen in the app: **Default** (cloud — Groq
 Whisper V3 Turbo) and **Offline** (on-device Parakeet). On the cloud path only, a
@@ -16,6 +18,138 @@ Both prompts also carry **rule 3**: when the user spells a word out letter by
 letter mid-sentence ("Las Fuentas, spelled L-A-S-F-U-E-N-T-A-S"), those letters
 are an instruction addressed to the model. It respells the word, deletes the
 instruction, and the letters outrank the transcript.
+
+## Two ways in: the keyboard and the overlay
+
+`DictationSession` owns a dictation end to end - engines, refiners, recording,
+the transcribe-then-refine pipeline, the UI. It deliberately does not know where
+the text goes or how the UI disappears, because those are the only two things
+the two entry points disagree about. They are the `DictationSession.Host`
+interface.
+
+- **`MutterboardInputMethodService`** (the keyboard). Commits through the
+  InputConnection, dismisses by switching back to the previous IME.
+- **`OverlayDictationService`** (the overlay). Floats over any app, started
+  either from a launcher activity you can map to a side button or from the Quick
+  Settings tile. Dismisses by removing its own window.
+
+The two draw themselves differently and that is deliberate. The keyboard keeps
+`keyboard_view.xml`, because it has to look like a keyboard. The overlay is
+Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
+`DictationSession.Snapshot`, so captions and button states cannot drift apart.
+
+### Rules that are not obvious from the code
+
+- **The overlay writes the clipboard every time, not just when pasting fails.**
+  Dictation there often has no destination yet: you start talking, move between
+  apps, and only then go find a field. A transcript that landed nowhere is the
+  failure worth engineering against, so the clipboard is the destination and the
+  paste is the bonus.
+
+- **Paste, not `ACTION_SET_TEXT`.** SET_TEXT replaces the entire field, so
+  matching the keyboard's insert-at-cursor behavior would mean reading the node,
+  splicing at the selection and restoring the cursor - the exact sequence that
+  breaks in Compose and WebView fields. `ACTION_PASTE` already has commitText's
+  semantics.
+
+- **The foreground service is not bureaucracy.** An overlay window does not make
+  the app foreground, and Android cuts the microphone to apps that aren't. It
+  must also come up *untyped* when RECORD_AUDIO is missing: declaring the
+  microphone type without the grant is a hard error on Android 14+, and the
+  overlay is reachable before the user has finished setup.
+
+- **`FLAG_NOT_FOCUSABLE` is load-bearing in two places** - on the overlay window
+  and on the launcher activity. Either one taking focus closes the keyboard and
+  drops the cursor in the field being pasted into, which is the entire point of
+  the design.
+
+- **The launcher activity ships disabled.** It carries a LAUNCHER filter so OEM
+  side-button mappers can see it, which would otherwise mean a second app icon
+  for everyone. The settings toggle enables the component; there is no separate
+  preference, so nothing can drift out of sync with it. `MutterboardTileService`
+  is disabled and enabled by the same toggle, for the same reason.
+
+- **There is only ever one app icon, and the two entry points take turns
+  holding it.** Both need a LAUNCHER activity - the mappers only list launchable
+  apps - so leaving both enabled put two Mutterboard icons in the drawer, which
+  is not a thing apps do. The overlay toggle enables `OverlayLauncherActivity`
+  and disables the `SettingsLauncher` alias, and back again. With the overlay on,
+  tapping the icon starts talking; settings is on the icon's long-press shortcut
+  (`res/xml/shortcuts.xml`) and on the band's own settings button.
+  `syncLauncherIcons` repairs installs that predate this, because component
+  states survive an update and both icons would otherwise stay enabled forever.
+
+- **Never change a component's enabled state while an activity is running on
+  it.** Android destroys that activity, which from the user's side is the app
+  vanishing to the home screen - it reads exactly like a crash, and there is no
+  stack trace to find afterwards. The settings screen runs on the
+  `SettingsLauncher` alias it disables, so the swap happens in `onStop`.
+  `DONT_KILL_APP` does not help: the process survives, the activity does not.
+
+- **Nothing may reach settings through `getLaunchIntentForPackage`.** With the
+  overlay on, the package's launch intent *is* the overlay launcher, so asking
+  for it to answer "take me to settings" starts another dictation instead.
+  `DictationSession.openSetupActivity` names `MainActivity` explicitly.
+
+- **The Quick Settings tile routes through the launcher activity, not straight
+  to the service.** A tile click does not make the app foreground, and a
+  microphone foreground service cannot be started from the background. The
+  activity is the one path already allowed to start it, so both entry points go
+  through it.
+
+- **The band is a band, not a screen.** The look is ported from Checkr's
+  `VoiceOverlay`, which fills the screen and treats a tap outside its band as
+  cancel. That is wrong here: the point of the overlay is that a dictation
+  survives you moving around while you talk, and a full-screen window would
+  swallow every touch. The window is sized to the band so everything above it
+  reaches the app underneath. The translucency is the same argument made
+  visually - the band admits it is sitting on top of something.
+
+- **The accessibility service is optional and must stay optional.** Without it
+  the overlay still works, it just stops pasting for you. That is what keeps the
+  "Allow restricted settings" unlock off the critical path for a new user.
+
+## Where this is going (picked up 2026-09-08)
+
+**The overlay is meant to become the default way to use Mutterboard.** Not a
+second entry point bolted onto a keyboard: the way you are expected to use it is
+to map it to a button or a Quick Settings tile and run it from anywhere. Ry's
+call on 2026-09-07, after living with it for an afternoon.
+
+The keyboard is **not** being removed. It stays a real IME, and everything under
+"The refiners are the heart of this app" still applies to it unchanged. What
+changes is which one is the front door, which is a question about setup copy and
+ordering far more than about code: today the app opens on "Device setup ->
+Enable keyboard" and treats the overlay as an extra further down the page.
+
+### What is unfinished
+
+All of this lives on `feature/dictation-overlay`, unmerged.
+
+- **The settings experience was walked end to end on 2026-09-08** from a real
+  fresh install, and rebuilt around the walk. `scripts/fresh-setup.sh` is how
+  that is done again: save, reset, restore. Reset uninstalls rather than
+  `pm clear`, because clearing leaves the component states the overlay choice
+  sets and the shell user is not allowed to put those back.
+- **Setup is now a choice, not a checklist.** Device setup asks for the
+  microphone, Transcription asks for the key, and "How you dictate" offers
+  Overlay or Keyboard as radio options with each one's setup nested under it.
+  They are alternatives: nothing in the app arbitrates between an overlay and a
+  keyboard both live at once, so it never offers both. The overlay's component
+  state IS the choice - no second preference to drift - and a fresh install is
+  written to Overlay once, on first launch.
+- **Band height** was cut from 269dp to about 168dp and may want to go smaller.
+  The wave and the top padding are what is left to trim.
+- **The silence trim constants want tuning against real recordings.**
+  `SILENCE_PEAK_PERCENT` and `SILENCE_FLOOR` were picked from one measured
+  failure; the debug log prints `peak=` and `threshold=` on every stop.
+- **Niagara's search box (`bitpit.launcher`) refuses both ACTION_PASTE and
+  ACTION_SET_TEXT.** Falls back to the clipboard, which is the designed
+  behaviour, but it is the one field seen doing this.
+- **Pastiera's bar went missing once right after closing the overlay** and came
+  back on its own. Never reproduced, and the IME config was verified intact at
+  the time. If it recurs, suspect `OverlayLauncherActivity` coming up
+  FLAG_NOT_FOCUSABLE and the field never re-requesting the keyboard.
 
 ## The refiners are the heart of this app
 

@@ -2,4 +2,9 @@
     <string name="app_name">Mutterboard</string>
     <string name="ime_label">Mutterboard Voice Keyboard</string>
     <string name="ime_subtype_label">English (US) Voice</string>
+    <string name="overlay_launcher_label">Mutterboard Dictate</string>
+    <string name="shortcut_settings_short">Settings</string>
+    <string name="shortcut_settings_long">Mutterboard settings</string>
+    <string name="tile_label">Dictate</string>
+    <string name="accessibility_service_description">Lets the dictation overlay paste your transcript into the text field you are already in. Without this, transcripts are still copied to the clipboard for you to paste yourself.</string>
 </resources>
