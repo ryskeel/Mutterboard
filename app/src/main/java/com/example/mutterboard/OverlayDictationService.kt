@@ -122,12 +122,9 @@ class OverlayDictationService : Service(), DictationSession.Host {
         }
         val pasted = MutterboardAccessibilityService.instance?.insertIntoFocusedField(text) ?: false
         Log.d(TAG, "commit pasted=$pasted")
-        // Nothing visibly happened when there was no field to paste into, so say
-        // where the text went. Only on that path — a successful paste speaks for
-        // itself, and a toast over it would be noise.
-        if (!pasted) {
-            Toast.makeText(this, "Copied. Paste it anywhere.", Toast.LENGTH_SHORT).show()
-        }
+        // No "copied" toast on the clipboard-only path: Android already shows its
+        // own clipboard confirmation on every write, and two notices for one
+        // event is worse than none.
     }
 
     override fun dismiss() {
