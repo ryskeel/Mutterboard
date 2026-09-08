@@ -109,35 +109,36 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   the overlay still works, it just stops pasting for you. That is what keeps the
   "Allow restricted settings" unlock off the critical path for a new user.
 
-- **Android's floating shortcut button is a third way in, not litter.** Android
-  attaches its accessibility shortcut to any service the user enables, asked for
-  or not, and the app cannot detach it - that setting needs WRITE_SECURE_SETTINGS.
-  Setup used to tell people to go and turn it off. On a Pixel there is no side
-  button to map and Quick Tap is unreliable, which leaves that button as the only
-  press-anywhere way in, so the service claims it instead
-  (`flagRequestAccessibilityButton` plus an `AccessibilityButtonCallback` - there
-  is no override to hook). It starts
-  `OverlayLauncherActivity` rather than the service, same foreground-service
-  reason as the tile, and it does nothing while the keyboard is the chosen mode.
-
-- **"Allow restricted settings" comes back on every update, not just the first
-  install.** A sideloaded app has the block re-armed each time it is updated, and
-  it hides the accessibility service's enable switch entirely rather than arguing
-  with you - the settings page just has no toggle on it, which reads as the app
-  being broken. Seen on both a Pixel 9a and a Titan II
-  (`appops get <pkg> ACCESS_RESTRICTED_SETTINGS` shows the reject). Combined with
-  the rule below, a release that touches the service config costs the user two
-  unlocks, not one, so setup names the symptom on both steps it affects.
+- **Never ask for the accessibility button.** `flagRequestAccessibilityButton`
+  looks like free real estate - Android attaches its shortcut to any service the
+  user enables anyway, so claiming the press turns litter into an entry point,
+  which is worth having on a Pixel with no side button to map. It is not free:
+  Settings then treats the service as one you invoke *with* the button and drops
+  the "Use Mutterboard Dictate" switch from the service's own page, leaving the
+  shortcut toggle as the only way to turn on the permission that makes pasting
+  work. Shipped in v1.19.0 and pulled in v1.19.1, confirmed by installing both
+  ways on one Titan II and watching the switch come and go. A phone with nothing
+  remappable has the Quick Settings tile; that is what it is for.
 
 - **Touching `accessibility_service_config.xml` switches the service off on
   every phone that has it.** Android treats a service that redeclares itself as
   one the user has not consented to, drops it from the enabled list, and says
-  nothing; the overlay carries on and quietly stops pasting, which is what a
-  user notices. Adding `flagRequestAccessibilityButton` in v1.19.0 did exactly
-  that. Verified either way on a Titan II: an update carrying only a version bump
-  left the grant alone. So a release that edits that file has to tell people to
-  turn the service back on - and on a sideloaded install they may have to walk
-  the "Allow restricted settings" unlock a second time to do it.
+  nothing; the overlay carries on and quietly stops pasting, which is what a user
+  notices. Verified either way on a Titan II: an update carrying only a version
+  bump left the grant alone. So a release that edits that file has to tell people
+  to turn the service back on, and pulling a mistake out of that file costs them
+  the same grant a second time.
+
+- **The overlay says so when it could not paste.** The clipboard fallback is
+  indistinguishable from working, which is how a revoked service reads as "the
+  app stopped pasting" with nothing on screen to explain it. The band stays up
+  and names Android as the one that turned the permission off - but only for
+  someone who had the service running before (`KEY_ACCESSIBILITY_SEEN`, written
+  from the service and from the settings screen, because the update that revokes
+  the grant is also the one that stops the service ever connecting again).
+  Someone who never enabled it is not owed a warning: the clipboard is the design
+  for them. It waits to be answered rather than timing out - a timeout took the
+  band away mid-reach, before the press that fixes it landed.
 
 - **"Message pasted from your clipboard" is Android's, not ours.** It fires
   because ACTION_PASTE makes the *target* app read a clip it did not write, and

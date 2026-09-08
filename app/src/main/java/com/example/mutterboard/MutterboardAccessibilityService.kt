@@ -1,10 +1,7 @@
 package com.example.mutterboard
 
-import android.accessibilityservice.AccessibilityButtonController
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
-import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
@@ -27,7 +24,6 @@ class MutterboardAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        registerShortcutButton()
         // Remember that this was once running. Android drops the user's grant
         // whenever this service redeclares itself in an update and says nothing
         // about it, so the overlay needs a way to know that a dictation which
@@ -49,56 +45,6 @@ class MutterboardAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
     override fun onInterrupt() = Unit
-
-    /**
-     * Makes Android's floating shortcut button start a dictation.
-     *
-     * The button is not something the app asks for — Android attaches its
-     * shortcut to any service the user enables — so for a long time it sat on
-     * screen doing nothing and setup told the user to go and remove it. On a
-     * Pixel that is the wrong trade: there is no side button to map and Quick Tap
-     * is unreliable, which leaves this as the only press-anywhere way in. So the
-     * button becomes an entry point rather than litter.
-     *
-     * The press arrives through a callback rather than an override, which is the
-     * only route an AccessibilityService has to it, and it only arrives at all
-     * because the service config asks for the button.
-     */
-    private fun registerShortcutButton() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        accessibilityButtonController.registerAccessibilityButtonCallback(
-            object : AccessibilityButtonController.AccessibilityButtonCallback() {
-                override fun onClicked(controller: AccessibilityButtonController) =
-                    startDictation()
-
-                override fun onAvailabilityChanged(
-                    controller: AccessibilityButtonController,
-                    available: Boolean,
-                ) = Unit
-            }
-        )
-    }
-
-    /**
-     * Routed through [OverlayLauncherActivity] like the tile, and for the same
-     * reason: a microphone foreground service cannot be started from the
-     * background, and that activity is the one path already allowed to start it.
-     * The launch itself is permitted because the app holds SYSTEM_ALERT_WINDOW.
-     *
-     * Ignored when the user has chosen the keyboard. The service can outlive that
-     * choice — Android keeps it enabled — and a button that started an overlay
-     * the user turned off would be the app arguing with its own settings screen.
-     */
-    private fun startDictation() {
-        if (!isOverlayLauncherEnabled(this)) {
-            Log.d(TAG, "shortcut pressed while the overlay is off; ignoring")
-            return
-        }
-        startActivity(
-            Intent(this, OverlayLauncherActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-    }
 
     /**
      * Puts [text] into the currently focused text field, returning false when

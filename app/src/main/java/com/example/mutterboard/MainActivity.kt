@@ -354,6 +354,15 @@ private fun SetupScreen(
         overlayEnabled = isOverlayLauncherEnabled(context)
         canDrawOverlays = Settings.canDrawOverlays(context)
         accessibilityEnabled = isAccessibilityEnabled(context)
+        // Recorded here as well as from the service itself, because the update
+        // that revokes the grant is also the one that stops the service ever
+        // connecting again - so the service alone can miss the fact that this
+        // user had it. Seeing it enabled from out here is the same evidence.
+        if (accessibilityEnabled) {
+            prefs.edit()
+                .putBoolean(MutterboardInputMethodService.KEY_ACCESSIBILITY_SEEN, true)
+                .apply()
+        }
         shortcutAttached = hasAccessibilityShortcut(context)
     }
 
@@ -1240,43 +1249,26 @@ private fun ModeChoiceRow(
 }
 
 /**
- * Android's floating shortcut button, offered as a way into the overlay.
+ * Turning on the accessibility service makes Android attach its own shortcut,
+ * which parks a button on screen that Mutterboard never uses and cannot remove
+ * itself. Presented as the next step in the sequence rather than as a warning:
+ * it is a normal consequence of the previous step, not something the user got
+ * wrong.
  *
- * It used to be presented as litter to remove, because the service ignored it and
- * a button that does nothing is worse than no button. It starts a dictation now
- * (see MutterboardAccessibilityService.registerShortcutButton), and on a phone
- * with nothing remappable it is the only press-anywhere way in there is, so the
- * step is the opposite of what it was: turn it on.
- *
- * The app can only open the screen, never flip the switch - the setting behind it
- * needs WRITE_SECURE_SETTINGS. Android usually attaches it by itself when the
- * service goes on, in which case this arrives already done.
+ * v1.19.0 tried to make the button start a dictation instead of asking people to
+ * remove it. Claiming it costs the "Use Mutterboard Dictate" switch on the
+ * service's settings page, which is the switch that turns pasting on, so the
+ * button went back to being litter. See accessibility_service_config.xml.
  */
 @Composable
-private fun ShortcutEntryRow(done: Boolean, step: Int?, onAction: () -> Unit) {
-    StepRow(
-        label = "Start from the floating button",
-        done = done,
-        actionLabel = "Set up",
-        onAction = onAction,
-        step = step,
-        note = "Android's accessibility button, if you want a way in from any screen."
-    )
-}
-
-/**
- * The same button once the user has chosen the keyboard, where it is litter
- * again: the service stays enabled, so Android keeps the button on screen, and
- * pressing it is ignored because the overlay is off.
- */
-@Composable
-private fun ShortcutLeftoverRow(onAction: () -> Unit) {
+private fun ShortcutStepRow(done: Boolean, step: Int?, onAction: () -> Unit) {
     StepRow(
         label = "Turn off Android's shortcut button",
-        done = false,
+        done = done,
         actionLabel = "Turn off",
         onAction = onAction,
-        note = "Android added this for the overlay. It does nothing in keyboard mode."
+        step = step,
+        note = "Android adds this on its own. Mutterboard never uses it."
     )
 }
 
@@ -1300,9 +1292,10 @@ private fun RestrictedSettingsNote(symptom: String, onOpenAppInfo: () -> Unit) {
     Column(modifier = Modifier.padding(start = 36.dp, end = 16.dp, bottom = 14.dp)) {
         Text(
             symptom + " Android is blocking it because Mutterboard was installed " +
-                "outside the Play Store. Open App info, tap the three dots at the " +
-                "top right, and choose Allow restricted settings. Then come back " +
-                "and try again.",
+                "outside the Play Store. The unlock is called Allow restricted " +
+                "settings and it lives on the App info page, usually in a menu at " +
+                "the top right. Not every phone has it in the same place, and some " +
+                "do not offer it at all.",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1419,27 +1412,24 @@ private fun DictationModeCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 36.dp, end = 16.dp, bottom = 14.dp)
                     )
-                    // The same block, wearing a different face. Here the page
-                    // does not argue with you - the switch that turns Mutterboard
-                    // Dictate on is simply not drawn, which reads as the app
-                    // being broken rather than as a permission being withheld.
-                    // Worth saying on this step in particular: updating a
-                    // sideloaded app re-arms the block, so this is the one that
-                    // comes back after a release.
+                    // The same block, on the step where it bites hardest. It
+                    // shows up here as a switch you cannot move rather than as a
+                    // dialog, and updating a sideloaded app re-arms it, so this
+                    // is the one that comes back after a release.
                     RestrictedSettingsNote(
-                        symptom = "If that screen has no switch for Mutterboard Dictate,",
+                        symptom = "If the switch is greyed out, or says it is " +
+                            "controlled by a restricted setting,",
                         onOpenAppInfo = onOpenAppInfo
                     )
                 }
-                // Only reachable once step 2 is done: the button belongs to the
-                // accessibility service, so there is nothing to attach it to
-                // until that is on. Usually already attached by then, which is
-                // why it is shown rather than hidden - it reads as a step that
-                // is finished rather than a button that appeared from nowhere.
+                // Only reachable once step 2 is done, because Android attaches
+                // the shortcut when the service goes on. Shown even when already
+                // clear so it reads as a step that is finished rather than a
+                // warning that appears out of nowhere.
                 if (accessibilityEnabled) {
                     HorizontalDivider(modifier = Modifier.padding(start = 36.dp))
-                    ShortcutEntryRow(
-                        done = shortcutAttached,
+                    ShortcutStepRow(
+                        done = !shortcutAttached,
                         step = 3,
                         onAction = onOpenShortcutSettings
                     )
@@ -1472,7 +1462,7 @@ private fun DictationModeCard(
         // neither option - it is something to clean up - so it sits below both.
         if (!overlayChosen && shortcutAttached) {
             HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
-            ShortcutLeftoverRow(onAction = onOpenShortcutSettings)
+            ShortcutStepRow(done = false, step = null, onAction = onOpenShortcutSettings)
         }
     }
 }

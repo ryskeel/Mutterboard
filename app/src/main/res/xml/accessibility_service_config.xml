@@ -5,17 +5,18 @@
   because nothing here is event-driven: the overlay calls in on demand when a
   transcript is ready.
 
-  flagRequestAccessibilityButton is the exception, and it is not about
-  accessibility at all. Android attaches its shortcut to any service the user
-  enables whether it asks or not, so the floating button appears regardless; this
-  flag is what makes a press on it reach us instead of doing nothing. On a phone
-  with no remappable side button that button is the best way into the overlay
-  there is.
+  It deliberately does NOT ask for the accessibility button
+  (flagRequestAccessibilityButton). Asking makes Settings treat the service as
+  one you invoke with the button, and it drops the "Use Mutterboard Dictate"
+  switch from the service's own page - leaving the shortcut toggle as the only
+  way to turn on the permission that makes pasting work. Verified both ways on a
+  Titan II. Whatever the button is worth, it is not worth being unable to enable
+  the service without it.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeViewFocused"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagRequestAccessibilityButton"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_service_description"
     android:notificationTimeout="100" />
