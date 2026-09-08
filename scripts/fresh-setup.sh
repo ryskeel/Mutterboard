@@ -147,10 +147,16 @@ restore() {
     fi
 
     say "secure settings"
-    adb shell settings put secure enabled_input_methods "$(cat "$BACKUP/enabled_input_methods")"
-    adb shell settings put secure default_input_method "$(cat "$BACKUP/default_input_method")"
-    adb shell settings put secure enabled_accessibility_services "$(cat "$BACKUP/enabled_a11y")"
-    adb shell settings put secure accessibility_enabled "$(cat "$BACKUP/a11y_enabled")"
+    # Quoted for the DEVICE's shell, not just ours. An enabled-IME list is
+    # semicolon-separated, and adb shell hands its arguments to sh as one string:
+    # unquoted, everything after the first ";" runs as its own command.
+    secure_put() {
+        adb shell "settings put secure $1 '$2'" || true
+    }
+    secure_put enabled_input_methods "$(cat "$BACKUP/enabled_input_methods")"
+    secure_put default_input_method "$(cat "$BACKUP/default_input_method")"
+    secure_put enabled_accessibility_services "$(cat "$BACKUP/enabled_a11y")"
+    secure_put accessibility_enabled "$(cat "$BACKUP/a11y_enabled")"
 
     echo
     echo "Back to where you were - except the overlay switch."
