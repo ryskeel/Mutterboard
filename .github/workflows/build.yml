@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - 'v*'
+  # A tag push is the normal way to cut a release, but it needs a terminal with
+  # a credential that may push tags - which rules out a phone, and ruled out the
+  # remote session that shipped v1.19.2. This button builds the same APK from
+  # whatever ref you run it on and creates the tag as part of the release, so a
+  # release never depends on where you happen to be sitting.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v1.19.2'
+        required: true
 
 permissions:
   contents: write
@@ -12,8 +22,19 @@ jobs:
   release:
     runs-on: ubuntu-latest
 
+    env:
+      # On a tag push inputs.tag is empty, so this is the pushed tag's own name.
+      TAG: ${{ inputs.tag || github.ref_name }}
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check the tag is a version
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag '$TAG' is not vMAJOR.MINOR.PATCH - the versionCode below would be wrong."
+            exit 1
+          fi
 
       - uses: actions/setup-java@v4
         with:
@@ -28,7 +49,7 @@ jobs:
 
       - name: Build debug APK
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${TAG#v}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           CODE=$(( ${MAJOR:-0} * 10000 + ${MINOR:-0} * 100 + ${PATCH:-0} ))
           echo "Building $VERSION (versionCode $CODE)"
@@ -38,8 +59,11 @@ jobs:
 
       - name: Create GitHub release
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "Mutterboard $GITHUB_REF_NAME" \
+          # --target creates the tag at this commit when the tag doesn't exist
+          # yet (the dispatch path); it is ignored when the tag pushed it.
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "Mutterboard $TAG" \
             --notes "Built from [\`${GITHUB_SHA:0:7}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})" \
             app/build/outputs/apk/debug/app-debug.apk
         env:
