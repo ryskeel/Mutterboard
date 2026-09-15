@@ -105,6 +105,23 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   reaches the app underneath. The translucency is the same argument made
   visually - the band admits it is sitting on top of something.
 
+- **The puck's tap finishes the dictation; the hold brings the band back.** The
+  puck is the whole interface for someone working that way, so the common need
+  (the text) gets the cheap gesture and the rare one (the band) gets the
+  deliberate one. Drag and hold share the press without competing: the hold is a
+  timer armed on touch-down and cancelled the instant the finger crosses the slop
+  the drag already measures, so a press that moves can never also be a hold. The
+  haptic tick at the timeout is load-bearing, not polish - it is the only way to
+  feel a hesitant press crossing from tap to hold.
+
+- **Puck or band is remembered, and only a deliberate choice writes it.**
+  Collapsing or expanding by hand sets the shape the next dictation opens in
+  (`overlay_puck_mode`). The automatic expand that surfaces an error passes
+  `remember = false`, because a missing mic permission must not quietly end puck
+  mode on the user's behalf. The auto-expand also skips IDLE: that is the state a
+  dictation that worked passes through, and expanding on it popped the band open
+  at the end of every recording.
+
 - **The accessibility service is optional and must stay optional.** Without it
   the overlay still works, it just stops pasting for you. That is what keeps the
   "Allow restricted settings" unlock off the critical path for a new user.

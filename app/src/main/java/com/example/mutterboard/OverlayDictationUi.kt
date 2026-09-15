@@ -87,7 +87,7 @@ fun OverlayDictationBand(
         MinimizedPuck(
             posture = snapshot.state.posture(),
             amplitude = amplitude,
-            onExpand = { onMinimizedChanged(false) },
+            onFinish = onAction,
         )
         return
     }
@@ -356,19 +356,24 @@ private val BAND_MAX_HEIGHT = 340.dp
  * *start* something. The point of the collapsed state is the opposite — the
  * dictation is already running, you just moved it out of the way — and the wave
  * is the one thing in this app that already says "still listening".
+ *
+ * Tapping it finishes the dictation. Real presses never arrive here — the puck's
+ * drag, tap and hold are all read as raw touches by PuckDragLayout, which takes
+ * the stream before Compose sees it — but the semantics are what a screen reader
+ * is offered, so the action it names has to be the action a tap performs.
  */
 @Composable
 private fun MinimizedPuck(
     posture: WavePosture,
     amplitude: () -> Float,
-    onExpand: () -> Unit,
+    onFinish: () -> Unit,
 ) {
     Box(
         modifier = Modifier
             .size(width = 78.dp, height = 46.dp)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.primary)
-            .clickable(onClickLabel = "Expand Mutterboard", onClick = onExpand),
+            .clickable(onClickLabel = "Finish dictation", onClick = onFinish),
         contentAlignment = Alignment.Center,
     ) {
         DictationWave(

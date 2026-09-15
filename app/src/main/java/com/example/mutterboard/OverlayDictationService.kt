@@ -17,6 +17,7 @@ import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -90,6 +91,18 @@ class OverlayDictationService : Service(), DictationSession.Host {
     private var puckX = 0
     private var puckY = 0
 
+    /**
+     * Whether the last dictation was left as a puck, and so whether the next one
+     * should come up as one.
+     *
+     * The puck is a way of working, not a state of one recording: someone who
+     * dictates from the puck wants the puck every time, and having to collapse
+     * the band again on every launch is the friction they minimized to escape.
+     * Only a deliberate collapse or expand writes this - the automatic expand
+     * that surfaces an error must not silently end puck mode on their behalf.
+     */
+    private var puckMode = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -101,6 +114,7 @@ class OverlayDictationService : Service(), DictationSession.Host {
         // window now runs to the bottom of the display, so an inset measured from
         // the edge alone would park the puck on top of the gesture pill.
         puckY = prefs.getInt(KEY_PUCK_Y, MINIMIZED_INSET_DP.dpToPx() + bottomInsetPx())
+        puckMode = prefs.getBoolean(KEY_PUCK_MODE, false)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -109,13 +123,17 @@ class OverlayDictationService : Service(), DictationSession.Host {
 
         startInForeground()
 
+        // Before the view is built, so the puck composes as the puck rather than
+        // as a band that snaps shut a frame later.
+        minimized.value = puckMode
+
         val s = DictationSession(this, this)
         session = s
         val view = createBandView(s)
         overlayView = view
         windowManager = getSystemService(WindowManager::class.java)
         try {
-            windowManager?.addView(view, overlayLayoutParams())
+            windowManager?.addView(view, overlayLayoutParams(minimized.value))
         } catch (e: Throwable) {
             // Almost always the "display over other apps" grant being missing or
             // revoked. Nothing useful to show from here, so bow out cleanly
@@ -143,10 +161,18 @@ class OverlayDictationService : Service(), DictationSession.Host {
             // Anything that needs the user is worth un-minimizing for. A puck
             // cannot carry "Mic permission needed", so a failure that happened
             // while the band was out of the way would otherwise be invisible.
+            //
+            // IDLE is not one of those: it is what a dictation that worked passes
+            // through, and expanding on it popped the band open at the end of
+            // every recording - the one moment someone in puck mode is most
+            // certain they are done. The expand is also deliberately not
+            // remembered, because the app asked for the band here, the user did
+            // not.
             if (it.state != DictationSession.State.RECORDING &&
-                it.state != DictationSession.State.TRANSCRIBING
+                it.state != DictationSession.State.TRANSCRIBING &&
+                it.state != DictationSession.State.IDLE
             ) {
-                setMinimized(false)
+                setMinimized(false, remember = false)
             }
         }
 
@@ -165,7 +191,7 @@ class OverlayDictationService : Service(), DictationSession.Host {
                         minimized = minimized.value,
                         bottomInset = (bottomInsetPx() / resources.displayMetrics.density).dp,
                         pasteWarning = pasteWarning.value,
-                        onMinimizedChanged = { setMinimized(it) },
+                        onMinimizedChanged = { setMinimized(it, remember = true) },
                         onModeChanged = { session.modeChanged(it) },
                         onFixPaste = { openAccessibilitySettings() },
                         onDismissPasteWarning = { dismissPasteWarning() },
@@ -194,8 +220,19 @@ class OverlayDictationService : Service(), DictationSession.Host {
     }
 
     /**
-     * Lets the collapsed puck be dragged anywhere on the screen, and treats a
-     * press that never travelled as a tap to bring the band back.
+     * Carries all three of the puck's gestures: drag it anywhere, tap it to
+     * finish the dictation, hold it to bring the band back.
+     *
+     * Tap finishes rather than expands because the puck is the whole interface
+     * for someone working this way - they collapsed the band to get it out of
+     * the way, and the next thing they want is the text, not the band back. The
+     * band is the rarer need, so it takes the deliberate gesture.
+     *
+     * Drag and hold do not compete for the same press. The hold is a timer armed
+     * on touch-down and cancelled the moment the finger passes the slop the drag
+     * already measures, so a press that moves is a drag and never a hold. Only a
+     * press that stays still long enough is a hold, and it says so with a haptic
+     * tick at the moment it stops being a tap.
      *
      * Done on raw screen coordinates rather than as a Compose gesture, because
      * the thing being moved is the window itself. Compose only ever reports a
@@ -216,26 +253,54 @@ class OverlayDictationService : Service(), DictationSession.Host {
         private var startX = 0
         private var startY = 0
         private var dragging = false
+        private var expanded = false
+
+        /**
+         * The hold. Fires only if the press is still on the puck and still
+         * within the slop when the timeout lands, so a drag never reaches it.
+         *
+         * The haptic is not decoration: it is the only signal that the press has
+         * crossed from tap to hold, and it is what stops a hesitant drag being a
+         * surprise. The finger is still down afterwards and the band is now
+         * underneath it, so the rest of the gesture is swallowed rather than
+         * delivered to whatever button the band just put there.
+         */
+        private val expandOnHold = Runnable {
+            expanded = true
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            setMinimized(false, remember = true)
+        }
 
         override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = minimized.value
 
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean {
-            if (!minimized.value) return false
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    // Expanded, every touch goes straight through to Compose.
+                    if (!minimized.value) return false
                     downX = event.rawX
                     downY = event.rawY
                     startX = puckX
                     startY = puckY
                     dragging = false
+                    expanded = false
+                    postDelayed(expandOnHold, ViewConfiguration.getLongPressTimeout().toLong())
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    if (expanded) return true
                     val dx = event.rawX - downX
                     val dy = event.rawY - downY
                     // Below the slop it is still a tap: a thumb never presses
                     // perfectly still.
-                    if (!dragging && abs(dx) + abs(dy) > slop) dragging = true
+                    if (!dragging && abs(dx) + abs(dy) > slop) {
+                        dragging = true
+                        // Past the slop the press is a drag, and a drag is never
+                        // also a hold. Cancelling here rather than checking the
+                        // distance when the timer lands is what keeps the two
+                        // gestures off each other.
+                        removeCallbacks(expandOnHold)
+                    }
                     if (dragging) {
                         val metrics = resources.displayMetrics
                         // Insets from the bottom-right corner, so both axes run
@@ -248,9 +313,19 @@ class OverlayDictationService : Service(), DictationSession.Host {
                     }
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (dragging) savePuckPosition() else setMinimized(false)
+                    removeCallbacks(expandOnHold)
+                    when {
+                        // The hold already did its work on the way down.
+                        expanded -> Unit
+                        dragging -> savePuckPosition()
+                        // Stop, refine, paste - the same thing the band's own
+                        // button does, which is why it goes through the session
+                        // rather than reimplementing any of it.
+                        else -> session?.micTapped()
+                    }
                 }
                 MotionEvent.ACTION_CANCEL -> {
+                    removeCallbacks(expandOnHold)
                     if (dragging) savePuckPosition()
                 }
             }
@@ -289,8 +364,21 @@ class OverlayDictationService : Service(), DictationSession.Host {
     /**
      * Collapses the band to its puck, or brings it back, resizing the window to
      * match. Cheap enough to call with the value it already holds.
+     *
+     * [remember] carries the difference between the user choosing a shape and the
+     * app forcing one. Only a choice sets the shape the next dictation opens in;
+     * an expand the app did to show an error must leave puck mode alone, or a
+     * missing mic permission would quietly switch someone back to the band for
+     * good.
      */
-    private fun setMinimized(value: Boolean) {
+    private fun setMinimized(value: Boolean, remember: Boolean) {
+        if (remember && puckMode != value) {
+            puckMode = value
+            getSharedPreferences(MutterboardInputMethodService.PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_PUCK_MODE, value)
+                .apply()
+        }
         if (minimized.value == value) return
         minimized.value = value
         moveOverlay()
@@ -529,6 +617,7 @@ class OverlayDictationService : Service(), DictationSession.Host {
         private const val MINIMIZED_INSET_DP = 24
         private const val KEY_PUCK_X = "overlay_puck_x"
         private const val KEY_PUCK_Y = "overlay_puck_y"
+        private const val KEY_PUCK_MODE = "overlay_puck_mode"
     }
 }
 
