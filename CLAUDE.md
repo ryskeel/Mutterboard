@@ -122,6 +122,29 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   dictation that worked passes through, and expanding on it popped the band open
   at the end of every recording.
 
+- **The puck snaps to three columns, and the columns are measured off a
+  constant.** Left, centre and right with 16dp of edge padding, chosen live as the
+  finger crosses each halfway mark; vertical stays free, because height is where
+  the thing you are covering actually varies. The column is what gets saved, not a
+  coordinate. `PUCK_WIDTH_DP` in the service has to match `PUCK_WIDTH` in the UI:
+  the window's first position is decided before the view has ever been laid out,
+  so a centre computed from the measured width is half a puck off.
+
+- **Thinking is a shape change, not a quieter wave.** The squiggle rolls up into a
+  spinning ring, one interpolated path rather than two drawings swapped over.
+  Inside the puck a tap ends the dictation, and the seconds of transcribing that
+  follow used to look exactly like the seconds before the tap, so the tap read as a
+  press that missed.
+
+- **The overlay outlives its own session by one animation.** `dismiss()` starts
+  the mist burst and posts the teardown behind it, because the window vanishing on
+  the frame it committed gave the one event worth confirming - your words landing
+  in the field - no acknowledgement at all. `POOF_MS` is both the animation's
+  length and the teardown delay: shorter cuts the mist off mid-air, longer leaves
+  an invisible window over the app the user has already gone back to. The puck's
+  touch handling switches off for the duration, or a press would land on a
+  dictation that is over.
+
 - **The accessibility service is optional and must stay optional.** Without it
   the overlay still works, it just stops pasting for you. That is what keeps the
   "Allow restricted settings" unlock off the critical path for a new user.

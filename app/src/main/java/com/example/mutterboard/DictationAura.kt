@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.pow
 import kotlin.math.sin
 
 /**
@@ -110,6 +111,112 @@ private fun Cloud.draw(scope: DrawScope, width: Float, height: Float, t: Float, 
         center = at,
     )
 }
+
+/**
+ * The mist letting go: the same blooms the band floats in, thrown outward and
+ * faded to nothing over about half a second.
+ *
+ * It plays where the dictation UI was, at the moment the text lands somewhere
+ * else. The overlay used to vanish on the same frame it committed, which gave the
+ * one event worth confirming - your words arriving in the field - no acknowledgement
+ * at all. Something has to say "that went somewhere", and the mist was already the
+ * app's way of saying a thing is happening.
+ *
+ * Built from the same wide radial gradients as [DictationAura] rather than from a
+ * particle system: it has to read as the mist that was already there dispersing,
+ * and anything with visible edges would read as new objects appearing instead.
+ *
+ * Draws nothing once [POOF_MS] has elapsed, so it cannot outlive the window being
+ * torn down behind it.
+ */
+@Composable
+fun PoofBurst(modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val puffs = remember(scheme) {
+        // Spread around the compass rather than evenly, so the cloud comes apart
+        // unevenly the way real mist does. Radians, then a distance multiplier.
+        listOf(
+            Puff(scheme.primaryContainer, 0.78f, 0.52f, -1.95f, 1.00f),
+            Puff(scheme.tertiaryContainer, 0.70f, 0.44f, -0.62f, 0.86f),
+            Puff(scheme.secondaryContainer, 0.66f, 0.47f, -2.65f, 0.78f),
+            Puff(scheme.primary, 0.34f, 0.33f, -1.20f, 1.12f),
+            Puff(scheme.tertiary, 0.30f, 0.30f, -2.35f, 0.64f),
+            Puff(scheme.secondary, 0.26f, 0.28f, 0.15f, 0.92f),
+        )
+    }
+    val progress = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        val start = withFrameNanos { it }
+        while (progress.floatValue < 1f) {
+            withFrameNanos { now ->
+                progress.floatValue =
+                    ((now - start) / 1_000_000f / POOF_MS).coerceIn(0f, 1f)
+            }
+        }
+    }
+
+    Canvas(modifier) {
+        val p = progress.floatValue
+        if (p >= 1f) return@Canvas
+        // Ease out: the mist leaves quickly and then drifts, which is what makes
+        // it read as released rather than as animated.
+        val eased = 1f - (1f - p).pow(2.2f)
+        // Up fast, then away. Starting at zero is what gives the puff its push;
+        // starting lit would just be a fade.
+        val bloom = (p / BLOOM_FRACTION).coerceAtMost(1f)
+        val fade = (1f - ((p - BLOOM_FRACTION) / (1f - BLOOM_FRACTION)).coerceIn(0f, 1f))
+            .pow(1.5f)
+        val envelope = bloom * fade
+        if (envelope <= 0f) return@Canvas
+        val reach = minOf(size.width, size.height) * 0.5f
+        val centre = Offset(size.width / 2f, size.height / 2f)
+        for (puff in puffs) {
+            val at = Offset(
+                centre.x + cos(puff.direction) * reach * puff.distance * eased,
+                centre.y + sin(puff.direction) * reach * puff.distance * eased,
+            )
+            val r = reach * puff.radius * (0.55f + 0.95f * eased)
+            val a = puff.alpha * envelope
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colorStops = arrayOf(
+                        0.00f to puff.color.copy(alpha = a),
+                        0.34f to puff.color.copy(alpha = a * 0.62f),
+                        0.62f to puff.color.copy(alpha = a * 0.24f),
+                        0.82f to puff.color.copy(alpha = a * 0.07f),
+                        1.00f to Color.Transparent,
+                    ),
+                    center = at,
+                    radius = r,
+                ),
+                radius = r,
+                center = at,
+            )
+        }
+    }
+}
+
+private class Puff(
+    val color: Color,
+    val alpha: Float,
+    /** Bloom radius as a fraction of the burst's reach. */
+    val radius: Float,
+    /** Which way it leaves, in radians. */
+    val direction: Float,
+    /** How far it travels, as a multiple of the reach. */
+    val distance: Float,
+)
+
+/**
+ * How long the burst lasts. The window is torn down on this same number, so the
+ * two must not drift apart: a shorter window cuts the mist off mid-air, and a
+ * longer one leaves an invisible window sitting over the app the user has just
+ * gone back to.
+ */
+const val POOF_MS = 520f
+
+/** The share of the burst spent arriving, before it starts leaving. */
+private const val BLOOM_FRACTION = 0.22f
 
 @Composable
 private fun rememberAuraClock(): State<Float> {

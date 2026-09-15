@@ -13,7 +13,9 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
@@ -82,12 +84,31 @@ class OverlayDictationService : Service(), DictationSession.Host {
     private val pasteWarning = mutableStateOf(false)
 
     /**
-     * Where the puck was left, as insets from the bottom-right corner in px.
+     * Whether the mist is playing out the end of a dictation. The window outlives
+     * the session by exactly that long - see [dismiss].
+     */
+    private val poofing = mutableStateOf(false)
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Where the puck was left: a column across, and a free inset up from the
+     * bottom in px.
      *
      * Remembered across dictations because where the band is in the way is a fact
      * about the user's screen, not about this one recording; making them drag it
      * clear again every time would be the annoyance minimizing exists to remove.
+     *
+     * Horizontal is a column rather than a coordinate because a puck parked by
+     * hand is never quite anywhere: dragged freely it ends up a few pixels off the
+     * edge, or a few pixels off centre, and every one of those is a position the
+     * user did not mean. Three columns are all the horizontal choices that exist
+     * on a phone - out of the way left, out of the way right, or deliberately in
+     * the middle - so the drag picks between them instead of between pixels.
+     * Vertical stays free, because height is where the thing you are covering
+     * actually varies.
      */
+    private var puckColumn = COLUMN_RIGHT
     private var puckX = 0
     private var puckY = 0
 
@@ -109,7 +130,8 @@ class OverlayDictationService : Service(), DictationSession.Host {
         super.onCreate()
         createNotificationChannel()
         val prefs = getSharedPreferences(MutterboardInputMethodService.PREFS, Context.MODE_PRIVATE)
-        puckX = prefs.getInt(KEY_PUCK_X, MINIMIZED_INSET_DP.dpToPx())
+        puckColumn = prefs.getInt(KEY_PUCK_COLUMN, COLUMN_RIGHT)
+        puckX = columnInsetPx(puckColumn)
         // Clear of the navigation bar as well as the screen edge: the overlay
         // window now runs to the bottom of the display, so an inset measured from
         // the edge alone would park the puck on top of the gesture pill.
@@ -189,6 +211,7 @@ class OverlayDictationService : Service(), DictationSession.Host {
                         onCancel = { session.cancelTapped() },
                         onSettings = { session.settingsTapped() },
                         minimized = minimized.value,
+                        poofing = poofing.value,
                         bottomInset = (bottomInsetPx() / resources.displayMetrics.density).dp,
                         pasteWarning = pasteWarning.value,
                         onMinimizedChanged = { setMinimized(it, remember = true) },
@@ -271,14 +294,17 @@ class OverlayDictationService : Service(), DictationSession.Host {
             setMinimized(false, remember = true)
         }
 
-        override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = minimized.value
+        // Not while the burst is playing: the puck is gone by then, and a press
+        // landing on the mist would be read as a tap on a dictation that is over.
+        override fun onInterceptTouchEvent(ev: MotionEvent): Boolean =
+            minimized.value && !poofing.value
 
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     // Expanded, every touch goes straight through to Compose.
-                    if (!minimized.value) return false
+                    if (!minimized.value || poofing.value) return false
                     downX = event.rawX
                     downY = event.rawY
                     startX = puckX
@@ -305,11 +331,22 @@ class OverlayDictationService : Service(), DictationSession.Host {
                         val metrics = resources.displayMetrics
                         // Insets from the bottom-right corner, so both axes run
                         // against the finger.
-                        puckX = (startX - dx).toInt()
-                            .coerceIn(0, (metrics.widthPixels - width).coerceAtLeast(0))
-                        puckY = (startY - dy).toInt()
+                        //
+                        // Across, the finger picks a column rather than a
+                        // position: the puck jumps the moment the free inset
+                        // passes the halfway mark between two of them, which is
+                        // what makes the snap something you aim with rather than
+                        // something that happens to you when you let go.
+                        val column = nearestColumn((startX - dx).toInt())
+                        val snappedX = columnInsetPx(column)
+                        val snappedY = (startY - dy).toInt()
                             .coerceIn(0, (metrics.heightPixels - height).coerceAtLeast(0))
-                        moveOverlay()
+                        if (column != puckColumn || snappedX != puckX || snappedY != puckY) {
+                            puckColumn = column
+                            puckX = snappedX
+                            puckY = snappedY
+                            moveOverlay()
+                        }
                     }
                 }
                 MotionEvent.ACTION_UP -> {
@@ -345,10 +382,33 @@ class OverlayDictationService : Service(), DictationSession.Host {
     private fun savePuckPosition() {
         getSharedPreferences(MutterboardInputMethodService.PREFS, Context.MODE_PRIVATE)
             .edit()
-            .putInt(KEY_PUCK_X, puckX)
+            .putInt(KEY_PUCK_COLUMN, puckColumn)
             .putInt(KEY_PUCK_Y, puckY)
             .apply()
     }
+
+    /**
+     * Where a column sits, as an inset from the right edge.
+     *
+     * Measured against the puck's declared width rather than the view's, because
+     * this is needed before the view has ever been laid out - the window's first
+     * position is decided while its width is still zero, and a centre computed
+     * from zero is half a puck off.
+     */
+    private fun columnInsetPx(column: Int): Int {
+        val screenWidth = resources.displayMetrics.widthPixels
+        val puckWidth = PUCK_WIDTH_DP.dpToPx()
+        val padding = PUCK_EDGE_PADDING_DP.dpToPx()
+        return when (column) {
+            COLUMN_LEFT -> (screenWidth - puckWidth - padding).coerceAtLeast(0)
+            COLUMN_CENTER -> ((screenWidth - puckWidth) / 2).coerceAtLeast(0)
+            else -> padding
+        }
+    }
+
+    /** The column whose resting place is closest to a freely dragged [insetPx]. */
+    private fun nearestColumn(insetPx: Int): Int =
+        COLUMNS.minByOrNull { abs(insetPx - columnInsetPx(it)) } ?: COLUMN_RIGHT
 
     /**
      * Floats the dictation UI along the bottom edge, where the keyboard would be.
@@ -423,10 +483,15 @@ class OverlayDictationService : Service(), DictationSession.Host {
             } else {
                 Gravity.BOTTOM or Gravity.START
             }
-            // Wherever the user last dragged the puck to.
+            // Wherever the user last dragged the puck to. The burst needs room
+            // around the puck to disperse into, and the window is only as big as
+            // what it holds - so while it plays, the window grows by the margin
+            // the content has just added and steps back by the same amount, which
+            // leaves the puck itself exactly where it was.
             if (minimized) {
-                x = puckX
-                y = puckY
+                val margin = if (poofing.value) POOF_MARGIN_DP.dpToPx() else 0
+                x = (puckX - margin).coerceAtLeast(0)
+                y = (puckY - margin).coerceAtLeast(0)
             }
         }
     }
@@ -499,7 +564,15 @@ class OverlayDictationService : Service(), DictationSession.Host {
      */
     override fun dismiss() {
         if (pasteWarning.value) return
-        teardown()
+        // Already playing: commit and dismiss arrive together, and a second pass
+        // here would restart the burst and post a second teardown.
+        if (poofing.value) return
+        // The text has landed somewhere else by now, and the window vanishing on
+        // the same frame is what made that moment silent. Hold it open for exactly
+        // as long as the mist takes to clear.
+        poofing.value = true
+        moveOverlay()
+        mainHandler.postDelayed({ teardown() }, POOF_MS.toLong())
     }
 
     /** Sends the user to the switch, and gets out of the way behind them. */
@@ -545,6 +618,8 @@ class OverlayDictationService : Service(), DictationSession.Host {
         viewHost = null
         minimized.value = false
         pasteWarning.value = false
+        poofing.value = false
+        mainHandler.removeCallbacksAndMessages(null)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -615,8 +690,27 @@ class OverlayDictationService : Service(), DictationSession.Host {
 
         /** Where the puck starts out: clear of the gesture bar, not sitting on it. */
         private const val MINIMIZED_INSET_DP = 24
-        private const val KEY_PUCK_X = "overlay_puck_x"
+        private const val KEY_PUCK_COLUMN = "overlay_puck_column"
         private const val KEY_PUCK_Y = "overlay_puck_y"
+
+        private const val COLUMN_LEFT = 0
+        private const val COLUMN_CENTER = 1
+        private const val COLUMN_RIGHT = 2
+        private val COLUMNS = listOf(COLUMN_LEFT, COLUMN_CENTER, COLUMN_RIGHT)
+
+        /**
+         * How far the puck sits off the screen edge in its outer columns. Flush
+         * against the edge reads as something that has fallen off the screen
+         * rather than as something parked there, and on a curved display it is
+         * also where the glass stops being flat.
+         */
+        private const val PUCK_EDGE_PADDING_DP = 16
+
+        /** Must match MinimizedPuck's width - the columns are measured off it. */
+        private const val PUCK_WIDTH_DP = 78
+
+        /** How far the mist is allowed to travel past the puck it leaves. */
+        const val POOF_MARGIN_DP = 56
         private const val KEY_PUCK_MODE = "overlay_puck_mode"
     }
 }
