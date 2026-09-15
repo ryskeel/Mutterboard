@@ -89,12 +89,19 @@ class CasualRefiner(private val apiKey: String) {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                // Silent at the product level by design - the caller commits the
+                // raw transcript so a message is never lost. Say WHY in debug
+                // builds: that silence is what hid a dead model id for days.
+                if (BuildConfig.DEBUG) Log.i(TAG, "refine transport failure: $e")
                 onResult(null)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string()
                 if (!response.isSuccessful || body == null) {
+                    if (BuildConfig.DEBUG) {
+                        Log.i(TAG, "refine HTTP ${response.code}: ${body?.take(500)}")
+                    }
                     onResult(null)
                     return
                 }
@@ -207,8 +214,11 @@ class CasualRefiner(private val apiKey: String) {
 
         // Same model as the default pass, on purpose: casual mode is the same
         // edit rendered differently, so there's no reason to trade away the
-        // faithfulness the 27b already demonstrated.
-        private const val MODEL = "qwen/qwen3.6-27b"
+        // faithfulness the 27b already demonstrated. Moved off qwen3.6-27b when
+        // Groq stopped serving it - see the note in GroqRefiner, and keep the
+        // two ids in step: a stale id here breaks only casual mode, which reads
+        // as the toggle doing nothing rather than as an outage.
+        private const val MODEL = "qwen/qwen3.8-27b"
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
         /**

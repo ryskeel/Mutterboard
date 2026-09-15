@@ -240,6 +240,13 @@ prompt.** They are the design document.
   message once. Any prompt change that makes output diverge further from the
   input must be checked against it.
 
+- **The Groq model id expires, and the app hides it.** Both refiners fall back
+  to the raw transcript on any failure, so a decommissioned model id reads as
+  "the cleanup stopped happening" with nothing on screen and no crash. It has
+  happened twice now (llama-3.3-70b in August 2026, qwen3.6-27b in September).
+  When refined output looks like bare Whisper, read the debug HTTP log before
+  touching the prompt, and keep the id in both refiners in step.
+
 - **Whisper's output is already punctuated and capitalized.** It usually returns
   document-style prose; on fast speech it returns bare unpunctuated text. Any
   prompt work has to handle both. Casual mode is mostly *subtraction*. Note the

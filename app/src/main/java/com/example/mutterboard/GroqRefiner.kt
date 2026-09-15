@@ -75,9 +75,11 @@ class GroqRefiner(private val apiKey: String) {
         val payload = JSONObject().apply {
             put("model", MODEL)
             put("temperature", 0)
-            // Qwen3.6 is a thinking model and reasons by default: it emits a
-            // <think> block into the content and takes ~4.4s instead of ~0.4s,
-            // which is fatal for a keyboard. "none" turns it off entirely.
+            // Qwen is a thinking model and 3.6 reasoned by default: it emitted
+            // a <think> block into the content and took ~4.4s instead of ~0.4s,
+            // which is fatal for a keyboard. "none" turns it off entirely. 3.8
+            // defaults to none, but send it anyway - the default is the model's
+            // to change, and this pass cannot afford the latency if it does.
             put("reasoning_effort", "none")
             // Groq admits a request only if its EXPECTED output fits the
             // tier's output-tokens-per-minute budget. With no max_tokens it
@@ -265,16 +267,23 @@ class GroqRefiner(private val apiKey: String) {
         // anything that could change meaning (e.g. "not") must NOT go here.
         private val IGNORED_TOKENS = setOf("a", "an", "the", "and")
 
-        // Groq decommissioned llama-3.3-70b-versatile on 2026-08-16. Qwen3.6 27B
-        // is the replacement: on a bake-off of the prompt below it matched the
-        // 70b edit-for-edit (including collapsing stutter repeats and refusing to
-        // answer a dictated question) at a slightly better median latency.
+        // Groq stopped serving qwen/qwen3.6-27b around 2026-09-11; the id now
+        // returns an unsupported-model error, which the refiner's own
+        // fall-back-to-raw contract turns into "the cleanup pass quietly stopped
+        // happening" rather than anything visible. qwen3.8-27b is its successor
+        // and Groq's own migration target. Assume this recurs: a model id here
+        // has a shelf life of months, and the symptom is always transcripts
+        // arriving unrefined, so check the debug HTTP log before the prompt.
         //
-        // Earlier history, still the reason a small model isn't used here:
+        // Earlier history: llama-3.3-70b-versatile was decommissioned
+        // 2026-08-16, and qwen3.6-27b replaced it after matching the 70b
+        // edit-for-edit on a bake-off of the prompt below (collapsing stutter
+        // repeats, refusing to answer a dictated question) at a slightly better
+        // median latency. Still the reason a small model isn't used here:
         // llama-3.1-8b-instant was too lossy on longer dictations — even with an
         // explicit "reproduce the whole message" rule it dropped trailing
         // sentences.
-        private const val MODEL = "qwen/qwen3.6-27b"
+        private const val MODEL = "qwen/qwen3.8-27b"
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
         /**
