@@ -228,14 +228,15 @@ nightly features Ry picks one at a time.
 - **Pastiera is GPL-3.0, so Mutterboard is too.** Ry agreed; it is a hobby
   project and stays open source.
 - **Mutterboard is the host, Pastiera is the guest.** Its source sits under
-  `pastiera/`, subtree-merged from the `v0.85` tag (the last stable; the 0.86
+  `keyboard/` (the name is ours to pick; GPL only asks that the copyright
+  notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag (the last stable; the 0.86
   Ry ran was a nightly) with full history. Remotes: `pastiera` is Ry's fork,
   `pastiera-upstream` is palsoftware. Nightly is not a separate repo, it is
   upstream `main`. Pick a nightly change across with
-  `git cherry-pick -Xsubtree=pastiera <sha>`.
+  `git cherry-pick -Xsubtree=keyboard <sha>`.
 - **Upstream tags are fetched under `pastiera/*`** and both remotes are
   `--no-tags`, so they never mix with Mutterboard's own release tags.
-- `pastiera/` still builds on its own (`./gradlew assembleStableDebug` inside
+- `keyboard/` still builds on its own (`./gradlew assembleStableDebug` inside
   it). Nothing is wired into Mutterboard's app yet.
 
 ## The refiners are the heart of this app
