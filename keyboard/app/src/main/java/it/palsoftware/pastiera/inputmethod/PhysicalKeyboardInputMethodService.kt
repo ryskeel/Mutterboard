@@ -91,7 +91,7 @@ class PhysicalKeyboardInputMethodService : InputMethodService() {
     private var speechRecognitionManager: SpeechRecognitionManager? = null
     private var isSpeechRecognitionActive: Boolean = false
     private val externalDictation by lazy {
-        it.palsoftware.pastiera.inputmethod.voice.ExternalDictationController(
+        it.palsoftware.pastiera.inputmethod.mutterboard.voice.ExternalDictationController(
             this, { currentInputConnection }, { candidatesBarController }
         )
     }
@@ -1959,7 +1959,12 @@ class PhysicalKeyboardInputMethodService : InputMethodService() {
         
         if (isEditable && !restarting) {
             val autoShowKeyboardEnabled = SettingsManager.getAutoShowKeyboard(this)
-            if (autoShowKeyboardEnabled && isReallyEditable) {
+            if (
+                autoShowKeyboardEnabled &&
+                isReallyEditable &&
+                // Mutterboard: see mutterboard/HomeScreen.
+                !it.palsoftware.pastiera.inputmethod.mutterboard.HomeScreen.isHomeApp(this, info?.packageName)
+            ) {
                 if (!isInputViewShown && isInputViewActive) {
                     ensureInputViewCreated()
                 }

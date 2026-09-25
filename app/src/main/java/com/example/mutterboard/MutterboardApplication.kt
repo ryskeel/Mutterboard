@@ -1,7 +1,7 @@
 package com.example.mutterboard
 
 import android.app.Application
-import it.palsoftware.pastiera.inputmethod.voice.ExternalDictation
+import it.palsoftware.pastiera.inputmethod.mutterboard.voice.ExternalDictation
 
 class MutterboardApplication : Application() {
     override fun onCreate() {

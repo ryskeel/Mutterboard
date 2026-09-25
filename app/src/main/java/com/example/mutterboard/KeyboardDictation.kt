@@ -1,7 +1,7 @@
 package com.example.mutterboard
 
 import android.content.Context
-import it.palsoftware.pastiera.inputmethod.voice.ExternalDictation
+import it.palsoftware.pastiera.inputmethod.mutterboard.voice.ExternalDictation
 
 /**
  * The physical keyboard's mic button, running on [DictationSession].

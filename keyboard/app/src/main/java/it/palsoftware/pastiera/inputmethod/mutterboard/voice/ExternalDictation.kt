@@ -1,4 +1,4 @@
-package it.palsoftware.pastiera.inputmethod.voice
+package it.palsoftware.pastiera.inputmethod.mutterboard.voice
 
 import android.content.Context
 

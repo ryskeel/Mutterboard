@@ -1,4 +1,4 @@
-package it.palsoftware.pastiera.inputmethod.voice
+package it.palsoftware.pastiera.inputmethod.mutterboard.voice
 
 import android.content.Context
 import android.os.Handler
@@ -47,27 +47,29 @@ class ExternalDictationController(
             active.micTapped()
             return true
         }
-        lateinit var dictation: ExternalDictation
-        dictation = factory(context, object : ExternalDictation.Callbacks {
+        // Null until the factory returns: the session reports its idle state
+        // from inside its own constructor, and that report is not for us.
+        var dictation: ExternalDictation? = null
+        val created = factory(context, object : ExternalDictation.Callbacks {
+            private fun mine() = dictation != null && current === dictation
+
             override fun commit(text: String) {
-                if (current !== dictation) return
-                inputConnection()?.commitText(text, 1)
+                if (mine()) inputConnection()?.commitText(text, 1)
             }
 
             override fun onUpdate(update: ExternalDictation.Update) {
-                if (current !== dictation) return
-                render(update)
+                if (mine()) render(update)
             }
 
             override fun onFinished() {
-                if (current !== dictation) return
-                finish()
+                if (mine()) finish()
             }
         })
-        current = dictation
+        dictation = created
+        current = created
         bar().showDictationStrip(true) { cancel() }
         bar().setMicrophoneButtonActive(true)
-        dictation.start()
+        created.start()
         return true
     }
 
