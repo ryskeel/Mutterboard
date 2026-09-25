@@ -198,21 +198,8 @@ class CandidatesBarController(
         candidatesStatusBar.updateMicrophoneAudioLevel(rmsdB)
     }
     
-    // Mutterboard: the dictation strip. See voice/ExternalDictationController.
-    fun showDictationStrip(show: Boolean, onCancel: (() -> Unit)?) {
-        inputStatusBar.showDictationStrip(show, onCancel)
-        candidatesStatusBar.showDictationStrip(show, onCancel)
-    }
-
-    fun setDictationCaption(text: String?) {
-        inputStatusBar.setDictationCaption(text)
-        candidatesStatusBar.setDictationCaption(text)
-    }
-
-    fun updateDictationLevel(level: Float) {
-        inputStatusBar.updateDictationLevel(level)
-        candidatesStatusBar.updateDictationLevel(level)
-    }
+    // Mutterboard: see mutterboard/voice/DictationBar.
+    val dictationBars get() = listOf(inputStatusBar.dictationBar, candidatesStatusBar.dictationBar)
 
     fun showSpeechRecognitionHint(show: Boolean) {
         inputStatusBar.showSpeechRecognitionHint(show)

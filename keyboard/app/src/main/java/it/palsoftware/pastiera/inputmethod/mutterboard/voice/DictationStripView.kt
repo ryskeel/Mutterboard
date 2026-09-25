@@ -4,7 +4,8 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.RectF
+import android.graphics.Path
+import android.os.SystemClock
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
@@ -15,8 +16,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import it.palsoftware.pastiera.R
 import kotlin.math.PI
-import kotlin.math.abs
-import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.pow
 import kotlin.math.sin
 
 /**
@@ -24,10 +25,12 @@ import kotlin.math.sin
  * where the suggestions were, and a cancel button. Stop is the mic button
  * itself, which turns into one for the duration.
  *
- * A caption replaces the wave whenever there is something to say instead
- * ("Transcribing…", "Set Groq API key").
+ * A caption replaces the wave only when something has gone wrong ("Set Groq
+ * API key"). Transcribing is said by the wave, as in the overlay.
  */
 class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context) {
+
+    enum class Posture { LISTENING, THINKING, DONE, MISSED }
 
     var onCancel: (() -> Unit)? = null
 
@@ -50,6 +53,9 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
             addView(wave, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             addView(caption, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
+        // Inset from the cancel button's side too, so the wave is centred on
+        // the bar rather than on what is left of it.
+        addView(View(context), LayoutParams(heightPx, heightPx))
         addView(middle, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f))
 
         val cancel = ImageView(context).apply {
@@ -67,7 +73,13 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
         addView(cancel, LayoutParams(heightPx, heightPx))
     }
 
-    fun setLevel(level: Float) = wave.setLevel(level)
+    fun setLevel(level: Float) {
+        wave.level = level.coerceIn(0f, 1f)
+    }
+
+    fun setPosture(posture: Posture) {
+        wave.posture = posture
+    }
 
     fun setCaption(text: String?) {
         caption.text = text
@@ -76,75 +88,74 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
     }
 
     /**
-     * Mutterboard's listening wave (WaveformView in the app), copied rather than
-     * shared: the app's copy is tinted from a Material theme this keyboard does
-     * not run under, and it draws on a dark bar here, so it is white.
+     * The overlay's squiggle (DictationWave in the app), ported to a View: one
+     * long wave that tapers to nothing at both ends and doubles as the level
+     * meter. It travels and rides the mic while listening, swells slowly and
+     * evenly while thinking, and flattens to a level line when done.
      */
     private class WaveView(context: Context) : View(context) {
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
-        private val rect = RectF()
-        private var smoothed = 0f
-        private var target = 0f
+        var posture = Posture.LISTENING
+        var level = 0f
+
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeWidth = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 3f, resources.displayMetrics)
+        }
+        private val path = Path()
         private var phase = 0f
-
-        fun setLevel(level: Float) {
-            target = level.coerceIn(0f, 1f)
-        }
-
-        private val ticker = object : Runnable {
-            override fun run() {
-                smoothed += (target - smoothed) * 0.25f
-                phase += 0.28f
-                invalidate()
-                postDelayed(this, FRAME_MS)
-            }
-        }
-
-        override fun onAttachedToWindow() {
-            super.onAttachedToWindow()
-            post(ticker)
-        }
-
-        override fun onDetachedFromWindow() {
-            removeCallbacks(ticker)
-            super.onDetachedFromWindow()
-        }
+        private var peak = 0f
+        private var amp = 0f
+        private var last = 0L
 
         override fun onDraw(canvas: Canvas) {
+            val now = SystemClock.uptimeMillis()
+            val dt = if (last == 0L) 0f else ((now - last) / 1000f).coerceIn(0f, 0.1f)
+            last = now
+
+            val ampTau = if (level > amp) 0.12f else 0.26f
+            amp += (level - amp) * (1f - exp(-dt / ampTau))
+            phase += dt * when (posture) {
+                Posture.LISTENING -> 2.1f + amp * 1.5f
+                Posture.THINKING -> 1.15f
+                else -> 0.55f
+            }
+            val target = when (posture) {
+                Posture.LISTENING -> 0.09f + amp * 0.80f
+                Posture.THINKING -> 0.24f
+                Posture.DONE -> 0f
+                Posture.MISSED -> 0.05f
+            }
+            val tau = if (target > peak) 0.10f else 0.22f
+            peak += (target - peak) * (1f - exp(-dt / tau))
+
             val w = width.toFloat()
             val h = height.toFloat()
-            if (w <= 0f || h <= 0f) return
-            val cy = h / 2f
-            val barWidth = dp(5f)
-            val pitch = barWidth + dp(6f)
-            val startX = (w - ((BAR_COUNT - 1) * pitch + barWidth)) / 2f
-            val center = (BAR_COUNT - 1) / 2f
-            val maxHalf = (h / 2f - dp(4f)).coerceAtLeast(barWidth)
-            val radius = barWidth / 2f
-            val level = IDLE_BASELINE + (1f - IDLE_BASELINE) * smoothed
-            for (i in 0 until BAR_COUNT) {
-                val dist = abs(i - center) / center
-                val envelope = 0.34f + 0.66f * cos(dist * (PI.toFloat() / 2f))
-                val wiggle = 0.5f + 0.5f * sin(phase + i * 0.7f)
-                val motion = IDLE_MOTION + (WIGGLE_DEPTH - IDLE_MOTION) * smoothed
-                val half = (maxHalf * envelope * level * ((1f - motion) + motion * wiggle)).coerceAtLeast(radius)
-                val left = startX + i * pitch
-                rect.set(left, cy - half, left + barWidth, cy + half)
-                paint.alpha = (EDGE_ALPHA + (255f - EDGE_ALPHA) * (1f - dist)).toInt()
-                canvas.drawRoundRect(rect, radius, radius, paint)
+            val centreY = h / 2f
+            val reach = peak * (h - paint.strokeWidth) / 2f
+            path.reset()
+            for (i in 0..SAMPLES) {
+                val f = i / SAMPLES.toFloat()
+                val envelope = sin(PI * f).pow(0.75).toFloat()
+                val y = centreY + reach * envelope * sin(f * CYCLES * 2f * PI.toFloat() - phase)
+                if (i == 0) path.moveTo(f * w, y) else path.lineTo(f * w, y)
+            }
+            canvas.drawPath(path, paint)
+            if (isShown) postInvalidateOnAnimation()
+        }
+
+        override fun onVisibilityChanged(changedView: View, visibility: Int) {
+            super.onVisibilityChanged(changedView, visibility)
+            if (isShown) {
+                last = 0L
+                postInvalidateOnAnimation()
             }
         }
 
-        private fun dp(v: Float) =
-            TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics)
-
-        companion object {
-            const val FRAME_MS = 33L
-            const val BAR_COUNT = 15
-            const val IDLE_BASELINE = 0.14f
-            const val WIGGLE_DEPTH = 0.5f
-            const val IDLE_MOTION = 0.05f
-            const val EDGE_ALPHA = 70f
+        private companion object {
+            const val SAMPLES = 160
+            const val CYCLES = 2.5f
         }
     }
 }
