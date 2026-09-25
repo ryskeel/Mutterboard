@@ -24,3 +24,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "Mutterboard"
 include(":app")
+
+// Pastiera's keyboard, built as a library from its own source tree (see
+// keyboard/app/mutterboard.gradle.kts for why it has a build file of its own).
+include(":keyboard")
+project(":keyboard").projectDir = file("keyboard/app")
+project(":keyboard").buildFileName = "mutterboard.gradle.kts"

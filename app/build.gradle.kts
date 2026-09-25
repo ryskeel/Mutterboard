@@ -38,7 +38,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.mutterboard"
-        minSdk = 24
+        // 29 is Pastiera's floor, and the keyboard module cannot go lower.
+        minSdk = 29
         targetSdk = 36
         // Overridable from CI so a release derives its version from the git tag;
         // locally, falls back to the latest tag (see gitVersionName above).
@@ -91,6 +92,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":keyboard"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

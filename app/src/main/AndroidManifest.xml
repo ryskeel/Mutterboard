@@ -24,7 +24,18 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Mutterboard">
+        android:theme="@style/Theme.Mutterboard"
+        tools:replace="android:label,android:theme">
+
+        <!-- Pastiera's own settings screen, minus its LAUNCHER filter: a third
+             app icon would break the one-icon rule below, and Mutterboard's
+             settings are the way in. -->
+        <activity
+            android:name="it.palsoftware.pastiera.MainActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Pastiera"
+            tools:node="replace" />
 
         <!-- Settings. Reached through the alias below rather than a filter of
              its own, because which of the two entry points owns the app icon is
