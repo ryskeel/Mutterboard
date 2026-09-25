@@ -8,7 +8,9 @@ import android.util.TypedValue
 import android.util.Log
 import android.view.View
 import android.view.ViewTreeObserver
+import android.view.ViewGroup
 import android.widget.LinearLayout
+import it.palsoftware.pastiera.inputmethod.StatusBarController
 
 /**
  * Puts one of the keyboard's bars into its dictating look and takes it out
@@ -36,6 +38,7 @@ class DictationBar(
      * taller for a moment. Whatever it asked for is remembered and restored.
      */
     private val holdSuggestionsDown = ViewTreeObserver.OnPreDrawListener {
+        keepMistVisible()
         val view = suggestions()
         if (view != null && view.visibility != View.GONE) {
             suggestionsVisibilityBefore = view.visibility
@@ -46,6 +49,73 @@ class DictationBar(
         }
     }
     private var holding = false
+
+    /**
+     * The mist is the bar's background, so anything painting a flat colour on
+     * top of it hides it. Stable had nothing doing that; nightly has two: the
+     * themed rows fill themselves, and the Titan 2 Elite rounded corners paint
+     * solid fills beside and below the bottom row. Both are cleared while the
+     * mist is up and put back after. Pastiera re-applies its theme on every
+     * status refresh, which the dictation causes, so this runs every frame.
+     */
+    private val clearedFills = mutableMapOf<View, Drawable>()
+    private var chromeColorsBefore: List<Any>? = null
+
+    private fun keepMistVisible() {
+        val bar = layout() ?: return
+        val aura = aura ?: return
+        if (bar.background !== aura) {
+            (bar.background as? ColorDrawable)?.let { backgroundBefore = it }
+            bar.background = aura
+        }
+        clearFlatFills(bar)
+        (bar as? StatusBarController.ImeChromeLayout)?.let { chrome ->
+            if (chromeColorsBefore == null) {
+                chromeColorsBefore = listOf(
+                    chrome.regularCornerColors, chrome.compactCornerColors,
+                    chrome.bottomFillColors, chrome.expandedCloseColor
+                )
+            }
+            val clear = Color.TRANSPARENT to Color.TRANSPARENT
+            if (chrome.bottomFillColors != clear || chrome.regularCornerColors != clear) {
+                chrome.regularCornerColors = clear
+                chrome.compactCornerColors = clear
+                chrome.bottomFillColors = clear
+                chrome.expandedCloseColor = Color.TRANSPARENT
+                chrome.invalidate()
+            }
+        }
+    }
+
+    // Flat colour fills only: buttons and suggestion pills draw shapes, which
+    // are what the mist is supposed to sit behind.
+    private fun clearFlatFills(group: ViewGroup) {
+        for (i in 0 until group.childCount) {
+            val child = group.getChildAt(i)
+            if (child === strip) continue
+            val bg = child.background
+            if (bg is ColorDrawable && bg.alpha > 0) {
+                clearedFills.putIfAbsent(child, bg)
+                child.background = null
+            }
+            if (child is ViewGroup) clearFlatFills(child)
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun restoreFills() {
+        clearedFills.forEach { (view, bg) -> if (view.background == null) view.background = bg }
+        clearedFills.clear()
+        val before = chromeColorsBefore ?: return
+        (layout() as? StatusBarController.ImeChromeLayout)?.let { chrome ->
+            chrome.regularCornerColors = before[0] as Pair<Int, Int>
+            chrome.compactCornerColors = before[1] as Pair<Int, Int>
+            chrome.bottomFillColors = before[2] as Pair<Int, Int>
+            chrome.expandedCloseColor = before[3] as Int
+            chrome.invalidate()
+        }
+        chromeColorsBefore = null
+    }
 
     private fun trace(what: String) {
         val bar = layout()
@@ -93,6 +163,7 @@ class DictationBar(
                 it.appear()
             }
         }
+        keepMistVisible()
     }
 
     fun setPhase(phase: ExternalDictation.Phase, caption: String?) {
@@ -135,6 +206,7 @@ class DictationBar(
         }
         aura = null
         backgroundBefore = null
+        restoreFills()
         if (holding) {
             layout()?.viewTreeObserver?.removeOnPreDrawListener(holdSuggestionsDown)
             holding = false
