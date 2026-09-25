@@ -90,6 +90,11 @@ class PhysicalKeyboardInputMethodService : InputMethodService() {
     // Speech recognition using SpeechRecognizer (modern approach)
     private var speechRecognitionManager: SpeechRecognitionManager? = null
     private var isSpeechRecognitionActive: Boolean = false
+    private val externalDictation by lazy {
+        it.palsoftware.pastiera.inputmethod.voice.ExternalDictationController(
+            this, { currentInputConnection }, { candidatesBarController }
+        )
+    }
     private var pendingSpeechRecognition: Boolean = false
     
     // Broadcast receiver for speech recognition (deprecated, kept for backwards compatibility)
@@ -325,6 +330,9 @@ class PhysicalKeyboardInputMethodService : InputMethodService() {
      * Starts voice input using SpeechRecognizer via SpeechRecognitionManager.
      */
     private fun startSpeechRecognition() {
+        // Mutterboard: its own dictation when the app has installed it.
+        if (externalDictation.micPressed()) return
+
         // If recognition is already active, toggle it off
         if (isSpeechRecognitionActive) {
             stopSpeechRecognition()
@@ -1662,6 +1670,7 @@ class PhysicalKeyboardInputMethodService : InputMethodService() {
     
     override fun onDestroy() {
         super.onDestroy()
+        externalDictation.destroy()
         stopClipboardCleanupTimer()
         // Remove listener when service is destroyed
         prefsListener?.let {
@@ -2493,6 +2502,7 @@ class PhysicalKeyboardInputMethodService : InputMethodService() {
     
     override fun onWindowHidden() {
         super.onWindowHidden()
+        externalDictation.onHidden()
         multiTapController.finalizeCycle()
         resetModifierStates(preserveNavMode = true)
         suggestionController.onContextReset()

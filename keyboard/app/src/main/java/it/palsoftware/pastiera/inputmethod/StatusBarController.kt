@@ -184,6 +184,44 @@ class StatusBarController(
      * Shows or hides the speech recognition hint message.
      * When showing, replaces the swipe hint with speech recognition message.
      */
+    // Mutterboard: while dictating, the suggestion row is swapped for the wave.
+    private var dictationStrip: it.palsoftware.pastiera.inputmethod.voice.DictationStripView? = null
+    private var suggestionsVisibilityBeforeDictation: Int? = null
+
+    fun showDictationStrip(show: Boolean, onCancel: (() -> Unit)?) {
+        val layout = statusBarLayout ?: return
+        val suggestions = fullSuggestionsBar?.ensureView()
+        if (show) {
+            val strip = dictationStrip ?: it.palsoftware.pastiera.inputmethod.voice.DictationStripView(
+                context,
+                TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 36f, context.resources.displayMetrics).toInt()
+            ).also {
+                dictationStrip = it
+                layout.addView(it, 0)
+            }
+            strip.onCancel = onCancel
+            strip.setCaption(null)
+            strip.visibility = View.VISIBLE
+            if (suggestionsVisibilityBeforeDictation == null) {
+                suggestionsVisibilityBeforeDictation = suggestions?.visibility
+            }
+            suggestions?.visibility = View.GONE
+        } else {
+            dictationStrip?.visibility = View.GONE
+            dictationStrip?.onCancel = null
+            suggestionsVisibilityBeforeDictation?.let { suggestions?.visibility = it }
+            suggestionsVisibilityBeforeDictation = null
+        }
+    }
+
+    fun setDictationCaption(text: String?) {
+        dictationStrip?.setCaption(text)
+    }
+
+    fun updateDictationLevel(level: Float) {
+        dictationStrip?.setLevel(level)
+    }
+
     fun showSpeechRecognitionHint(show: Boolean) {
         variationBarView?.showSpeechRecognitionHint(show)
     }

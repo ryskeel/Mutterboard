@@ -114,6 +114,8 @@ class MicrophoneButtonFactory : StatusBarButtonFactory {
     
     private fun startAudioFeedback(button: ImageView, stateHolder: MicrophoneStateHolder) {
         setStateDescriptionIfChanged(button, button.context.getString(R.string.status_bar_state_on))
+        // Mutterboard: while it is recording, the mic button is the stop button.
+        button.setImageResource(R.drawable.mutterboard_ic_stop_24)
         // Stop any existing animation
         stateHolder.pulseAnimator?.cancel()
         stateHolder.pulseAnimator = null
@@ -143,6 +145,7 @@ class MicrophoneButtonFactory : StatusBarButtonFactory {
     
     private fun stopAudioFeedback(button: ImageView, stateHolder: MicrophoneStateHolder) {
         setStateDescriptionIfChanged(button, button.context.getString(R.string.status_bar_state_off))
+        button.setImageResource(R.drawable.ic_baseline_mic_24)
         // Cancel any pulse animation if still running
         stateHolder.pulseAnimator?.cancel()
         stateHolder.pulseAnimator = null
