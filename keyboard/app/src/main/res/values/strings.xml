@@ -1,0 +1,969 @@
+<resources>
+    <string name="app_name">Pastiera</string>
+    <string name="input_method_name">Pastiera</string>
+    <string name="input_method_name_en">English</string>
+    <string name="input_method_name_it">Italiano</string>
+    <string name="input_method_name_fr">Français</string>
+    <string name="input_method_name_de">Deutsch</string>
+    <string name="input_method_name_pl">Polski</string>
+    <string name="input_method_name_da">Dansk</string>
+    <string name="input_method_name_no">Norsk</string>
+    <string name="input_method_name_es">Español</string>
+    <string name="input_method_name_pt">Português</string>
+    <string name="input_method_name_ru">Русский</string>
+    <string name="input_method_name_sr">Српски</string>
+    <string name="input_method_name_uk">Українська</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="back">Back</string>
+    <string name="settings_back_content_description">Back</string>
+    
+    <!-- Long Press Section -->
+    <string name="long_press_title">Long Press</string>
+    <string name="keyboard_timing_long_press_value">%1$dms</string>
+    <string name="long_press_duration">Long Press Duration: %1$dms</string>
+    <string name="long_press_description">Wait time before a long press is recognized. A lower value makes long press more responsive, while a higher value requires a longer press.</string>
+    <string name="setting_applied_immediately">Setting applied immediately</string>
+    
+    <!-- Auto Capitalize Section -->
+    <string name="auto_capitalize_title">Auto-Capitalize First Letter</string>
+    <string name="auto_capitalize_description">Automatically capitalizes the first letter when starting to type in an empty text field.</string>
+
+    <!-- Auto Capitalize After Period Section -->
+    <string name="auto_capitalize_after_period_title">Auto-Capitalize After Period</string>
+    <string name="auto_capitalize_after_period_description">Automatically capitalizes the next letter after typing a period followed by a space (end of sentence).</string>
+
+    <!-- Double Space to Period Section -->
+    <string name="double_space_to_period_title">Double Space to Period</string>
+    <string name="double_space_to_period_description">Double tap space to insert a period followed by a space and capitalize the next letter.</string>
+
+    <!-- Clear Alt on Space Section -->
+    <string name="clear_alt_on_space_title">Clear Alt on Space</string>
+    <string name="clear_alt_on_space_description">Automatically disable Alt or Alt-Lock when pressing Space.</string>
+    
+    <!-- Swipe to Delete Section -->
+    <string name="swipe_to_delete_title">Enable Swipe to Delete</string>
+
+    <!-- Delete Alternatives Section -->
+    <string name="delete_alternatives_title">Delete</string>
+    <string name="delete_alternatives_description">Alternative methods to delete characters to the right of cursor</string>
+    <string name="shift_backspace_delete_title">Shift + Backspace</string>
+    <string name="alt_backspace_delete_title">Alt + Backspace</string>
+    <string name="backspace_at_start_delete_title">Backspace at line start</string>
+    <string name="delete_alternatives_hint">Hint: Ctrl + key can be configured in Nav Mode settings</string>
+    <string name="delete_alternatives_selection_hint">When text is selected, these alternatives are disabled and Backspace deletes the selection.</string>
+
+    <!-- Swipe Incremental Threshold Section -->
+    <string name="swipe_incremental_threshold_title">Swipe Bar Sensitivity</string>
+    <string name="swipe_incremental_threshold_description">Distance required to move cursor one position. Lower values make the cursor move faster.</string>
+    
+    <!-- Auto Show Keyboard Section -->
+    <string name="auto_show_keyboard_title">Auto Show Keyboard</string>
+    
+    <!-- Alt+Ctrl Speech Recognition Shortcut Section -->
+    <string name="alt_ctrl_speech_shortcut_title">Alt+Ctrl Speech Recognition</string>
+    <string name="alt_ctrl_speech_shortcut_description">Enable Alt+Ctrl keyboard shortcut to start speech recognition</string>
+
+    <!-- Static Variation Bar Mode -->
+    <string name="static_variation_bar_mode_title">Static Variation Bar</string>
+    <string name="static_variation_bar_mode_description">Always show a fixed set of utility keys in the variation row instead of context-based variations.</string>
+    <string name="static_variation_preset_title">Static variation preset</string>
+    <string name="static_variation_preset_off">Off</string>
+    <string name="static_variation_preset_off_description">Use dynamic variations and suggestions only.</string>
+    <string name="static_variation_preset_symbols">Symbols</string>
+    <string name="static_variation_preset_symbols_description">Default punctuation row.</string>
+    <string name="static_variation_preset_numbers">Numbers</string>
+    <string name="static_variation_preset_numbers_description">Quick number row.</string>
+    <string name="static_variation_preset_alternative">Alternative symbols</string>
+    <string name="static_variation_preset_alternative_description">Brackets and special characters.</string>
+    <string name="static_variation_preset_dev_choice">Dev’s Choice</string>
+    <string name="static_variation_preset_dev_choice_description">Curated punctuation row.</string>
+    <string name="static_variation_base_layer_title">Alternative Top Row Preset</string>
+    <string name="static_variation_base_layer_description">Switch the top static row between default symbols and an alternative bracket/special-character set. Shift and Alt layers stay independent.</string>
+    <string name="static_variation_layer_sticky_title">Sticky Layer</string>
+    <string name="static_variation_layer_sticky_description">When Shift/Alt layer is latched by double tap, keep it active after selecting a symbol from that layer.</string>
+    <string name="swipe_to_move_cursor">Swipe to move cursor</string>
+    
+    <!-- Info Section -->
+    <string name="info_title">Information</string>
+    <string name="info_description">Settings are automatically saved and immediately applied to the input method.</string>
+    
+    <!-- Main Activity -->
+    <string name="keyboard_title">Pastiera Keyboard</string>
+    <string name="keyboard_subtitle">Physical keyboard with long press support</string>
+    <string name="settings_content_description">Settings</string>
+    
+    <!-- Installation Section -->
+    <string name="installation_title">Installation</string>
+    <string name="installation_step1">1. Click the button below to open settings</string>
+    <string name="installation_step2">2. Enable \'Pastiera Physical Keyboard\'</string>
+    <string name="installation_step3">3. Come back here and test the keyboard</string>
+    <string name="open_keyboard_settings">Open Keyboard Settings</string>
+    
+    <!-- Main Activity - Enable/Select IME -->
+    <string name="enable_pastiera">Enable Pastiera</string>
+    <string name="pastiera_not_enabled">Pastiera is not enabled</string>
+    <string name="choose_input_method">Choose input method</string>
+    <string name="pastiera_not_selected">Pastiera is not selected</string>
+    
+    <!-- Test Section -->
+    <string name="test_keyboard_title">Keyboard Test</string>
+    <string name="test_keyboard_description">Connect a physical keyboard and test below:</string>
+    <string name="test_keyboard_normal">• Normal press: inserts the character</string>
+    <string name="test_keyboard_long_press">• Long press (500ms): inserts the Alt character</string>
+    <string name="test_field_label">Test field</string>
+    <string name="test_field_placeholder">Type here with the physical keyboard…</string>
+    
+    <!-- Last Event Section -->
+    <string name="last_keyboard_event_title">Last Keyboard Event</string>
+    <string name="no_event_yet">No event yet</string>
+    <string name="ignore_back_short">Ignore BACK</string>
+    
+    <!-- Long Press Mappings Section -->
+    <string name="long_press_mappings_title">Long Press Mappings</string>
+    <string name="long_press_mappings_line1">Q→0, W→1, E→2, R→3, T→(, Y→), U→-, I→_, O→\', P→:</string>
+    <string name="long_press_mappings_line2">A→@, S→4, D→5, F→6, G→*, H→#, J→+, K→\", L→\'</string>
+    <string name="long_press_mappings_line3">Z→!, X→7, C→8, V→9, B→., N→\', M→?</string>
+    
+    <!-- Buttons -->
+    <string name="settings_button">Settings</string>
+    <string name="change_keyboard_button">Change Keyboard</string>
+    <string name="save">Save</string>
+    
+    <!-- SYM Customization -->
+    <string name="sym_customization_title">Customize SYM Keyboard</string>
+    <string name="sym_customization_button">Customize SYM Keyboard</string>
+    <string name="sym_customization_description">Personalize emoji mappings for the SYM keyboard. Tap on any key to change its emoji.</string>
+    <string name="reset_to_default">Reset to Default</string>
+    <string name="select_emoji">Select Emoji</string>
+    <string name="close">Close</string>
+    
+    <!-- Auto-Correction Section -->
+    <string name="auto_correct_title">Auto Substitutions</string>
+    <string name="auto_correct_languages_title">Substitutions</string>
+    <string name="auto_correct_settings_title">Auto-Correction Substitutions</string>
+    <string name="auto_correct_settings_description">Select which substitutions to use for auto-correction. The system language is shown at the top.</string>
+    <string name="auto_correct_system_language">System language</string>
+    <string name="auto_correct_ricette_pastiera_description">Customizations valid for all substitutions</string>
+    <string name="auto_correct_other_languages">Other Substitutions</string>
+    <string name="auto_correct_custom_languages">Custom Substitutions</string>
+    <string name="auto_correct_at_least_one_language_required">At least one substitution required for operation</string>
+    <string name="auto_correct_edit">Edit</string>
+    <string name="auto_correct_edit_description">Tap on a correction to edit it, or use the + button to add a new one.</string>
+    <string name="auto_correct_add_correction">Add Correction</string>
+    <string name="auto_correct_edit_correction">Edit Correction</string>
+    <string name="auto_correct_original">Original</string>
+    <string name="auto_correct_corrected">Corrected</string>
+    <string name="auto_correct_delete">Delete</string>
+    <string name="auto_correct_save">Save</string>
+    <string name="auto_correct_cancel">Cancel</string>
+    <string name="auto_correct_no_corrections">No corrections available. Tap the + button to add one.</string>
+    <string name="auto_correct_add_language">Add New Substitution</string>
+    <string name="auto_correct_language_code">Substitution Code</string>
+    <string name="auto_correct_language_name">Substitution Name</string>
+    <string name="auto_correct_language_code_hint">Enter a code and name for your custom substitution (e.g., \"fr\" / \"French\", \"mydict\" / \"My Dictionary\")</string>
+    <string name="auto_correct_language_code_required">Substitution name is required</string>
+    <string name="auto_correct_language_already_exists">This substitution already exists</string>
+    <string name="auto_correct_suggestions_toggle_title">Suggestions while typing</string>
+    <string name="auto_correct_accent_matching_title">Match accented words</string>
+    <string name="auto_correct_auto_replace_title">Auto-replace on space/enter</string>
+    <string name="auto_correct_max_distance_title">Maximum correction distance</string>
+    <string name="auto_correct_max_distance_off">Off</string>
+    <string name="auto_correct_max_distance_description">Maximum number of character differences allowed for auto-correction. 0 = disabled, 1-3 = increasing tolerance.</string>
+    <string name="auto_correct_manage_user_dict_title">Manage user dictionary</string>
+    <string name="auto_correct_keyboard_proximity_title">Keyboard Proximity Ranking</string>
+    <string name="auto_correct_keyboard_proximity_description">Filter unlikely typos based on key distance (QWERTY/AZERTY/QWERTZ)</string>
+    <string name="auto_correct_edit_type_ranking_title">Edit Type Ranking</string>
+    <string name="auto_correct_edit_type_ranking_description">Rank suggestions by edit type (insert > substitute > delete)</string>
+    <string name="clear">Clear</string>
+    <string name="experimental_suggestions_title">Experimental suggestions</string>
+    <string name="experimental_suggestions_subtitle">Enable the new dictionary/suggestion engine (beta)</string>
+
+    <!-- User dictionary management -->
+    <string name="user_dict_title">User dictionary</string>
+    <string name="user_dict_add_hint">Add a word</string>
+    <string name="user_dict_add_button">Save word</string>
+    <string name="user_dict_empty_state">No user words saved yet.</string>
+    <string name="user_dict_edit_title">Edit word</string>
+    <string name="user_dict_frequency_label">Uses: %1$d</string>
+    
+    <!-- SYM Customization Screen -->
+    <string name="sym_customize_title">Customize SYM Keyboard</string>
+    <string name="sym_auto_close_title">Auto-Close SYM Layout</string>
+    <string name="sym_auto_close_description">Automatically close SYM layout after inserting a character, pressing Alt, or pressing Enter. Does not close with Control or Shift.</string>
+    <string name="sym_enable_emoji_page_title">Enable Emoji Page</string>
+    <string name="sym_enable_emoji_page_description">Show the emoji SYM layout when cycling.</string>
+    <string name="sym_enable_symbols_page_title">Enable Symbols Page</string>
+    <string name="sym_enable_symbols_page_description">Show the symbols SYM layout when cycling.</string>
+    <string name="sym_enable_clipboard_page_title">Enable Clipboard Page</string>
+    <string name="sym_enable_clipboard_page_description">Show the clipboard history when cycling.</string>
+    <string name="sym_enable_emoji_picker_page_title">Enable Emoji Picker Page</string>
+    <string name="sym_enable_emoji_picker_page_description">Show the full emoji picker when cycling.</string>
+    <string name="emoji_picker_expanded_height_title">Larger emoji picker</string>
+    <string name="emoji_picker_expanded_height_description">Use about 1.5x height for the emoji search page; other SYM pages keep their normal height.</string>
+    <string name="sym_swap_pages_title">Arrange SYM pages order</string>
+    <string name="sym_swap_pages_description">Set the exact cycle order for all SYM pages by dragging each row.</string>
+    <string name="sym_order_emoji_first">Emoji first</string>
+    <string name="sym_order_symbols_first">Symbols first</string>
+    <string name="sym_order_clipboard_first">Clipboard first</string>
+    <string name="sym_instructions_title">Instructions</string>
+    <string name="sym_instructions_text">Tap on any key below to change its emoji. Changes are saved automatically.</string>
+    <string name="sym_reset_to_default">Reset to Default</string>
+    <string name="sym_reset_confirm_title">Reset to Default</string>
+    <string name="sym_reset_confirm_message">Are you sure you want to reset all SYM mappings to default? This action cannot be undone.</string>
+    <string name="sym_reset_confirm_button">Reset</string>
+    <string name="cancel">Cancel</string>
+    
+    <!-- Emoji Picker Dialog -->
+    <string name="emoji_picker_title">Select Emoji</string>
+    <string name="emoji_picker_title_for_letter">Select emoji for letter %1$s</string>
+    <string name="emoji_picker_close">Close</string>
+    <string name="emoji_category_smileys">Smileys &amp; People</string>
+    <string name="emoji_category_animals">Animals &amp; Nature</string>
+    <string name="emoji_category_food">Food &amp; Drink</string>
+    <string name="emoji_category_travel">Travel &amp; Places</string>
+    
+    <!-- Modifiers -->
+    <string name="modifier_shift">SHIFT</string>
+    <string name="modifier_ctrl">CTRL</string>
+    
+    <!-- Long Press Modifier Section -->
+    <string name="long_press_modifier_title">Long Press Modifier</string>
+    <string name="long_press_modifier_description">Choose what long press does: Alt+key, Shift+key, character variations, or Sym mappings</string>
+    <string name="long_press_modifier_alt">Alt</string>
+    <string name="long_press_modifier_shift">Shift</string>
+    <string name="long_press_modifier_variations">Variations</string>
+    <string name="long_press_modifier_sym">Sym</string>
+    <string name="typing_sound_title">Typing Sounds</string>
+    <string name="typing_sound_off">Off</string>
+    <string name="typing_sound_click">Keyboard click</string>
+    <string name="typing_sound_typewriter">Typewriter</string>
+    <string name="typing_sound_custom">Custom sound pack…</string>
+    <string name="typing_sound_output_title">Typing Sound Output</string>
+    <string name="typing_sound_output_media">Media volume</string>
+    <string name="typing_sound_output_system">System sounds</string>
+    <string name="typing_sound_output_notification">Notifications</string>
+    <string name="typing_sound_output_dnd_hint">System sounds and notifications follow silent mode and Do Not Disturb.</string>
+    <string name="typing_sound_import_success">Typing sound pack imported</string>
+    <string name="typing_sound_import_failed">Could not import this sound pack. Use a ZIP with audio files in normal/, space/, backspace/, enter/, and modifier/ folders.</string>
+    <string name="typing_sound_docs_title">Sound pack format</string>
+    <string name="typing_sound_docs_description">Open the import guide on pastiera.eu</string>
+    <string name="typing_sound_docs_url">https://pastiera.eu/guides/typing-soundpacks/</string>
+    
+    <!-- Keyboard Layout Section -->
+    <string name="keyboard_layout_title">Keyboard Layout</string>
+    <string name="keyboard_layout_description">Select your keyboard layout. ALT, SYM and Ctrl mappings remain based on physical key position.</string>
+    <string name="keyboard_layout_editor_title">Keyboard Layout Editor</string>
+    <string name="keyboard_layout_no_conversion">Standard</string>
+    <string name="keyboard_layout_no_conversion_description">Standard QWERTY layout (no conversion)</string>
+    <string name="keyboard_layout_conversions_title">Layout Conversions</string>
+    <string name="keyboard_layout_conversions_description">Convert letter keys to match the selected layout</string>
+    <string name="keyboard_layout_viewer_title">Keyboard map</string>
+    <string name="keyboard_layout_viewer_subtitle">Layout: %1$s</string>
+    <string name="keyboard_layout_viewer_unavailable">Unable to load this layout mapping.</string>
+    <string name="keyboard_layout_viewer_empty">No key mappings found for this layout.</string>
+    <string name="keyboard_layout_multitap_badge">multitap</string>
+    <string name="keyboard_layout_viewer_multitap_on">multitap</string>
+    <string name="keyboard_layout_viewer_multitap_off">single</string>
+    <string name="keyboard_layout_viewer_open">View mapping</string>
+    <string name="keyboard_layout_settings_button">Keyboard Layout Settings</string>
+    <string name="keyboard_layout_mode_title">Automatic Layout Mapping</string>
+    <string name="keyboard_layout_mode_auto_description">ON: follow subtype/locale mapping defaults.</string>
+    <string name="keyboard_layout_mode_manual_description">OFF: use one manually selected layout for all locales.</string>
+    <string name="alt_shift_layout_switch_title">Alt+Shift Layout Switch</string>
+    <string name="alt_shift_layout_switch_description">Cycle languages/layouts with Alt+Shift.</string>
+    <string name="toast_on_layout_switch_title">Layout Switch Toast</string>
+    <string name="toast_on_layout_switch_description">Show a toast when switching languages/layouts.</string>
+    <string name="keyboard_profile_override_title">Physical Keyboard Profile</string>
+    <string name="keyboard_profile_override_auto_description">Auto detect from device fingerprint (current: %1$s).</string>
+    <string name="keyboard_profile_override_manual_description">Manual override for device-specific key mappings.</string>
+    <string name="keyboard_profile_option_auto">Auto</string>
+    <string name="keyboard_profile_option_key2">BlackBerry Key2</string>
+    <string name="keyboard_profile_option_q25">BlackBerry Q25</string>
+    <string name="keyboard_profile_option_titan2">Unihertz Titan / Titan 2</string>
+    <string name="keyboard_profile_option_titan2elite_qwerty">Titan 2 Elite (QWERTY)</string>
+    <string name="keyboard_profile_option_mp01">Minimal Phone (MP01)</string>
+    <string name="keyboard_currency_symbol_title">Currency Symbol</string>
+    <string name="keyboard_currency_symbol_description">Symbol inserted by dedicated hardware currency keys.</string>
+    
+    <!-- About Section -->
+    <string name="about_github">GitHub</string>
+    <string name="about_build_info">Pastiera IME - Palsoftware 2026</string>
+    <string name="settings_device_keyboard_info">Device: %1$s; Keyboard: %2$s</string>
+    <string name="about_title">About</string>
+    <string name="about_credits_error">Unable to load credits information.</string>
+    
+    <!-- Launcher Shortcuts Section -->
+    <string name="starter_launcher_shortcuts_title">Pastiera-QuickLauncher</string>
+    <string name="starter_launcher_shortcuts_description">Quick launching, SYM shortcuts, and app key assignments</string>
+    <string name="starter_launcher_shortcuts_intro">These settings share one app-to-key assignment list. Choose where Pastiera should listen for those assigned keys.</string>
+    <string name="launcher_shortcuts_title">Homescreen shortcuts</string>
+    <string name="launcher_shortcuts_experimental">Experimental</string>
+    <string name="launcher_shortcuts_description">Use assigned app keys directly on the Android launcher or home screen.</string>
+    <string name="launcher_shortcuts_configure">Assigned app keys</string>
+    <string name="launcher_shortcuts_configure_description">Tap a key to assign or replace an app. Assigned keys are shared by both trigger modes.</string>
+    <string name="launcher_shortcuts_configure_description_with_quick_launcher">Tap a key to assign or replace an app. Quick launcher is currently assigned to %1$s.</string>
+    <string name="quick_launcher_default_blocked_hint">New: SYM can open the quick launcher. Pastiera would normally assign it to Space, but Space already has a shortcut. Open the assignments page and choose “Open quick launcher” on any key to try it.</string>
+    
+    <!-- Launcher Shortcuts Screen -->
+    <string name="launcher_shortcuts_screen_title">Pastiera-QuickLauncher</string>
+    <string name="launcher_shortcuts_not_assigned">Not assigned</string>
+    <string name="launcher_shortcuts_remove">Remove</string>
+    <string name="launcher_shortcuts_app_name_unavailable">App (name unavailable)</string>
+    <string name="launcher_shortcuts_shortcut_type">Shortcut: %1$s</string>
+    <string name="launcher_shortcuts_shortcut_unknown">unknown</string>
+    <string name="launcher_shortcuts_action_type">Action: %1$s</string>
+    
+    <!-- Launcher Shortcut Assignment Activity -->
+    <string name="launcher_shortcut_assignment_title">Assign app to key</string>
+    <string name="launcher_shortcut_assignment_key">Key %1$s</string>
+    <string name="launcher_shortcut_assignment_header">Shortcut</string>
+    <string name="launcher_shortcut_assignment_search_placeholder">Search apps...</string>
+    <string name="launcher_shortcut_assignment_search_description">Search</string>
+    <string name="launcher_shortcut_assignment_close">Close</string>
+    <string name="launcher_shortcut_assignment_no_apps">No apps found</string>
+    <string name="launcher_shortcut_assignment_no_results">No results for \"%1$s\"</string>
+    <string name="launcher_shortcut_assignment_key_name">Key %1$d</string>
+    <string name="quick_launcher_title">Pastiera-QuickLauncher</string>
+    <string name="quick_launcher_subtitle">Type to search. Enter opens the top result.</string>
+    <string name="quick_launcher_close">Close</string>
+    <string name="quick_launcher_search_placeholder">Start typing...</string>
+    <string name="quick_launcher_auto_start_single">Launch automatically when only one result remains</string>
+    <string name="quick_launcher_auto_start_single_title">Open unique match automatically</string>
+    <string name="quick_launcher_auto_start_single_description">When the quick launcher search leaves only one app, launch it without pressing Enter.</string>
+    <string name="quick_launcher_limit_results_title">Show only top search results</string>
+    <string name="quick_launcher_limit_results_description">Do not render the full alphabetical app list. The quick launcher stays empty until you type and then shows only the top three matches.</string>
+    <string name="quick_launcher_text_field_shortcuts_title">Allow SYM+Space in text fields</string>
+    <string name="quick_launcher_text_field_shortcuts_description">When enabled, the QuickLauncher can also open while the cursor is inside an app text field.</string>
+    <string name="quick_launcher_text_field_shortcuts_hint">In text fields, hold SYM and press Space. SYM latch cannot trigger this because tapping SYM cycles the SYM pages.</string>
+    <string name="quick_launcher_respect_keyboard_layout_title">Use active keyboard layout</string>
+    <string name="quick_launcher_respect_keyboard_layout_description">When enabled, search input follows the current Pastiera layout instead of Android’s raw QWERTY key output.</string>
+    <string name="quick_launcher_typo_tolerant_ranking_title">Typo-tolerant search</string>
+    <string name="quick_launcher_typo_tolerant_ranking_description">Also match app names with small typing mistakes. Existing prefix and abbreviation matches still rank higher.</string>
+    <string name="quick_launcher_ranking_info_button">How ranking works</string>
+    <string name="quick_launcher_ranking_info_title">QuickLauncher ranking</string>
+    <string name="quick_launcher_ranking_info_body">Results are ranked in this order: exact app name, app name prefix, word prefix, abbreviation/subsequence match, typo-tolerant app name match, then package-name match. Typo tolerance is ignored for very short queries.</string>
+    <string name="quick_launcher_behavior_title">Behaviour</string>
+    <string name="quick_launcher_behavior_description">Launch rules, result rendering, and SYM+Space from text fields.</string>
+    <string name="quick_launcher_cosmetic_title">Appearance</string>
+    <string name="quick_launcher_cosmetic_description">Width and compact pill presentation.</string>
+    <string name="quick_launcher_width_title">Launcher width</string>
+    <string name="quick_launcher_width_value">%1$d%% screen width</string>
+    <string name="quick_launcher_pill_mode_title">Pill mode</string>
+    <string name="quick_launcher_pill_mode_description">Open as a compact search pill and expand only after typing.</string>
+    <string name="quick_launcher_type_to_search">Start typing to search apps</string>
+    <string name="quick_launcher_loading_apps">Loading apps...</string>
+    <string name="quick_launcher_assign_action">Open quick launcher</string>
+    <string name="quick_launcher_no_apps">No apps found</string>
+    <string name="quick_launcher_no_results">No results for \"%1$s\"</string>
+    <string name="quick_launcher_enter_hint">Enter</string>
+    
+    <!-- Power Shortcuts Section -->
+    <string name="power_shortcuts_title">SYM key shortcuts</string>
+    <string name="power_shortcuts_description">Press SYM and then an assigned key to launch apps or actions.</string>
+    <string name="power_shortcuts_press_key">Press shortcut key to launch</string>
+    
+    <!-- Notification Helper -->
+    <string name="notification_nav_mode_channel_name">Pastiera Nav Mode</string>
+    <string name="notification_nav_mode_channel_description">Notifications for Pastiera nav mode</string>
+    <string name="notification_nav_mode_activated_title">Nav Mode Activated</string>
+    <string name="notification_nav_mode_activated_text">Nav mode activated</string>
+    
+    <!-- Update Notifications -->
+    <string name="notification_update_channel_name">Pastiera Updates</string>
+    <string name="notification_update_channel_description">Notifications about new Pastiera versions</string>
+    <string name="notification_update_available_title">Pastiera - New update available</string>
+    <string name="notification_update_available_text">A new version of Pastiera is available (%1$s)</string>
+    
+    <!-- Speech Recognition -->
+    <string name="speech_recognition_prompt">Speak now...</string>
+    <string name="speech_recognition_error_no_match">No text recognized. Try again.</string>
+    <string name="speech_recognition_error_timeout">No speech input detected.</string>
+    <string name="speech_recognition_error_permission">Microphone permission denied.</string>
+    <string name="speech_recognition_error_network">Network error.</string>
+    <string name="speech_recognition_error_generic">Speech recognition error.</string>
+    <string name="speech_recognition_error_not_available">Speech recognition not available.</string>
+    
+    <!-- Auto Correct Edit Screen -->
+    <string name="auto_correct_search_placeholder">Search corrections...</string>
+    <string name="auto_correct_search_description">Search</string>
+    <string name="auto_correct_clear_search">Clear search</string>
+    <string name="auto_correct_no_corrections_found">No corrections found</string>
+    
+    <!-- Nav Mode Settings -->
+    <string name="nav_mode_title">Nav Mode</string>
+    <string name="nav_mode_guide_title">Nav Mode guide</string>
+    <string name="nav_mode_guide_description">How Ctrl, mappings, app shortcuts, and layout hints work together.</string>
+    <string name="nav_mode_guide_text">Nav Mode turns letter keys into navigation and shortcut keys. The result can differ by app because some apps understand Android editor actions, while others only react to real Ctrl shortcuts.
+
+Ctrl-hold navigation
+When Ctrl-hold navigation is off, physically held Ctrl is passed to the app whenever possible. Shortcuts such as Ctrl+B, Ctrl+I, or Ctrl+Z can then work directly in editors.
+
+When Ctrl-hold navigation is on, physically held Ctrl first uses the Nav Mode mappings below. A mapped key performs its configured Nav Mode command.
+
+Double-tap Ctrl
+Double-tapping Ctrl latches Nav Mode. After that, pressing a letter triggers the Nav Mode mapping until Nav Mode is left again. This is useful for arrows, Page Up/Down, Escape, Tab, and selection commands without holding Ctrl.
+
+Action vs. Native Ctrl
+Actions such as Copy, Paste, Cut, Select All, and Undo are sent as Android editor actions. They work in many text fields, but not every app supports every action.
+
+Use Native Ctrl when an app expects a real shortcut. For example, mapping I to Native Ctrl sends Ctrl+I, so editors such as Google Docs can use it for italic text. Undo can also be mapped as Native Ctrl if an app handles Ctrl+Z better than Android Undo.
+
+QWERTZ on physical QWERTY
+Nav Mode uses the physical key position so navigation remains stable. Layout hints on keys show when the active text layout would treat that physical key as a different letter, such as Y/Z on QWERTZ.
+
+Layout-aware app Ctrl shortcuts
+When held Ctrl is passed to apps, this optional setting can translate Ctrl+letter through the active Pastiera layout first. It affects app shortcuts, not the physical Nav Mode grid.
+
+Overrides
+Each key can be configured as Keycode, Action, Native Ctrl, or None. Use overrides to solve app-specific conflicts without changing the whole mode.</string>
+    <string name="nav_mode_enable_title">Enable Nav Mode</string>
+    <string name="nav_mode_enable_description">Double-tap Ctrl to activate navigation mode</string>
+    <string name="nav_mode_ctrl_hold_title">Ctrl-hold navigation</string>
+    <string name="nav_mode_ctrl_hold_description">When enabled, text fields use Nav Mode mappings while Ctrl is held. When off, Ctrl shortcuts are passed to the app. Keys set to Native Ctrl are always passed through as real Ctrl shortcuts.</string>
+    <string name="layout_aware_ctrl_shortcuts_title">Layout-aware app Ctrl shortcuts</string>
+    <string name="layout_aware_ctrl_shortcuts_description">When held Ctrl is passed to apps, translate Ctrl+letter through the active Pastiera layout first.</string>
+    <string name="layout_aware_ctrl_shortcuts_disabled_description">Disabled while Ctrl-hold navigation is active, because held Ctrl is handled by Nav Mode instead of the app.</string>
+    <string name="layout_aware_ctrl_shortcuts_info_title">Ctrl shortcuts and Nav Mode</string>
+    <string name="layout_aware_ctrl_shortcuts_info_text">There are two paths for held Ctrl. If Ctrl-hold navigation is on, Pastiera handles Ctrl+key with the Nav Mode mappings shown below. If Ctrl-hold navigation is off, Pastiera passes Ctrl+key to the app. This option only affects that app path: when enabled, Ctrl+letter is translated through the active Pastiera layout first, so shortcuts can follow the letters you type. When disabled, apps receive the original physical key positions.</string>
+    <string name="nav_mode_key_mappings">Key Mappings</string>
+    <string name="nav_mode_revert_to_default">Revert to Default</string>
+    <string name="nav_mode_note">Note: Modifying nav mode keys also affects Ctrl+key combinations in text fields.</string>
+    <string name="nav_mode_warning_icon">⚠</string>
+    <string name="nav_mode_configure_key">Configure %1$s</string>
+    <string name="nav_mode_type">Type</string>
+    <string name="nav_mode_keycode">Keycode</string>
+    <string name="nav_mode_action">Action</string>
+    <string name="nav_mode_native_ctrl">Native Ctrl</string>
+    <string name="nav_mode_none">None</string>
+    <string name="nav_mode_use_default">Use Default: %1$s</string>
+    <string name="nav_mode_save">Save</string>
+    <string name="nav_mode_cancel">Cancel</string>
+    <string name="nav_mode_default">default</string>
+    
+    <!-- Unicode Character Picker -->
+    <string name="unicode_picker_title_for_letter">Select character for %1$s</string>
+    <string name="unicode_picker_title">Select unicode character</string>
+    <string name="unicode_picker_close">Close</string>
+    <string name="unicode_category_punctuation">Punctuation</string>
+    <string name="unicode_category_math">Mathematical Symbols</string>
+    <string name="unicode_category_currency">Currencies</string>
+    <string name="unicode_category_technical">Technical Symbols</string>
+    <string name="unicode_category_arrows">Arrows</string>
+    <string name="unicode_category_misc">Miscellaneous</string>
+    <string name="unicode_category_variations">Variations</string>
+    <string name="emoji_category_smileys_and_emotion">Smileys &amp; Emotion</string>
+    <string name="emoji_category_people_and_body">People &amp; Body</string>
+    <string name="emoji_category_animals_and_nature">Animals &amp; Nature</string>
+    <string name="emoji_category_food_and_drink">Food &amp; Drink</string>
+    <string name="emoji_category_travel_and_places">Travel &amp; Places</string>
+    <string name="emoji_category_activities">Activities</string>
+    <string name="emoji_category_objects">Objects</string>
+    <string name="emoji_category_symbols">Symbols</string>
+    <string name="emoji_category_flags">Flags</string>
+    <string name="emoji_category_recents">Recents</string>
+    <string name="emoji_category_emoticons">Emoticons</string>
+    <string name="emoji_picker_error">Unable to load emoji</string>
+    <string name="emoji_picker_search_label">Search</string>
+    <string name="emoji_picker_search_placeholder">Search emoji...</string>
+    <string name="emoji_picker_no_results">No emoji found</string>
+    
+    <!-- Variation Customization -->
+    <string name="variation_customize_title">Customize Variations</string>
+    <string name="app_enter_behavior_title">Enter key behaviour</string>
+    <string name="app_enter_behavior_description">Configure app-specific Enter and newline handling</string>
+    <string name="app_enter_behavior_enable_title">App-specific Enter behaviour</string>
+    <string name="app_enter_behavior_enable_description">Use Pastiera overrides for selected messaging apps. Tested apps show the strategy Pastiera actually uses.</string>
+    <string name="app_enter_behavior_preset_title">Messaging preset</string>
+    <string name="app_enter_behavior_preset_description">Apply a consistent default to installed known messaging apps.</string>
+    <string name="app_enter_behavior_preset_app_default">App default</string>
+    <string name="app_enter_behavior_preset_send_shift_newline">Enter sends, Shift+Enter newline</string>
+    <string name="app_enter_behavior_preset_newline_ctrl_send">Enter newline, Ctrl+Enter sends</string>
+    <string name="app_enter_behavior_preset_newline_only">Enter newline only</string>
+    <string name="app_enter_behavior_preset_custom">Custom</string>
+    <string name="app_enter_behavior_overrides_title">App overrides</string>
+    <string name="app_enter_behavior_add_app">Add app</string>
+    <string name="app_enter_behavior_add_app_description">For additional apps this is a target configuration first. The curated messaging list uses tested strategies.</string>
+    <string name="app_enter_behavior_add_app_list_title">Choose app</string>
+    <string name="app_enter_behavior_remove_app">Remove app</string>
+    <string name="app_enter_behavior_show_manual_override">Manual override</string>
+    <string name="app_enter_behavior_hide_manual_override">Hide manual fields</string>
+    <string name="app_enter_behavior_manual_override_note">The curated strategy is usually the better default. Override only for app updates or special cases.</string>
+    <string name="app_enter_behavior_option_app_default">App default</string>
+    <string name="app_enter_behavior_option_send_shift_newline">Enter sends, Shift+Enter newline</string>
+    <string name="app_enter_behavior_option_newline_ctrl_send">Enter newline, Ctrl+Enter sends</string>
+    <string name="app_enter_behavior_option_enter_newline">Enter newline</string>
+    <string name="app_enter_behavior_status_app_default">Pastiera does not intervene.</string>
+    <string name="app_enter_behavior_status_whatsapp_active">Active: %1$s.</string>
+    <string name="app_enter_behavior_status_partial_active">Partially active: %1$s.</string>
+    <string name="app_enter_behavior_status_experimental_active">Experimentally active: %1$s.</string>
+    <string name="app_enter_behavior_status_not_active">Not active yet: %1$s is planned.</string>
+    <string name="app_enter_behavior_status_native_result">App default: Pastiera does not intervene.</string>
+    <string name="app_enter_behavior_status_strategy_result">Active: %1$s.</string>
+    <string name="app_enter_behavior_status_experimental_result">Experimentally active: %1$s.</string>
+    <string name="app_enter_behavior_strategy_none_label">No override</string>
+    <string name="app_enter_behavior_strategy_app_action_label">App action</string>
+    <string name="app_enter_behavior_strategy_plain_enter_label">Plain Enter</string>
+    <string name="app_enter_behavior_strategy_unconfigured_label">Not configured</string>
+    <string name="app_enter_behavior_strategy_app_default_detail">The app decides whether Enter sends or inserts a newline.</string>
+    <string name="app_enter_behavior_strategy_whatsapp_newline_ctrl_send">Pastiera inserts newlines directly and sends through the app\'s send action.</string>
+    <string name="app_enter_behavior_strategy_whatsapp_send_shift_newline">Pastiera sends through the app\'s send action. Shift+Enter is inserted directly as a newline.</string>
+    <string name="app_enter_behavior_strategy_whatsapp_newline_only">Tested: Pastiera inserts Enter directly as a newline and does not trigger send.</string>
+    <string name="app_enter_behavior_strategy_discord_app_default_detail">Tested: Discord already behaves correctly for Enter sends and Shift+Enter newline. Pastiera does not intervene here.</string>
+    <string name="app_enter_behavior_strategy_discord_partial_detail">Tested: Newlines are inserted directly. Ctrl+Enter sends a plain Enter without Ctrl meta because Discord\'s app action only hides the keyboard.</string>
+    <string name="app_enter_behavior_strategy_experimental_detail">Not confirmed: Pastiera is trying the app\'s send action and direct newline insertion.</string>
+    <string name="app_enter_behavior_strategy_not_tested_detail">The technical strategy still needs to be tested for this app.</string>
+    <string name="app_enter_behavior_desired_label">Wanted behaviour</string>
+    <string name="app_enter_behavior_strategy_label">Send strategy</string>
+    <string name="app_enter_behavior_strategy_auto">Auto / not tested</string>
+    <string name="app_enter_behavior_strategy_editor_action">Editor action</string>
+    <string name="app_enter_behavior_strategy_ctrl_enter">Ctrl+Enter</string>
+    <string name="app_enter_behavior_strategy_plain_enter">Plain Enter</string>
+    <string name="app_enter_behavior_additional_send_shortcut_label">Additional send shortcut</string>
+    <string name="app_enter_behavior_additional_send_shortcut_description">Apply an extra send shortcut to the rendered app list below.</string>
+    <string name="app_enter_behavior_additional_send_shortcut_none">None</string>
+    <string name="app_enter_behavior_additional_send_shortcut_sym_enter">SYM + Enter</string>
+    <string name="app_enter_behavior_sym_enter_conflict_title">SYM + Enter is already used by QuickLauncher</string>
+    <string name="app_enter_behavior_sym_enter_conflict_description">Move the QuickLauncher trigger to another key before using SYM + Enter as an additional send shortcut.</string>
+    <string name="app_enter_behavior_sym_enter_conflict_action">Change trigger</string>
+    <string name="variation_instructions_title">Instructions</string>
+    <string name="variation_instructions_description">Tap on any variation box to select a character. Each letter can have up to 7 variation characters.</string>
+    <string name="variation_picker_title">Select variation for %1$s</string>
+    <string name="custom_variation_input">Custom character</string>
+    <string name="add">Add</string>
+    <string name="variation_picker_clear">Clear (Empty)</string>
+    <string name="variation_reset_to_default">Reset to Default</string>
+    <string name="variation_reset_confirm_title">Reset to Default</string>
+    <string name="variation_reset_confirm_message">Are you sure you want to reset all variations to default? This action cannot be undone.</string>
+    <string name="variation_reset_confirm_button">Reset</string>
+    <string name="static_variation_input_label">Value</string>
+    <string name="static_variation_input_hint">Leave empty and save to remove the slot.</string>
+    <string name="variation_global_layout_override_title">Global Variation Mapping</string>
+    <string name="variation_global_layout_override_description">Force variation ordering from one layout across all layouts. Default is current IME layout (%1$s).</string>
+    <string name="variation_global_layout_override_none">None (use current layout)</string>
+    
+    <!-- SYM Customization Screen -->
+    <string name="sym_tab_emoji">Emoji</string>
+    <string name="sym_tab_characters">Characters</string>
+    
+    <!-- App Picker Dialog -->
+    <string name="app_picker_title">Select an app</string>
+    <string name="app_picker_cancel">Cancel</string>
+    <string name="app_picker_search_placeholder">Search apps...</string>
+    
+    <!-- Settings Screen -->
+    <string name="settings_support_ko_fi">Support on Ko-fi</string>
+    <string name="settings_nav_mode_configure">Configure navigation mode key mappings</string>
+    <string name="settings_update_section_title">Updates</string>
+    <string name="settings_update_section_description">Check the latest release on GitHub.</string>
+    <string name="settings_update_button">Check for updates</string>
+    <string name="settings_update_checking">Checking for updates…</string>
+    <string name="settings_update_up_to_date">App is up to date.</string>
+    <string name="settings_update_check_failed">Unable to reach GitHub.</string>
+    <string name="update_dialog_title">New update available</string>
+    <string name="update_dialog_message">Version %1$s is available on GitHub.</string>
+    <string name="update_dialog_open_github">Open GitHub</string>
+    <string name="update_dialog_later">Later</string>
+    <string name="update_dialog_download_apk">Download APK</string>
+    
+    <!-- Auto Correct Settings -->
+    <string name="auto_correct_ricette_pastiera_name">Ricette Pastiera</string>
+    
+    <!-- Settings Categories -->
+    <string name="settings_category_keyboard_timing">Keyboard &amp; Timing</string>
+    <string name="settings_category_text_input">Smart Features</string>
+    <string name="settings_category_accessibility">Accessibility</string>
+    <string name="settings_category_auto_correction">Auto-correction</string>
+    <string name="settings_category_customization">Customization</string>
+    <string name="settings_category_sounds">Sounds</string>
+    <string name="settings_sounds_description">Typing sounds and sound pack import</string>
+    <string name="settings_category_advanced">Advanced</string>
+    <string name="settings_accessibility_live_read_title">Live reading for status bar changes</string>
+    <string name="settings_accessibility_live_read_description">When enabled, TalkBack can announce language/layout and status bar changes automatically.</string>
+    <string name="settings_accessibility_second_row_title">Read second row (quick settings and variations)</string>
+    <string name="settings_accessibility_second_row_description">When disabled, TalkBack will skip the lower row and keep word suggestions separate.</string>
+    <string name="settings_accessibility_suggestions_delay_title">Suggestions read delay</string>
+    <string name="settings_accessibility_suggestions_delay_value">%1$d ms</string>
+    <string name="settings_accessibility_delay_decrease">Decrease delay by 50 milliseconds</string>
+    <string name="settings_accessibility_delay_increase">Increase delay by 50 milliseconds</string>
+    <string name="settings_accessibility_delay_feedback">Suggestions delay: %1$d ms</string>
+    
+    <!-- Languages (Input Method Subtypes) -->
+    <string name="languages_title">Languages</string>
+    <string name="languages_description">Add languages to the Android input method selector. Only languages with dictionaries that are not system languages are shown.</string>
+    <string name="languages_no_available">All available languages are already added or are system languages.</string>
+    
+    <!-- Keyboard Layout Settings -->
+    <string name="layout_save_content_description">Save layout</string>
+    <string name="layout_import_content_description">Import layout</string>
+    <string name="layout_imported_successfully">Layout imported successfully</string>
+    <string name="layout_import_failed">Failed to import layout</string>
+    <string name="layout_invalid_file">Invalid layout file</string>
+    <string name="layout_import_error">Error importing layout: %1$s</string>
+    <string name="layout_save_canceled">Save canceled</string>
+    <string name="layout_saved_successfully">Layout saved successfully</string>
+    <string name="layout_save_error">Error saving layout: %1$s</string>
+    <string name="layout_imported_name">Imported Layout</string>
+    <string name="layout_imported_description">Imported from file</string>
+    <string name="layout_import_from_file">Import from file</string>
+    <string name="layout_download_from_cloud">Download from cloud repository</string>
+    <string name="online_layouts_title">Cloud layouts</string>
+    <string name="online_layouts_refresh">Refresh</string>
+    <string name="online_layouts_empty">No cloud layouts found.</string>
+    <string name="online_layouts_manifest_error">Failed to load layout list</string>
+    <string name="online_layouts_installed_badge">Installed</string>
+    <string name="online_layouts_size">Size: %1$s</string>
+    <string name="online_layouts_download">Download</string>
+    <string name="online_layouts_downloading">Downloading...</string>
+    <string name="online_layouts_download_progress">%1$s / %2$s</string>
+    <string name="online_layouts_download_success">Downloaded %1$s</string>
+    <string name="online_layouts_download_network_error">Network error</string>
+    <string name="online_layouts_download_invalid_format">Invalid layout format</string>
+    <string name="online_layouts_download_hash_mismatch">Download verification failed</string>
+    <string name="online_layouts_download_failed">Download failed</string>
+    <string name="online_layouts_uninstall">Delete</string>
+    <string name="online_layouts_uninstall_confirm_title">Delete layout</string>
+    <string name="online_layouts_uninstall_confirm_message">Are you sure you want to delete %1$s? This action cannot be undone.</string>
+    <string name="online_layouts_uninstall_success">Deleted %1$s</string>
+    <string name="online_layouts_uninstall_failed">Failed to delete layout</string>
+    <string name="layout_delete_content_description">Delete layout</string>
+    <string name="layout_delete_confirmation_title">Delete Layout</string>
+    <string name="layout_delete_confirmation_message">Are you sure you want to delete the layout \"%1$s\"? This action cannot be undone.</string>
+    <string name="layout_delete_success">Layout deleted successfully</string>
+    <string name="layout_delete_failed">Failed to delete layout</string>
+    <string name="layout_view_mapping">View mapping</string>
+    <string name="layout_delete">Delete</string>
+    <string name="layout_enable_for_cycling">Enable for cycling</string>
+    <string name="layout_select_as_active">Select as active layout</string>
+    <string name="delete">Delete</string>
+    
+    <!-- Main Activity Event Display -->
+    <string name="modifier_alt">ALT</string>
+    <string name="event_action_label">Action: </string>
+    <string name="event_keycode_label">KeyCode: </string>
+    <string name="event_scancode_label">ScanCode: </string>
+    <string name="event_unicode_label">Unicode: </string>
+    <string name="event_output_label">Output: </string>
+    <string name="event_not_available">N/A</string>
+    <string name="debug_recorder_record">Record</string>
+    <string name="debug_recorder_stop">Stop</string>
+    <string name="debug_recorder_copy">Copy</string>
+    <string name="debug_recorder_clear">Clear</string>
+    <string name="debug_recorder_view">View</string>
+    <string name="debug_recorder_share">Share</string>
+    <string name="debug_recorder_share_chooser">Share debug report</string>
+    <string name="debug_recorder_copied">Copied debug report (%1$d events)</string>
+    <string name="debug_recorder_status">Recorder: %1$s · Events: %2$d</string>
+    <string name="debug_recorder_status_recording">recording</string>
+    <string name="debug_recorder_status_stopped">stopped</string>
+    <string name="debug_recorder_started_at">Started at: </string>
+    <string name="debug_recorder_include_suggestions">incl. suggestions</string>
+    <string name="debug_report_viewer_title">Debug Report Viewer</string>
+    
+    <!-- Nav Mode Key Labels -->
+    <string name="nav_mode_action_copy">Copy</string>
+    <string name="nav_mode_action_paste">Paste</string>
+    <string name="nav_mode_action_cut">Cut</string>
+    <string name="nav_mode_action_undo">Undo</string>
+    <string name="nav_mode_action_select_all">SelAll</string>
+    <string name="nav_mode_action_expand_selection_left">←Sel</string>
+    <string name="nav_mode_action_expand_selection_right">→Sel</string>
+    <string name="nav_mode_action_move_word_left">←Word</string>
+    <string name="nav_mode_action_move_word_right">Word→</string>
+    <string name="nav_mode_action_expand_selection_word_left">←WordSel</string>
+    <string name="nav_mode_action_expand_selection_word_right">WordSel→</string>
+    <string name="nav_mode_action_toggle_pastierina">Pastierina</string>
+    <string name="nav_mode_action_media_play_pause">Play/Pause</string>
+    <string name="nav_mode_action_media_previous">Media Previous</string>
+    <string name="nav_mode_action_media_next">Media Next</string>
+    <string name="nav_mode_keycode_up">↑</string>
+    <string name="nav_mode_keycode_down">↓</string>
+    <string name="nav_mode_keycode_left">←</string>
+    <string name="nav_mode_keycode_right">→</string>
+    <string name="nav_mode_keycode_center">○</string>
+    <string name="nav_mode_keycode_page_up">PgUp</string>
+    <string name="nav_mode_keycode_page_down">PgDn</string>
+    <string name="nav_mode_keycode_escape">Esc</string>
+    <string name="nav_mode_keycode_tab">Tab</string>
+    <string name="nav_mode_keycode_forward_delete">Del→</string>
+    <string name="nav_mode_key_unknown">?</string>
+    
+    <!-- Tutorial -->
+    <string name="tutorial_skip">Skip</string>
+    <string name="tutorial_skip_update">Skip</string>
+    <string name="tutorial_previous">Previous</string>
+    <string name="tutorial_next">Next</string>
+    <string name="tutorial_finish">Finish</string>
+    <string name="tutorial_whats_new_title">New in this version: %1$s</string>
+    <string name="tutorial_whats_new_description">A few changes are worth knowing before you continue.</string>
+    <string name="tutorial_whats_new_bug_fixes_title">Bug fixes</string>
+    <string name="tutorial_whats_new_docs_button">Open Pastiera docs</string>
+    <string name="tutorial_whats_new_continue_hint">Continue through the tutorial to review the most useful settings for this release.</string>
+    <string name="tutorial_page_welcome_title">Welcome to Pastiera</string>
+    <string name="tutorial_page_welcome_description">Pastiera is an advanced input method for PKB Android devices with support for Nav Mode, shortcuts, custom keyboard mappings, and more.</string>
+    <string name="tutorial_devs_choice_button">Dev\'s Choice</string>
+    <string name="tutorial_devs_choice_applied">Dev\'s Choice settings applied.</string>
+    <string name="tutorial_page_enable_title">Enable Pastiera</string>
+    <string name="tutorial_page_enable_description">To get started, you need to enable Pastiera as an input method in Android Settings. Tap the button below to open settings.</string>
+    <string name="tutorial_page_select_title">Select Pastiera</string>
+    <string name="tutorial_page_select_description">To use Pastiera, select it among the input methods. The next step lets you choose whether Pastiera should use a virtual keyboard or hardware-keyboard mode.</string>
+    <string name="tutorial_page_software_keyboard_title">Keyboard Mode</string>
+    <string name="tutorial_page_software_keyboard_description">Pick the keyboard surface Pastiera should use here.</string>
+    <string name="tutorial_software_keyboard_auto_bullet">Recommended: hardware mode on known PKB devices, virtual mode on touch devices.</string>
+    <string name="tutorial_software_keyboard_virtual_bullet">Full on-screen keyboard for touch-first use. Still alpha.</string>
+    <string name="tutorial_software_keyboard_hardware_bullet">Compact surface for devices with physical keys.</string>
+    <string name="tutorial_software_keyboard_alpha_warning">Alpha feature: the virtual keyboard is still heavily under construction and is not recommended for daily use yet.</string>
+    <string name="tutorial_android16_ime_caption_title">Hide IME caption bar</string>
+    <string name="tutorial_android16_ime_caption_description">Titan 2 devices can show an extra IME caption bar under Pastiera. This OEM setting hides it and keeps Pastiera compact.</string>
+    <string name="tutorial_android16_ime_caption_before">Before: extra caption bar</string>
+    <string name="tutorial_android16_ime_caption_after">After: compact Pastiera</string>
+    <string name="tutorial_android16_ime_caption_check_android16">Android 16 or newer</string>
+    <string name="tutorial_android16_ime_caption_check_titan2">Unihertz Titan 2 or Titan 2 Elite</string>
+    <string name="tutorial_android16_ime_caption_check_setting">OEM gesture setting available</string>
+    <string name="tutorial_android16_ime_caption_button">Open “Hide IME caption bar”</string>
+    <string name="tutorial_android16_ime_caption_unavailable_button">Why this may be unavailable</string>
+    <string name="tutorial_android16_ime_caption_missing_requirement">Missing: %1$s.</string>
+    <string name="tutorial_android16_ime_caption_vendor_toast">This is vendor-specific behavior from Unihertz. The shortcut only works on supported Titan 2 firmware where Android exposes the OEM gesture setting.</string>
+    <string name="tutorial_android16_ime_caption_fallback">Could not open the Titan 2 gesture setting. Opening Android Settings instead.</string>
+    <string name="tutorial_software_keyboard_auto_checker_title">Auto detection</string>
+    <string name="tutorial_software_keyboard_auto_selected">Auto currently selects: %1$s</string>
+    <string name="tutorial_software_keyboard_auto_overridden">Current override: %1$s. Auto would select: %2$s</string>
+    <string name="tutorial_software_keyboard_auto_profile">Detected profile: %1$s / %2$s</string>
+    <string name="tutorial_software_keyboard_auto_reason_physical">Reason: this profile is treated as a physical-keyboard device, so Auto uses hardware-keyboard mode.</string>
+    <string name="tutorial_software_keyboard_auto_reason_touch">Reason: this profile is not recognized as a physical-keyboard device, so Auto uses virtual-keyboard mode.</string>
+    <string name="tutorial_page_led_title">LED Indicator</string>
+    <string name="tutorial_page_led_description">To get the most out of Pastiera, set the Fn key to act as Ctrl from Android system settings. The IME bar shows four LEDs: they turn blue when the modifier is active one-shot and orange when it is locked. The SYM layout LED is blue on the emoji page and orange on the symbols page.</string>
+    <string name="tutorial_page_nav_mode_title">Nav Mode</string>
+    <string name="tutorial_page_nav_mode_description">Nav Mode turns letter keys into navigation and editing controls. Press Ctrl twice to latch it, or enable Ctrl-hold navigation below.</string>
+    <string name="tutorial_nav_mode_bullet_selection">Selection actions can extend text selection left, right, or word by word.</string>
+    <string name="tutorial_nav_mode_bullet_words">Word actions jump by whole words for faster cursor movement in text fields.</string>
+    <string name="tutorial_nav_mode_bullet_media">Mappings can also handle app shortcuts, media controls, Escape, Tab, Page Up/Down, and Pastierina.</string>
+    <string name="tutorial_page_customization_title">Customization</string>
+    <string name="tutorial_page_customization_description">Pastiera offers many customization options:\n• Customizable keyboard layouts\n• Launcher shortcuts &amp; Power Shortcuts\n• IME bar can act as a swipe bar to move the cursor\n• Custom mappings for Nav Mode\nExplore the settings to find the perfect configuration for you!</string>
+    <string name="tutorial_quick_launcher_title">QuickLauncher</string>
+    <string name="tutorial_quick_launcher_description">Open apps from the keyboard without leaving your typing flow.</string>
+    <string name="tutorial_quick_launcher_bullet_sym_space">Hold SYM and press Space to open QuickLauncher from anywhere.</string>
+    <string name="tutorial_quick_launcher_bullet_text_fields">It also works while the cursor is inside a text field, so you can switch apps from typing context.</string>
+    <string name="tutorial_quick_launcher_bullet_search">Type a few letters, abbreviations, or small typos to find the app you want.</string>
+    <string name="tutorial_quick_launcher_bullet_layout">Search can respect your active Pastiera layout, such as QWERTZ.</string>
+    <string name="tutorial_quick_launcher_button">Open QuickLauncher settings</string>
+    <string name="tutorial_quick_launcher_mapping_conflict_title">SYM + Space is assigned to something else</string>
+    <string name="tutorial_quick_launcher_mapping_conflict_description">Space currently opens “%1$s”. Replace that mapping with QuickLauncher and enable it in text fields to try the new feature.</string>
+    <string name="tutorial_quick_launcher_mapping_conflict_button">Use SYM + Space for QuickLauncher</string>
+    <string name="tutorial_messenger_presets_title">Messenger presets</string>
+    <string name="tutorial_messenger_presets_description">Choose how Enter should behave in chat apps, where newline and send often differ by app.</string>
+    <string name="tutorial_messenger_presets_bullet_enter">Use tested presets for common messenger apps instead of tuning each key manually.</string>
+    <string name="tutorial_messenger_presets_bullet_sym_enter">Optionally use SYM + Enter as an additional send shortcut.</string>
+    <string name="tutorial_messenger_presets_bullet_apps">Per-app overrides stay available when one app behaves differently.</string>
+    <string name="tutorial_messenger_presets_button">Open messenger presets</string>
+    <string name="tutorial_typing_sound_demo_title">Typing sounds (gimmick)</string>
+    <string name="tutorial_typing_sound_demo_description">Choose a sound style and type below to hear it immediately.</string>
+    <string name="tutorial_typing_sound_demo_input_label">Try typing here</string>
+    <string name="tutorial_sym_emoji_button">SYM / Emoji</string>
+    <string name="tutorial_variations_button">Variations</string>
+    <string name="tutorial_status_bar_button">Status bar</string>
+    <string name="tutorial_page_ready_title">Ready to Start</string>
+    <string name="tutorial_page_ready_description">You are now ready to use Pastiera! Remember that you can always return to settings to further customize the keyboard to your needs.</string>
+    <string name="tutorial_enable_button">Enable Pastiera</string>
+    <string name="tutorial_enabled_message">Pastiera is enabled!</string>
+    <string name="tutorial_select_button">Select Pastiera</string>
+    <string name="tutorial_enable_first_message">Enable Pastiera first on the previous page</string>
+    <string name="tutorial_selected_message">Pastiera is selected!</string>
+    <string name="tutorial_show">Show Tutorial</string>
+    <string name="tutorial_review_description">Review the introductory tutorial</string>
+    <string name="tutorial_show_release_notes">Show release notes tutorial</string>
+    <string name="tutorial_show_release_notes_description">Preview the update intro without installing an upgrade</string>
+
+    <string name="pastierina_mode_title">Pastierina Mode</string>
+    <string name="pastierina_mode_description">Toggle minimal ui</string>
+    <string name="software_keyboard_mode_title">Keyboard Mode</string>
+    <string name="software_keyboard_mode_description">Separate from Pastierina. Controls hardware vs virtual keyboard behaviour.</string>
+    <string name="software_keyboard_mode_auto_current">Auto (current: %1$s)</string>
+    <string name="software_keyboard_mode_always_virtual">Always Virtual Keyboard</string>
+    <string name="software_keyboard_mode_always_hardware">Always Hardware Keyboard</string>
+    <string name="software_keyboard_mode_auto_short">Auto (PKB: Hardware, otherwise Virtual)</string>
+
+    <string name="titan2_layout_title">Titan 2 Layout Alignment</string>
+    <string name="titan2_layout_description">Align on-screen keyboard with Titan 2 physical keys</string>
+
+    <!-- Backup & Restore -->
+    <string name="backup_now">Backup now</string>
+    <string name="backup_now_description">Export all settings and custom layouts to a ZIP</string>
+    <string name="restore_from_file">Restore from file</string>
+    <string name="restore_from_file_description">Import a Pastiera backup ZIP</string>
+    <string name="backup_completed">Backup completed</string>
+    <string name="restore_completed">Restore completed</string>
+    <string name="backup_failed">Backup failed: %1$s</string>
+    <string name="restore_failed">Restore failed: %1$s</string>
+    
+    <!-- Units -->
+    <string name="dip_unit">DIP</string>
+    
+    <!-- Custom Input Styles -->
+    <string name="custom_input_styles_title">Languages and Keyboard Layouts</string>
+    <string name="custom_input_styles_description">Add additional languages and keyboard layouts that are not tied to system locale</string>
+    <string name="app_language_title">App Language</string>
+    <string name="app_language_description">Choose the language used for app interface texts.</string>
+    <string name="app_language_label">Language</string>
+    <string name="app_language_system_default">System default</string>
+    <string name="app_language_system_default_with_detected">System default (%1$s)</string>
+    <string name="custom_input_styles_add">Add Input Style</string>
+    <string name="custom_input_styles_empty">No custom input styles added yet. Tap the + button to add one.</string>
+    <string name="custom_input_styles_delete">Delete</string>
+    <string name="custom_input_styles_delete_confirm_title">Delete Input Style</string>
+    <string name="custom_input_styles_delete_confirm_message">Are you sure you want to delete this input style?</string>
+    <string name="custom_input_styles_add_dialog_title">Add Input Style</string>
+    <string name="custom_input_styles_edit_dialog_title">Edit Input Style</string>
+    <string name="custom_input_styles_edit_system_locale_title">Edit System Locale Layout</string>
+    <string name="custom_input_styles_select_locale">Select Language</string>
+    <string name="custom_input_styles_select_layout">Select Keyboard Layout</string>
+    <string name="custom_input_styles_save">Save</string>
+    <string name="custom_input_styles_cancel">Cancel</string>
+    <string name="custom_input_styles_duplicate_error">This language and layout combination already exists</string>
+    <string name="custom_input_styles_open_ime_picker">Open IME Picker</string>
+    <string name="custom_input_styles_open_ime_picker_description">Open system input method picker to enable the new language</string>
+    <string name="custom_input_styles_format">%1$s - %2$s</string>
+    <string name="custom_input_styles_add_custom_locale">Add Custom Locale…</string>
+    <string name="custom_input_styles_custom_locale_title">Enter Custom Locale Code</string>
+    <string name="custom_input_styles_custom_locale_label">Locale Code</string>
+    <string name="custom_input_styles_custom_locale_hint">Enter a locale code (e.g., en_US, it_IT, fr_FR)</string>
+    <string name="custom_input_styles_custom_locale_empty_error">Locale code cannot be empty</string>
+    <string name="custom_input_styles_custom_locale_invalid_error">Invalid locale code format. Use format: xx_XX or xx</string>
+    <string name="custom_input_styles_no_dictionary_warning">No dictionary available for this locale. Suggestions and auto-correction will be disabled.</string>
+    <string name="custom_input_styles_layout_mapping_updated">Layout mapping updated: %1$s - %2$s</string>
+    <string name="custom_input_styles_input_style_updated">Input style updated: %1$s - %2$s</string>
+    <string name="custom_input_styles_input_style_added">Input style added: %1$s - %2$s</string>
+    <string name="custom_input_styles_input_style_deleted">Input style deleted</string>
+    <string name="custom_input_styles_language_label">Language</string>
+    <string name="custom_input_styles_locale_display">%1$s (%2$s)</string>
+    <string name="custom_input_styles_system_locale_hint">System locale - cannot be changed</string>
+    <string name="custom_input_styles_system_badge">System</string>
+    <string name="custom_input_styles_default_layout">qwerty</string>
+    <string name="custom_input_styles_change_layout_hint">Tap to change layout</string>
+    <string name="custom_input_styles_custom_locale_placeholder">en_US, it_IT, fr_FR, etc.</string>
+    <string name="custom_input_styles_installed_dictionaries">Installed dictionaries</string>
+
+    <!-- Installed dictionaries screen -->
+    <string name="installed_dictionaries_title">Installed dictionaries</string>
+    <string name="installed_dictionaries_empty">No serialized dictionaries found.</string>
+    <string name="installed_dictionaries_language_code">Language: %1$s</string>
+    <string name="installed_dictionaries_filename">File: %1$s</string>
+    <string name="installed_dictionaries_import">Import dictionary</string>
+    <string name="installed_dictionaries_import_success">Imported %1$s</string>
+    <string name="installed_dictionaries_import_invalid_name">Invalid file name. Expected *_base.dict</string>
+    <string name="installed_dictionaries_import_invalid_format">Invalid dictionary format</string>
+    <string name="installed_dictionaries_import_failed">Import failed</string>
+    <string name="installed_dictionaries_imported_badge">Imported</string>
+    <string name="installed_dictionaries_installed_badge">Installed</string>
+    <string name="installed_dictionaries_available_online">Available online</string>
+    <string name="installed_dictionaries_size">Size: %1$s</string>
+    <string name="installed_dictionaries_refresh">Refresh</string>
+    <string name="installed_dictionaries_download">Download</string>
+    <string name="installed_dictionaries_download_success">Downloaded %1$s</string>
+    <string name="installed_dictionaries_download_network_error">Network error</string>
+    <string name="installed_dictionaries_download_invalid_format">Invalid dictionary format</string>
+    <string name="installed_dictionaries_download_hash_mismatch">Download verification failed</string>
+    <string name="installed_dictionaries_download_failed">Download failed</string>
+    <string name="installed_dictionaries_download_progress">%1$s / %2$s</string>
+    <string name="installed_dictionaries_manifest_error">Failed to load dictionary list</string>
+    <string name="installed_dictionaries_uninstall">Uninstall</string>
+    <string name="installed_dictionaries_uninstall_confirm_title">Uninstall dictionary</string>
+    <string name="installed_dictionaries_uninstall_confirm_message">Are you sure you want to uninstall %1$s? This action cannot be undone.</string>
+    <string name="installed_dictionaries_uninstall_success">Uninstalled %1$s</string>
+    <string name="installed_dictionaries_uninstall_not_found">Dictionary file not found</string>
+    <string name="installed_dictionaries_uninstall_cannot_delete_asset">Cannot uninstall built-in dictionaries</string>
+    <string name="installed_dictionaries_uninstall_failed">Failed to uninstall dictionary</string>
+
+    <!-- Clipboard page UI -->
+    <string name="clipboard_history_title">Clipboard History</string>
+    <string name="clipboard_clear_all">Clear All</string>
+    <string name="clipboard_empty_state">No clipboard history</string>
+    <string name="clipboard_pin">Pin</string>
+    <string name="clipboard_unpin">Unpin</string>
+    <string name="clipboard_delete">Delete</string>
+    <string name="clipboard_retention_apply">Apply</string>
+    <string name="clipboard_retention_time_title">Clipboard Retention Time</string>
+    <string name="clipboard_retention_time_description">0 = never delete clips</string>
+    <string name="clipboard_retention_time_minutes">%1$d minutes</string>
+
+    <!-- Trackpad Gesture Settings -->
+    <string name="trackpad_gestures_title">Trackpad Gesture Suggestions</string>
+    <string name="trackpad_gestures_description">Swipe up on the trackpad to accept suggestions</string>
+    <string name="trackpad_gestures_enabled_title">Enable Trackpad Gestures</string>
+    <string name="trackpad_gestures_enabled_description">Swipe up on trackpad to accept word suggestions</string>
+    <string name="trackpad_gestures_show_tutorial">Show Tutorial</string>
+    <string name="trackpad_gestures_tutorial_description">Learn how to use trackpad gestures</string>
+    <string name="trackpad_gestures_install_shizuku">Install Shizuku</string>
+    <string name="trackpad_gestures_install_shizuku_description">Required for trackpad gesture detection</string>
+    <string name="trackpad_gestures_shizuku_url">https://github.com/RikkaApps/Shizuku/releases/</string>
+    <string name="trackpad_gestures_shizuku_connected">Shizuku Connected</string>
+    <string name="trackpad_gestures_shizuku_not_connected">Shizuku Not Connected</string>
+    <string name="trackpad_gestures_shizuku_not_authorized">App Not Authorized in Shizuku</string>
+    <string name="trackpad_swipe_threshold_title">Trackpad Swipe Sensitivity</string>
+    <string name="trackpad_swipe_threshold_description">Adjust how far you need to swipe up to accept a suggestion.</string>
+
+    <!-- Trackpad Gesture Tutorial -->
+    <string name="trackpad_tutorial_title">Trackpad Gesture Suggestions</string>
+    <string name="trackpad_tutorial_welcome_title">Trackpad Gesture Suggestions</string>
+    <string name="trackpad_tutorial_welcome_description">Swipe up on your trackpad to quickly accept word suggestions without clicking!</string>
+    <string name="trackpad_tutorial_how_it_works_title">How It Works</string>
+    <string name="trackpad_tutorial_how_it_works_description">The trackpad is divided into three sections:\n\n• Left third → Accept left suggestion\n• Center third → Accept center suggestion\n• Right third → Accept right suggestion\n\nSimply swipe up in the corresponding area to insert that suggestion.</string>
+    <string name="trackpad_tutorial_shizuku_required_title">Shizuku Required</string>
+    <string name="trackpad_tutorial_shizuku_required_description">This feature requires Shizuku to access trackpad events.\n\n1. Install Shizuku from GitHub releases\n2. Enable developer options in Android settings\n3. Plug your device into a PC with ADB installed\n4. Run the command that Shizuku shows in its app\n5. Grant permission to Pastiera in Shizuku\n\nThe feature will work automatically once Shizuku is running.</string>
+    <string name="trackpad_tutorial_tips_title">Tips</string>
+    <string name="trackpad_tutorial_tips_description">• Make sure your swipe is primarily vertical\n• The gesture works best with quick, deliberate swipes\n• If other fingers are on the keyboard, gestures may not be detected (hardware palm rejection)\n• The feature can be enabled/disabled in Advanced Settings</string>
+    <string name="trackpad_tutorial_complete">Got It</string>
+    <string name="trackpad_tutorial_next">Next</string>
+    <string name="trackpad_tutorial_previous">Previous</string>
+
+    <!-- Trackpad Debug Accessibility Service -->
+    <string name="trackpad_debug_service_description">Displays trackpad events in a small overlay for debugging purposes</string>
+
+    <!-- Status Bar Buttons Configuration -->
+    <string name="status_bar_buttons_title">Status Bar Buttons</string>
+    <string name="status_bar_buttons_description">Customize status bar buttons</string>
+    <string name="status_bar_slot_left">Left Slot</string>
+    <string name="status_bar_slot_right_1">Right Slot 1</string>
+    <string name="status_bar_slot_right_2">Right Slot 2</string>
+    <string name="status_bar_slots_left">Left buttons</string>
+    <string name="status_bar_slots_right">Right buttons</string>
+    <string name="status_bar_slot_add">Add status bar button</string>
+    <string name="status_bar_slot_remove">Remove status bar button</string>
+    <string name="status_bar_button_none">None</string>
+    <string name="status_bar_button_none_description">Empty</string>
+    <string name="status_bar_button_clipboard">Clipboard</string>
+    <string name="status_bar_button_clipboard_description">Clipboard history</string>
+    <string name="status_bar_button_microphone">Microphone</string>
+    <string name="status_bar_button_microphone_description">Voice input</string>
+    <string name="status_bar_button_emoji">Emoji</string>
+    <string name="status_bar_button_emoji_description">Emoji picker</string>
+    <string name="status_bar_button_language">Language</string>
+    <string name="status_bar_button_language_description">Switch language</string>
+    <string name="status_bar_button_language_state_description">Language %1$s, layout %2$s</string>
+    <string name="status_bar_button_hamburger">Menu</string>
+    <string name="status_bar_button_hamburger_description">Quick actions</string>
+    <string name="status_bar_button_close_menu_description">Close quick actions</string>
+    <string name="status_bar_button_settings">Settings</string>
+    <string name="status_bar_button_settings_description">Open settings</string>
+    <string name="status_bar_button_symbols">Symbols</string>
+    <string name="status_bar_button_symbols_description">Symbols keyboard</string>
+    <string name="status_bar_button_undo">Undo</string>
+    <string name="status_bar_button_undo_description">Send Ctrl+Z</string>
+    <string name="status_bar_button_redo">Redo</string>
+    <string name="status_bar_button_redo_description">Send Ctrl+Y</string>
+    <string name="status_bar_variations_visible_title">Show variations</string>
+    <string name="status_bar_variations_visible_description">Show the configured variation row between the status bar buttons. When off, buttons use the full status bar; swipe cursor control still works.</string>
+    <string name="status_bar_swipe_cursor_info">Swipe across the status bar to move the cursor.</string>
+    <string name="dynamic_variation_slot_count_title">Dynamic variation slots</string>
+    <string name="dynamic_variation_slot_count_description">Aim to show %1$d dynamic entries between the status bar buttons.</string>
+    <string name="dynamic_variation_resize_to_content_title">Resize dynamic variations</string>
+    <string name="dynamic_variation_resize_to_content_description">When enabled, dynamic entries fill the available row based on how many are shown. When off, entries keep the slot size from the slider and stay left-aligned.</string>
+    <string name="status_bar_state_on">On</string>
+    <string name="status_bar_state_off">Off</string>
+    <string name="status_bar_button_clipboard_state_empty">Empty</string>
+    <string name="status_bar_button_clipboard_state_items">%1$d items</string>
+    <string name="sym_key_content_description">%1$s, %2$s</string>
+    <string name="status_bar_button_minimal_ui_description">Toggle compact keyboard UI</string>
+    <string name="status_bar_buttons_reset">Reset</string>
+</resources>

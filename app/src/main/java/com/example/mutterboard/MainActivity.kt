@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import it.palsoftware.pastiera.inputmethod.PhysicalKeyboardInputMethodService
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -43,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.Font
@@ -283,6 +285,8 @@ private fun SetupScreen(
     var showPrivacy by remember { mutableStateOf(false) }
     var hasMic by remember { mutableStateOf(false) }
     var imeEnabled by remember { mutableStateOf(false) }
+    var physicalKeyboard by remember { mutableStateOf(false) }
+    var chosenImeEnabled by remember { mutableStateOf(false) }
     var overlayEnabled by remember { mutableStateOf(false) }
     var canDrawOverlays by remember { mutableStateOf(false) }
     var accessibilityEnabled by remember { mutableStateOf(false) }
@@ -348,7 +352,9 @@ private fun SetupScreen(
     LaunchedEffect(refreshTick) {
         hasMic = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                 android.content.pm.PackageManager.PERMISSION_GRANTED
-        imeEnabled = isImeEnabled(context)
+        imeEnabled = isImeEnabled(context, dictationImeComponent(context))
+        physicalKeyboard = isPhysicalKeyboardChosen(context)
+        chosenImeEnabled = isImeEnabled(context, chosenImeComponent(context))
         // All three are granted on screens outside this app, so they can only be
         // re-read on resume; refreshTick already fires there.
         overlayEnabled = isOverlayLauncherEnabled(context)
@@ -468,32 +474,49 @@ private fun SetupScreen(
             )
             Spacer(Modifier.height(40.dp))
 
-            // The two ways in are alternatives, not a checklist. Enabling the
-            // keyboard was step 2 of setup back when it was the only way to
-            // dictate; left there it reads as required, which it is not, and it
-            // invites having both running at once - which nobody wants and which
-            // nothing in here arbitrates.
-            SectionHeader("How you dictate")
+            // Two independent things, not one choice. The keyboard is whichever
+            // fits the phone; the overlay is an extra you map to a button, and
+            // it runs happily alongside either keyboard. As one radio group it
+            // asked people to give up the keyboard to get the overlay.
+            SectionHeader("Keyboard")
             Spacer(Modifier.height(12.dp))
-            DictationModeCard(
-                overlayChosen = overlayEnabled,
-                imeEnabled = imeEnabled,
+            KeyboardCard(
+                physicalKeyboard = physicalKeyboard,
+                imeEnabled = chosenImeEnabled,
+                onChoose = { physical ->
+                    setPhysicalKeyboardChosen(context, physical)
+                    physicalKeyboard = physical
+                    chosenImeEnabled = isImeEnabled(context, chosenImeComponent(context))
+                },
+                onOpenImeSettings = onOpenImeSettings,
+                // Straight to the settings, not Pastiera's MainActivity: that is
+                // its own tutorial and enable-the-keyboard setup, which this
+                // screen already does.
+                onOpenKeyboardSettings = {
+                    context.startActivity(
+                        Intent(context, it.palsoftware.pastiera.SettingsActivity::class.java)
+                    )
+                }
+            )
+            Spacer(Modifier.height(40.dp))
+
+            SectionHeader("Overlay")
+            Spacer(Modifier.height(12.dp))
+            OverlayCard(
+                enabled = overlayEnabled,
                 canDrawOverlays = canDrawOverlays,
                 accessibilityEnabled = accessibilityEnabled,
-                onChoose = { overlay ->
+                onToggle = { overlay ->
                     setOverlayLauncherEnabled(context, overlay)
                     overlayEnabled = overlay
                     if (overlay) onRequestNotifications()
                 },
-                onOpenImeSettings = onOpenImeSettings,
                 onOpenOverlaySettings = onOpenOverlaySettings,
                 onOpenAccessibilitySettings = onOpenAccessibilitySettings,
                 onOpenAppInfo = onOpenAppInfo,
                 shortcutAttached = shortcutAttached,
                 onOpenShortcutSettings = onOpenShortcutSettings
             )
-
-
             Spacer(Modifier.height(40.dp))
 
             SectionHeader("Vocabulary")
@@ -1304,25 +1327,78 @@ private fun RestrictedSettingsNote(onOpenAppInfo: () -> Unit) {
 }
 
 /**
- * Which of the two ways into Mutterboard you are using, and the setup left for
- * it.
+ * Which keyboard Mutterboard is, which is a question about the phone.
  *
- * A choice rather than two switches. They are alternatives - the overlay floats
- * over any app and the keyboard only runs inside a text field you switched to -
- * and nothing in the app arbitrates between them if both are live, so offering
- * both at once is offering a state nobody wants.
+ * The component state is the choice: exactly one of the two input method
+ * services is enabled, so Android's keyboard list only ever shows one
+ * Mutterboard. Switching drops the other from that list, which is why the
+ * enable step follows the choice and can go back to undone.
  *
- * The overlay's own state is the choice: there is no separate preference that
- * could drift out of sync with which components are enabled.
+ * Touchscreen is today's dictation keyboard. It becomes a full typing keyboard
+ * when that exists; the description says what it is now, not what it will be.
  */
 @Composable
-private fun DictationModeCard(
-    overlayChosen: Boolean,
+private fun KeyboardCard(
+    physicalKeyboard: Boolean,
     imeEnabled: Boolean,
-    canDrawOverlays: Boolean,
-    accessibilityEnabled: Boolean,
     onChoose: (Boolean) -> Unit,
     onOpenImeSettings: () -> Unit,
+    onOpenKeyboardSettings: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        ModeChoiceRow(
+            label = "Touchscreen",
+            description = "For phones without keys. A dictation keyboard: switch " +
+                "to it, talk, and it types the text in.",
+            selected = !physicalKeyboard,
+            onSelect = { onChoose(false) }
+        )
+        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+        ModeChoiceRow(
+            label = "Physical keyboard",
+            description = "For phones with real keys. Replaces your keyboard, " +
+                "and its mic button dictates.",
+            selected = physicalKeyboard,
+            onSelect = { onChoose(true) }
+        )
+        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+        StepRow(
+            label = "Enable keyboard",
+            done = imeEnabled,
+            actionLabel = "Enable",
+            onAction = onOpenImeSettings,
+            step = 1
+        )
+        if (physicalKeyboard) {
+            StepRow(
+                label = "Layout, suggestions and shortcuts",
+                done = false,
+                actionLabel = "Open",
+                onAction = onOpenKeyboardSettings,
+                required = false
+            )
+        }
+    }
+}
+
+/**
+ * The overlay, on or off, and the setup it asks for when on.
+ *
+ * Its own state is the switch: there is no preference that could drift from
+ * which components are enabled.
+ */
+@Composable
+private fun OverlayCard(
+    enabled: Boolean,
+    canDrawOverlays: Boolean,
+    accessibilityEnabled: Boolean,
+    onToggle: (Boolean) -> Unit,
     onOpenOverlaySettings: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenAppInfo: () -> Unit,
@@ -1337,99 +1413,66 @@ private fun DictationModeCard(
         ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        ModeChoiceRow(
-            label = "Overlay",
-            description = "Dictate from anywhere, in a text field or not. The " +
-                "transcript goes to your clipboard, and pastes itself into the " +
-                "field if one is open.",
-            selected = overlayChosen,
-            onSelect = { onChoose(true) }
-        )
-        // Each option's setup sits directly under it, indented, with no divider
-        // between the two. A line there made the steps read as items in the same
-        // list as the options rather than as what the option above asks of you -
-        // and with both blocks collected at the bottom, the overlay's steps
-        // appeared under the word "Keyboard".
-        if (overlayChosen) {
-            OptionSteps {
-                // The keyboard is the other option, not an extra: leaving it on
-                // is the one state this card is a radio group to prevent, and
-                // Android will not let the app turn an IME off on the user's
-                // behalf. So it becomes the first thing the overlay asks of you.
-                if (imeEnabled) {
-                    StepRow(
-                        label = "Turn off the Mutterboard keyboard",
-                        done = false,
-                        actionLabel = "Turn off",
-                        onAction = onOpenImeSettings,
-                        note = "Otherwise you are running both at once."
-                    )
-                }
-                StepRow(
-                    label = "Display over other apps",
-                    done = canDrawOverlays,
-                    actionLabel = "Allow",
-                    onAction = onOpenOverlaySettings,
-                    step = 1
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = enabled,
+                    role = Role.Switch,
+                    onValueChange = { haptic(); onToggle(it) }
                 )
-                // Sideloaded apps hit "restricted settings" on Pixel and Samsung
-                // for exactly this permission, and the dialog they get names
-                // neither the cause nor the cure. One line, because someone
-                // stuck on a refused switch will read one line.
-                if (!canDrawOverlays) {
-                    RestrictedSettingsNote(onOpenAppInfo = onOpenAppInfo)
-                }
-                StepRow(
-                    label = "Auto-paste into text fields",
-                    done = accessibilityEnabled,
-                    actionLabel = "Enable",
-                    onAction = onOpenAccessibilitySettings,
-                    // No status line. The label is the description, and this
-                    // step is neither required nor worth a word about it.
-                    required = false,
-                    step = 2
-                )
-                // Android attaches its shortcut when the service goes on, and the
-                // app can neither use it nor remove it. Listing it as the step
-                // after the one that causes it is the whole explanation a new
-                // user needs for the button that just appeared on their screen -
-                // which is why it stays in the sequence, ticked, for people who
-                // have already dealt with it.
-                if (accessibilityEnabled) {
-                    ShortcutStepRow(
-                        done = !shortcutAttached,
-                        step = 3,
-                        onAction = onOpenShortcutSettings
-                    )
-                }
-            }
-        }
-        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
-        ModeChoiceRow(
-            label = "Keyboard",
-            description = "A normal keyboard you switch to from your usual one. " +
-                "It dictates, types the text in, then switches straight back. " +
-                "Worth choosing if your phone gives you no button to map the " +
-                "overlay to.",
-            selected = !overlayChosen,
-            onSelect = { onChoose(false) }
-        )
-        if (!overlayChosen) {
-            OptionSteps {
-                StepRow(
-                    label = "Enable keyboard",
-                    done = imeEnabled,
-                    actionLabel = "Enable",
-                    onAction = onOpenImeSettings,
-                    step = 1
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Dictate from anywhere", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Map it to a button or the Quick Settings tile. The " +
+                        "transcript goes to your clipboard, and pastes itself " +
+                        "into the field if one is open.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = enabled, onCheckedChange = null)
         }
-        // Sits below both options because it belongs to neither, and only when
-        // the button is actually there. It was a numbered step for a while,
-        // which put "turn this off" in front of people who did not have it and
-        // made a tidy-up look like part of setup.
-        if (!overlayChosen && shortcutAttached) {
+        if (enabled) {
+            HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+            StepRow(
+                label = "Display over other apps",
+                done = canDrawOverlays,
+                actionLabel = "Allow",
+                onAction = onOpenOverlaySettings,
+                step = 1
+            )
+            // Sideloaded apps hit "restricted settings" on Pixel and Samsung
+            // for exactly this permission, and the dialog they get names
+            // neither the cause nor the cure.
+            if (!canDrawOverlays) {
+                RestrictedSettingsNote(onOpenAppInfo = onOpenAppInfo)
+            }
+            StepRow(
+                label = "Auto-paste into text fields",
+                done = accessibilityEnabled,
+                actionLabel = "Enable",
+                onAction = onOpenAccessibilitySettings,
+                required = false,
+                step = 2
+            )
+            // Android attaches its shortcut when the service goes on, and the
+            // app can neither use it nor remove it. Listed as the step after
+            // the one that causes it, ticked once dealt with.
+            if (accessibilityEnabled) {
+                ShortcutStepRow(
+                    done = !shortcutAttached,
+                    step = 3,
+                    onAction = onOpenShortcutSettings
+                )
+            }
+        } else if (shortcutAttached) {
+            // Only when the button is actually there: a leftover from having
+            // had the service on, not part of any setup.
             HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
             ShortcutStepRow(done = false, step = null, onAction = onOpenShortcutSettings)
         }
@@ -1958,8 +2001,31 @@ private fun isAccessibilityEnabled(context: Context): Boolean {
     return enabled.split(':').any { ComponentName.unflattenFromString(it) == target }
 }
 
-private fun isImeEnabled(context: Context): Boolean {
+private fun isImeEnabled(context: Context, target: ComponentName): Boolean {
     val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-    val target = ComponentName(context, MutterboardInputMethodService::class.java)
     return imm.enabledInputMethodList.any { it.component == target }
+}
+
+private fun dictationImeComponent(context: Context) =
+    ComponentName(context, MutterboardInputMethodService::class.java)
+
+private fun physicalImeComponent(context: Context) =
+    ComponentName(context, PhysicalKeyboardInputMethodService::class.java)
+
+/** The physical keyboard ships disabled, so an install that never chose it has not. */
+private fun isPhysicalKeyboardChosen(context: Context): Boolean =
+    context.packageManager.getComponentEnabledSetting(physicalImeComponent(context)) ==
+        PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+
+private fun chosenImeComponent(context: Context) =
+    if (isPhysicalKeyboardChosen(context)) physicalImeComponent(context)
+    else dictationImeComponent(context)
+
+/**
+ * Swaps which input method service exists. Safe to call from the settings
+ * screen, unlike the launcher swap: no activity runs on either service.
+ */
+private fun setPhysicalKeyboardChosen(context: Context, physical: Boolean) {
+    setComponentEnabled(context, physicalImeComponent(context), physical)
+    setComponentEnabled(context, dictationImeComponent(context), !physical)
 }

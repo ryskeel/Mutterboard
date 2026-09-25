@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Include SharedPreferences for cloud backup -->
+        <include domain="sharedpref" path="."/>
+        <exclude domain="sharedpref" path="recent_emojis_prefs.xml"/>
+        
+        <!-- Include custom keyboard layouts directory -->
+        <include domain="file" path="keyboard_layouts/"/>
+        
+        <!-- Include nav mode mappings file -->
+        <include domain="file" path="ctrl_key_mappings.json"/>
+        
+        <!-- Include variations file -->
+        <include domain="file" path="variations.json"/>
+
+        <!-- Include default/user dictionary file stored in app-private files -->
+        <include domain="file" path="user_defaults.json"/>
+    </cloud-backup>
+</data-extraction-rules>

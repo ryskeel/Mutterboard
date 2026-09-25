@@ -254,6 +254,51 @@ All of this lives on `feature/dictation-overlay`, unmerged.
   the time. If it recurs, suspect `OverlayLauncherActivity` coming up
   FLAG_NOT_FOCUSABLE and the field never re-requesting the keyboard.
 
+## The Pastiera keyboard experiment (started 2026-09-25)
+
+On `feature/pastiera-keyboard`: turn Mutterboard into a full keyboard, so that
+on a phone with a physical keyboard (Ry's Titan II Elite) it replaces the
+on-screen keyboard entirely, and on any other phone it is still just
+dictation. The stock Kika keyboard is bad, Gboard misbehaves on hardware
+keyboards (phantom Alt shortcuts, double-space-period then backspace wiping all
+the text), and Pastiera nightly has quirks like staying up over Niagara after
+going home. The goal is Pastiera stable's behaviour, Gboard's look, and the
+nightly features Ry picks one at a time.
+
+- **Pastiera is GPL-3.0, so Mutterboard is too.** Ry agreed; it is a hobby
+  project and stays open source.
+- **Mutterboard is the host, Pastiera is the guest.** Its source sits under
+  `keyboard/` (the name is ours to pick; GPL only asks that the copyright
+  notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag (the last stable; the 0.86
+  Ry ran was a nightly) with full history. Remotes: `pastiera` is Ry's fork,
+  `pastiera-upstream` is palsoftware. Nightly is not a separate repo, it is
+  upstream `main`. Pick a nightly change across with
+  `git cherry-pick -Xsubtree=keyboard <sha>`.
+- **Upstream tags are fetched under `pastiera/*`** and both remotes are
+  `--no-tags`, so they never mix with Mutterboard's own release tags.
+- **It builds as the `:keyboard` library** through
+  `keyboard/app/mutterboard.gradle.kts`, never Pastiera's own build file, which
+  stays upstream-identical (it is AGP 8; we are AGP 9). Its GitHub updater is
+  off and its launcher icon is stripped in the app manifest.
+- **Settings: a Keyboard radio (Touchscreen / Physical keyboard) and a
+  separate Overlay switch.** They are independent: the overlay is an extra you
+  map to a button and it runs alongside either keyboard. Ry went through
+  "separate sections" and "nested under Keyboard" before landing here; the only
+  real either/or is which keyboard fits the phone. The radio is which of the two
+  IME services is enabled; the physical one ships disabled so updates keep the
+  dictation keyboard. Touchscreen is today's dictation keyboard until a
+  Gboard-style one exists.
+- **The mic button runs `DictationSession`** through
+  `keyboard/.../inputmethod/voice/` (Mutterboard's own package inside the
+  library) and `KeyboardDictation`, installed by `MutterboardApplication`. While
+  dictating, the suggestion row becomes the overlay's squiggle plus cancel, the
+  mic button becomes stop, and the whole bar sits in the overlay's mist.
+  It ends instantly - a poof was tried and Ry had it removed (`DictationBar`). Wave and mist are View ports of the
+  app's Compose `DictationWave`/`DictationAura`; keep the two in step.
+- **Its strings are rebranded from the app**, generated per locale by
+  `scripts/rebrand-keyboard-strings.py`; rerun it after picking nightly changes.
+  The About line keeps the Pastiera credit on purpose.
+
 ## The refiners are the heart of this app
 
 The dictation quality is the product, and it comes from the system prompts in

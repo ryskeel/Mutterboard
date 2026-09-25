@@ -16,6 +16,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
+        android:name=".MutterboardApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true"
@@ -24,7 +25,27 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Mutterboard">
+        android:theme="@style/Theme.Mutterboard"
+        tools:replace="android:label,android:theme">
+
+        <!-- Pastiera's own settings screen, minus its LAUNCHER filter: a third
+             app icon would break the one-icon rule below, and Mutterboard's
+             settings are the way in. -->
+        <activity
+            android:name="it.palsoftware.pastiera.MainActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Pastiera"
+            tools:node="replace" />
+
+        <!-- The physical keyboard ships disabled. Exactly one of the two input
+             method services is enabled at a time, and which one is the
+             Keyboard choice in settings - no preference to drift from it.
+             Existing installs keep the dictation keyboard they had. -->
+        <service
+            android:name="it.palsoftware.pastiera.inputmethod.PhysicalKeyboardInputMethodService"
+            android:enabled="false"
+            tools:node="merge" />
 
         <!-- Settings. Reached through the alias below rather than a filter of
              its own, because which of the two entry points owns the app icon is
