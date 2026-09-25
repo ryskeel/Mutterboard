@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import it.palsoftware.pastiera.inputmethod.PhysicalKeyboardInputMethodService
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -283,6 +284,8 @@ private fun SetupScreen(
     var showPrivacy by remember { mutableStateOf(false) }
     var hasMic by remember { mutableStateOf(false) }
     var imeEnabled by remember { mutableStateOf(false) }
+    var physicalKeyboard by remember { mutableStateOf(false) }
+    var chosenImeEnabled by remember { mutableStateOf(false) }
     var overlayEnabled by remember { mutableStateOf(false) }
     var canDrawOverlays by remember { mutableStateOf(false) }
     var accessibilityEnabled by remember { mutableStateOf(false) }
@@ -348,7 +351,9 @@ private fun SetupScreen(
     LaunchedEffect(refreshTick) {
         hasMic = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                 android.content.pm.PackageManager.PERMISSION_GRANTED
-        imeEnabled = isImeEnabled(context)
+        imeEnabled = isImeEnabled(context, dictationImeComponent(context))
+        physicalKeyboard = isPhysicalKeyboardChosen(context)
+        chosenImeEnabled = isImeEnabled(context, chosenImeComponent(context))
         // All three are granted on screens outside this app, so they can only be
         // re-read on resume; refreshTick already fires there.
         overlayEnabled = isOverlayLauncherEnabled(context)
@@ -478,6 +483,7 @@ private fun SetupScreen(
             DictationModeCard(
                 overlayChosen = overlayEnabled,
                 imeEnabled = imeEnabled,
+                chosenImeEnabled = chosenImeEnabled,
                 canDrawOverlays = canDrawOverlays,
                 accessibilityEnabled = accessibilityEnabled,
                 onChoose = { overlay ->
@@ -493,6 +499,27 @@ private fun SetupScreen(
                 onOpenShortcutSettings = onOpenShortcutSettings
             )
 
+
+            Spacer(Modifier.height(40.dp))
+
+            SectionHeader("Keyboard")
+            Spacer(Modifier.height(12.dp))
+            KeyboardTypeCard(
+                physicalKeyboard = physicalKeyboard,
+                imeEnabled = chosenImeEnabled,
+                onChoose = { physical ->
+                    setPhysicalKeyboardChosen(context, physical)
+                    physicalKeyboard = physical
+                    chosenImeEnabled = isImeEnabled(context, chosenImeComponent(context))
+                    imeEnabled = isImeEnabled(context, dictationImeComponent(context))
+                },
+                onOpenImeSettings = onOpenImeSettings,
+                onOpenKeyboardSettings = {
+                    context.startActivity(
+                        Intent(context, it.palsoftware.pastiera.MainActivity::class.java)
+                    )
+                }
+            )
 
             Spacer(Modifier.height(40.dp))
 
@@ -1319,6 +1346,7 @@ private fun RestrictedSettingsNote(onOpenAppInfo: () -> Unit) {
 private fun DictationModeCard(
     overlayChosen: Boolean,
     imeEnabled: Boolean,
+    chosenImeEnabled: Boolean,
     canDrawOverlays: Boolean,
     accessibilityEnabled: Boolean,
     onChoose: (Boolean) -> Unit,
@@ -1418,7 +1446,9 @@ private fun DictationModeCard(
             OptionSteps {
                 StepRow(
                     label = "Enable keyboard",
-                    done = imeEnabled,
+                    // Whichever keyboard the Keyboard section picked: with the
+                    // physical one, its mic key is how this option dictates.
+                    done = chosenImeEnabled,
                     actionLabel = "Enable",
                     onAction = onOpenImeSettings,
                     step = 1
@@ -1432,6 +1462,73 @@ private fun DictationModeCard(
         if (!overlayChosen && shortcutAttached) {
             HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
             ShortcutStepRow(done = false, step = null, onAction = onOpenShortcutSettings)
+        }
+    }
+}
+
+/**
+ * Which keyboard Mutterboard is: the dictation-only one it has always been, or a
+ * full keyboard for phones with real keys (built from Pastiera).
+ *
+ * Its own section rather than a sub-choice of "Keyboard" above, because the
+ * physical keyboard is a typing keyboard first and sits happily alongside the
+ * overlay - that is the setup it was built for.
+ *
+ * Like the overlay, the component state is the choice: exactly one of the two
+ * input method services is enabled, so Android's keyboard list only ever shows
+ * one Mutterboard. Switching drops the old one from that list, which is why the
+ * enable step follows the choice.
+ *
+ * Touchscreen will be the third option once it exists. Offering it before then
+ * would be a radio naming a keyboard that isn't there.
+ */
+@Composable
+private fun KeyboardTypeCard(
+    physicalKeyboard: Boolean,
+    imeEnabled: Boolean,
+    onChoose: (Boolean) -> Unit,
+    onOpenImeSettings: () -> Unit,
+    onOpenKeyboardSettings: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        ModeChoiceRow(
+            label = "Dictation only",
+            description = "Mutterboard's keyboard is just a microphone. You type " +
+                "with your phone's usual keyboard.",
+            selected = !physicalKeyboard,
+            onSelect = { onChoose(false) }
+        )
+        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+        ModeChoiceRow(
+            label = "Physical keyboard",
+            description = "Replaces your phone's keyboard, for phones with real " +
+                "keys. Suggestions, symbols and shortcuts sit in a bar above them.",
+            selected = physicalKeyboard,
+            onSelect = { onChoose(true) }
+        )
+        if (physicalKeyboard) {
+            OptionSteps {
+                StepRow(
+                    label = "Enable keyboard",
+                    done = imeEnabled,
+                    actionLabel = "Enable",
+                    onAction = onOpenImeSettings,
+                    step = 1
+                )
+                StepRow(
+                    label = "Layout, suggestions and shortcuts",
+                    done = false,
+                    actionLabel = "Open",
+                    onAction = onOpenKeyboardSettings,
+                    required = false
+                )
+            }
         }
     }
 }
@@ -1958,8 +2055,31 @@ private fun isAccessibilityEnabled(context: Context): Boolean {
     return enabled.split(':').any { ComponentName.unflattenFromString(it) == target }
 }
 
-private fun isImeEnabled(context: Context): Boolean {
+private fun isImeEnabled(context: Context, target: ComponentName): Boolean {
     val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-    val target = ComponentName(context, MutterboardInputMethodService::class.java)
     return imm.enabledInputMethodList.any { it.component == target }
+}
+
+private fun dictationImeComponent(context: Context) =
+    ComponentName(context, MutterboardInputMethodService::class.java)
+
+private fun physicalImeComponent(context: Context) =
+    ComponentName(context, PhysicalKeyboardInputMethodService::class.java)
+
+/** The physical keyboard ships disabled, so an install that never chose it has not. */
+private fun isPhysicalKeyboardChosen(context: Context): Boolean =
+    context.packageManager.getComponentEnabledSetting(physicalImeComponent(context)) ==
+        PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+
+private fun chosenImeComponent(context: Context) =
+    if (isPhysicalKeyboardChosen(context)) physicalImeComponent(context)
+    else dictationImeComponent(context)
+
+/**
+ * Swaps which input method service exists. Safe to call from the settings
+ * screen, unlike the launcher swap: no activity runs on either service.
+ */
+private fun setPhysicalKeyboardChosen(context: Context, physical: Boolean) {
+    setComponentEnabled(context, physicalImeComponent(context), physical)
+    setComponentEnabled(context, dictationImeComponent(context), !physical)
 }

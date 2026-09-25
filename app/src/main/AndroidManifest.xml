@@ -37,6 +37,15 @@
             android:theme="@style/Theme.Pastiera"
             tools:node="replace" />
 
+        <!-- The physical keyboard ships disabled. Exactly one of the two input
+             method services is enabled at a time, and which one is the
+             Keyboard choice in settings - no preference to drift from it.
+             Existing installs keep the dictation keyboard they had. -->
+        <service
+            android:name="it.palsoftware.pastiera.inputmethod.PhysicalKeyboardInputMethodService"
+            android:enabled="false"
+            tools:node="merge" />
+
         <!-- Settings. Reached through the alias below rather than a filter of
              its own, because which of the two entry points owns the app icon is
              something the overlay toggle switches at runtime. -->

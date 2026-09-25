@@ -236,8 +236,18 @@ nightly features Ry picks one at a time.
   `git cherry-pick -Xsubtree=keyboard <sha>`.
 - **Upstream tags are fetched under `pastiera/*`** and both remotes are
   `--no-tags`, so they never mix with Mutterboard's own release tags.
-- `keyboard/` still builds on its own (`./gradlew assembleStableDebug` inside
-  it). Nothing is wired into Mutterboard's app yet.
+- **It builds as the `:keyboard` library** through
+  `keyboard/app/mutterboard.gradle.kts`, never Pastiera's own build file, which
+  stays upstream-identical (it is AGP 8; we are AGP 9). Its GitHub updater is
+  off and its launcher icon is stripped in the app manifest.
+- **Settings has a Keyboard section: Dictation only / Physical keyboard.** Its
+  own section, not nested under Overlay/Keyboard, because the physical keyboard
+  types and happily coexists with the overlay (Ry's call). The choice is which
+  of the two IME services is enabled; the physical one ships disabled so updates
+  keep the dictation keyboard. Touchscreen (Gboard-style) is the planned third
+  option and stays hidden until it exists.
+- **Not done yet:** the physical keyboard's mic key still uses Android's speech
+  recognizer, not `DictationSession`.
 
 ## The refiners are the heart of this app
 
