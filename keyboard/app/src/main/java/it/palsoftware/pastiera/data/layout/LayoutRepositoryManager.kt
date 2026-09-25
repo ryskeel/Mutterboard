@@ -100,58 +100,67 @@ object LayoutRepositoryManager {
             val body = response.body ?: return@withContext LayoutDownloadResult.NetworkError
             val contentLength = body.contentLength()
             val cacheDir = File(context.cacheDir, "layout_downloads").apply { mkdirs() }
-            val tempFile = File(cacheDir, "${item.filename}.tmp")
-
-            body.byteStream().use { input ->
-                tempFile.outputStream().use { output ->
-                    val buffer = ByteArray(8192)
-                    var totalBytesRead = 0L
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        totalBytesRead += bytesRead
-                        onProgress?.invoke(totalBytesRead, contentLength)
+            withDownloadTempFile(cacheDir) { tempFile ->
+                body.byteStream().use { input ->
+                    tempFile.outputStream().use { output ->
+                        val buffer = ByteArray(8192)
+                        var totalBytesRead = 0L
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            totalBytesRead += bytesRead
+                            onProgress?.invoke(totalBytesRead, contentLength)
+                        }
                     }
                 }
-            }
 
-            val calculatedHash = calculateSHA256(tempFile)
-            if (!calculatedHash.equals(item.sha256, ignoreCase = true)) {
-                Log.e(TAG, "Hash mismatch for ${item.filename}. Expected ${item.sha256}, got $calculatedHash")
-                tempFile.delete()
-                return@withContext LayoutDownloadResult.HashMismatch
-            }
+                val calculatedHash = calculateSHA256(tempFile)
+                if (!calculatedHash.equals(item.sha256, ignoreCase = true)) {
+                    Log.e(
+                        TAG,
+                        "Hash mismatch for ${item.filename}. Expected ${item.sha256}, got $calculatedHash"
+                    )
+                    return@withDownloadTempFile LayoutDownloadResult.HashMismatch
+                }
 
-            val layoutName = layoutNameFromFilename(item.filename)
-            val validated = LayoutFileStore.loadLayoutFromStream(tempFile.inputStream())
-            if (validated == null) {
-                Log.e(TAG, "Downloaded layout ${item.filename} failed validation")
-                tempFile.delete()
-                return@withContext LayoutDownloadResult.InvalidFormat
-            }
-
-            val destFile = LayoutFileStore.getLayoutFile(context, layoutName)
-            if (destFile.exists()) {
-                destFile.delete()
-            }
-
-            if (!tempFile.renameTo(destFile)) {
-                tempFile.inputStream().use { input ->
-                    destFile.outputStream().use { output ->
-                        input.copyTo(output)
+                val layoutName = layoutNameFromFilename(item.filename)
+                val importResult = LayoutFileStore.saveLayoutFromJson(
+                    context = context,
+                    layoutName = layoutName,
+                    jsonString = tempFile.readText(),
+                    conflictPolicy = LayoutFileStore.LayoutConflictPolicy.REPLACE
+                )
+                if (importResult is LayoutFileStore.LayoutImportResult.Failure) {
+                    Log.e(
+                        TAG,
+                        "Downloaded layout ${item.filename} could not be installed: ${importResult.error}"
+                    )
+                    return@withDownloadTempFile when (importResult.error) {
+                        LayoutFileStore.LayoutImportError.WRITE_FAILED -> LayoutDownloadResult.CopyError
+                        else -> LayoutDownloadResult.InvalidFormat
                     }
                 }
-                tempFile.delete()
-            }
 
-            Log.i(TAG, "Layout downloaded: $layoutName")
-            LayoutDownloadResult.Success(layoutName)
+                Log.i(TAG, "Layout downloaded: $layoutName")
+                LayoutDownloadResult.Success(layoutName)
+            }
         } catch (e: SerializationException) {
             Log.e(TAG, "Invalid layout format for ${item.filename}", e)
             LayoutDownloadResult.InvalidFormat
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading layout ${item.filename}", e)
             LayoutDownloadResult.CopyError
+        }
+    }
+
+    internal fun <T> withDownloadTempFile(cacheDir: File, block: (File) -> T): T {
+        val tempFile = File.createTempFile("layout-download-", ".tmp", cacheDir)
+        return try {
+            block(tempFile)
+        } finally {
+            if (tempFile.exists() && !tempFile.delete()) {
+                Log.w(TAG, "Unable to delete layout download temp file: ${tempFile.name}")
+            }
         }
     }
 

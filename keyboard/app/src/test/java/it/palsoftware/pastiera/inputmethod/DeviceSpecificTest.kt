@@ -1,6 +1,8 @@
 package it.palsoftware.pastiera.inputmethod
 
 import android.view.KeyEvent
+import android.view.InputDevice
+import it.palsoftware.pastiera.data.layout.LayoutMappingRepository
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -9,6 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -64,6 +67,25 @@ class DeviceSpecificTest {
         assertEquals("Unihertz", DeviceSpecific.keyboardName())
         assertFalse(DeviceSpecific.needsRemapping())
         assertFalse(DeviceSpecific.isMinimalPhoneDevice())
+        assertFalse(DeviceSpecific.isTitan2EliteDevice())
+    }
+
+    @Test
+    fun originalTitanProfile_detectsOriginalTitanLayout() {
+        DeviceSpecific.setBuildFingerprintForTests(
+            brand = "Unihertz",
+            manufacturer = "A-gold",
+            model = "Titan",
+            device = "Titan",
+            product = "Titan",
+            board = "g61v71c2k_dfl_tee",
+            display = "Titan_20221121"
+        )
+
+        assertEquals("titan", DeviceSpecific.physicalKeyboardName())
+        assertEquals("Unihertz", DeviceSpecific.keyboardName())
+        assertFalse(DeviceSpecific.needsRemapping())
+        assertFalse(DeviceSpecific.isTitan2Device())
     }
 
     @Test
@@ -97,6 +119,23 @@ class DeviceSpecificTest {
     }
 
     @Test
+    fun clicksBuiltInManualOverrides_resolveAsIndependentProfiles() {
+        val razr = DeviceSpecific.resolveInputProfile(
+            event = null,
+            physicalProfileOverride = "clicks_razr"
+        )
+        val pixel = DeviceSpecific.resolveInputProfile(
+            event = null,
+            physicalProfileOverride = "clicks_pixel"
+        )
+
+        assertEquals("clicks_razr", razr.profileId)
+        assertEquals("clicks_pixel", pixel.profileId)
+        assertFalse(razr.autoDetected)
+        assertFalse(pixel.autoDetected)
+    }
+
+    @Test
     fun titan2EliteQwertyProfile_detectsOnlyWithStrictToken() {
         DeviceSpecific.setBuildFingerprintForTests(
             brand = "unihertz",
@@ -110,6 +149,7 @@ class DeviceSpecificTest {
         assertEquals("Unihertz", DeviceSpecific.keyboardName())
         assertFalse(DeviceSpecific.needsRemapping())
         assertTrue(DeviceSpecific.isTitan2Device())
+        assertTrue(DeviceSpecific.isTitan2EliteDevice())
     }
 
     @Test
@@ -126,6 +166,7 @@ class DeviceSpecificTest {
         assertEquals("titan2elite_qwerty", DeviceSpecific.physicalKeyboardName())
         assertEquals("Unihertz", DeviceSpecific.keyboardName())
         assertFalse(DeviceSpecific.needsRemapping())
+        assertTrue(DeviceSpecific.isTitan2EliteDevice())
     }
 
     @Test
@@ -142,6 +183,29 @@ class DeviceSpecificTest {
         assertEquals("titan2elite_qwerty", DeviceSpecific.physicalKeyboardName())
         assertEquals("Unihertz", DeviceSpecific.keyboardName())
         assertFalse(DeviceSpecific.needsRemapping())
+        assertTrue(DeviceSpecific.isTitan2EliteDevice())
+    }
+
+    @Test
+    fun shippedTitan2EliteFingerprint_exposesStableBackupIdentity() {
+        DeviceSpecific.setBuildFingerprintForTests(
+            brand = "Unihertz",
+            manufacturer = "Unihertz",
+            model = "Titan 2",
+            device = "Titan_2",
+            product = "Titan_2_EEA",
+            board = "G72BoardV1",
+            display = "Titan 2 Elite_EEA_V02.00.02",
+            fingerprint = "Unihertz/Titan_2_EEA/Titan_2:16/build/V02.00.02:user/release-keys"
+        )
+
+        val identity = DeviceSpecific.detectedDeviceIdentity()
+
+        assertEquals("titan2-elite", identity.stableId)
+        assertEquals("Titan 2 Elite", identity.displayName)
+        assertEquals("g72boardv1", identity.board)
+        assertTrue(identity.buildDisplay.contains("elite"))
+        assertTrue(identity.buildFingerprint.contains("V02.00.02"))
     }
 
     @Test
@@ -215,7 +279,7 @@ class DeviceSpecificTest {
     }
 
     @Test
-    fun key2Bbf1004ScanCodes_areNormalizedToExpectedKeyCodes() {
+    fun key2AlphabeticScanCodes_areNormalizedToCanonicalPositions() {
         DeviceSpecific.setBuildFingerprintForTests(
             brand = "blackberry",
             manufacturer = "blackberry",
@@ -253,6 +317,80 @@ class DeviceSpecificTest {
         val zRemapped = DeviceSpecific.remapHardwareKeyEvent(KeyEvent.KEYCODE_W, zInput)
         assertEquals(KeyEvent.KEYCODE_Z, zRemapped.keyCode)
         assertEquals(KeyEvent.KEYCODE_Z, zRemapped.event?.keyCode)
+
+        listOf(
+            Triple(21, KeyEvent.KEYCODE_Z, KeyEvent.KEYCODE_Y),
+            Triple(44, KeyEvent.KEYCODE_Y, KeyEvent.KEYCODE_Z),
+            Triple(16, KeyEvent.KEYCODE_A, KeyEvent.KEYCODE_Q),
+            Triple(17, KeyEvent.KEYCODE_Z, KeyEvent.KEYCODE_W),
+            Triple(30, KeyEvent.KEYCODE_Q, KeyEvent.KEYCODE_A),
+            Triple(44, KeyEvent.KEYCODE_W, KeyEvent.KEYCODE_Z)
+        ).forEach { (scanCode, reportedKeyCode, canonicalKeyCode) ->
+            val input = keyEvent(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = reportedKeyCode,
+                metaState = 0,
+                scanCode = scanCode
+            )
+            val remapped = DeviceSpecific.remapHardwareKeyEvent(reportedKeyCode, input)
+            assertEquals(canonicalKeyCode, remapped.keyCode)
+            assertEquals(canonicalKeyCode, remapped.event?.keyCode)
+        }
+    }
+
+    @Test
+    fun key2LineageEvents_areMappedExactlyOnceByInputLanguage() {
+        DeviceSpecific.setBuildFingerprintForTests(
+            brand = "blackberry",
+            manufacturer = "blackberry",
+            model = "bbf100-4",
+            device = "luna",
+            product = "lineage_luna"
+        )
+        val context = RuntimeEnvironment.getApplication()
+
+        try {
+            LayoutMappingRepository.loadLayout(context.assets, "qwertz", context)
+            assertEquals(
+                'z',
+                mappedCharacter(scanCode = 21, reportedKeyCode = KeyEvent.KEYCODE_Z)
+            )
+            assertEquals(
+                'y',
+                mappedCharacter(scanCode = 44, reportedKeyCode = KeyEvent.KEYCODE_Y)
+            )
+
+            LayoutMappingRepository.loadLayout(context.assets, "azerty", context)
+            assertEquals(
+                'a',
+                mappedCharacter(scanCode = 16, reportedKeyCode = KeyEvent.KEYCODE_A)
+            )
+            assertEquals(
+                'z',
+                mappedCharacter(scanCode = 17, reportedKeyCode = KeyEvent.KEYCODE_Z)
+            )
+            assertEquals(
+                'q',
+                mappedCharacter(scanCode = 30, reportedKeyCode = KeyEvent.KEYCODE_Q)
+            )
+            assertEquals(
+                'w',
+                mappedCharacter(scanCode = 44, reportedKeyCode = KeyEvent.KEYCODE_W)
+            )
+        } finally {
+            LayoutMappingRepository.loadLayout(context.assets, "qwerty", context)
+        }
+    }
+
+    private fun mappedCharacter(scanCode: Int, reportedKeyCode: Int): Char? {
+        val input = keyEvent(
+            action = KeyEvent.ACTION_DOWN,
+            keyCode = reportedKeyCode,
+            metaState = 0,
+            scanCode = scanCode
+        )
+        val remapped = DeviceSpecific.remapHardwareKeyEvent(reportedKeyCode, input)
+        return LayoutMappingRepository.getCharacter(remapped.keyCode, isShift = false)
     }
 
     @Test
@@ -304,6 +442,118 @@ class DeviceSpecificTest {
 
         assertEquals(KeyEvent.KEYCODE_CTRL_LEFT, remapped.keyCode)
         assertEquals(KeyEvent.KEYCODE_CTRL_LEFT, remapped.event?.keyCode)
+    }
+
+    @Test
+    fun clicksPowerScanCodes_restorePhysicalLetterPositionsAfterAndroidLayoutMapping() {
+        val physicalYReportedAsZ = keyEvent(
+            action = KeyEvent.ACTION_DOWN,
+            keyCode = KeyEvent.KEYCODE_Z,
+            metaState = 0,
+            scanCode = 21
+        )
+        val yRemapped = DeviceSpecific.remapHardwareKeyEvent(
+            keyCode = KeyEvent.KEYCODE_Z,
+            event = physicalYReportedAsZ,
+            physicalProfileOverride = "clicks_power"
+        )
+        assertEquals(KeyEvent.KEYCODE_Y, yRemapped.keyCode)
+        assertEquals(KeyEvent.KEYCODE_Y, yRemapped.event?.keyCode)
+
+        val physicalZReportedAsY = keyEvent(
+            action = KeyEvent.ACTION_DOWN,
+            keyCode = KeyEvent.KEYCODE_Y,
+            metaState = 0,
+            scanCode = 44
+        )
+        val zRemapped = DeviceSpecific.remapHardwareKeyEvent(
+            keyCode = KeyEvent.KEYCODE_Y,
+            event = physicalZReportedAsY,
+            physicalProfileOverride = "clicks_power"
+        )
+        assertEquals(KeyEvent.KEYCODE_Z, zRemapped.keyCode)
+        assertEquals(KeyEvent.KEYCODE_Z, zRemapped.event?.keyCode)
+    }
+
+    @Test
+    fun clicksPowerNonLetterScanCode_staysUnchanged() {
+        val input = keyEvent(
+            action = KeyEvent.ACTION_DOWN,
+            keyCode = KeyEvent.KEYCODE_SLASH,
+            metaState = 0,
+            scanCode = 53
+        )
+        val remapped = DeviceSpecific.remapHardwareKeyEvent(
+            keyCode = KeyEvent.KEYCODE_SLASH,
+            event = input,
+            physicalProfileOverride = "clicks_power"
+        )
+
+        assertEquals(KeyEvent.KEYCODE_SLASH, remapped.keyCode)
+        assertSame(input, remapped.event)
+    }
+
+    @Test
+    fun clicksPowerAccessory_isDetectedPerInputDevice() {
+        val profile = DeviceSpecific.resolveInputProfile(
+            identity = keyboardIdentity(
+                name = "Power Keyboard-A0FC-1",
+                vendorId = 2007,
+                isExternal = true
+            )
+        )
+
+        assertEquals("clicks_power", profile.profileId)
+        assertEquals(DeviceSpecific.InputDeviceKind.ACCESSORY, profile.kind)
+        assertTrue(profile.autoDetected)
+    }
+
+    @Test
+    fun similarlyNamedBuiltInKeyboard_isNotDetectedAsClicksAccessory() {
+        val profile = DeviceSpecific.resolveInputProfile(
+            identity = keyboardIdentity(
+                name = "Power Keyboard-A0FC-1",
+                vendorId = 2007,
+                isExternal = false
+            )
+        )
+
+        assertEquals("unknown", profile.profileId)
+        assertEquals(DeviceSpecific.InputDeviceKind.BUILT_IN, profile.kind)
+        assertFalse(profile.autoDetected)
+    }
+
+    @Test
+    fun clicksAccessoryDetection_winsOverBuiltInManualProfileForItsEvents() {
+        val profile = DeviceSpecific.resolveInputProfile(
+            identity = keyboardIdentity(
+                name = "Power Keyboard-A0FC-1",
+                vendorId = 2007,
+                isExternal = true
+            ),
+            physicalProfileOverride = "key2"
+        )
+
+        assertEquals("clicks_power", profile.profileId)
+        assertEquals(DeviceSpecific.InputDeviceKind.ACCESSORY, profile.kind)
+        assertTrue(profile.autoDetected)
+    }
+
+    private fun keyboardIdentity(
+        name: String,
+        vendorId: Int,
+        isExternal: Boolean
+    ): DeviceSpecific.KeyboardInputIdentity {
+        return DeviceSpecific.KeyboardInputIdentity(
+            name = name,
+            descriptor = "test-descriptor",
+            vendorId = vendorId,
+            productId = 0,
+            sources = InputDevice.SOURCE_KEYBOARD,
+            keyboardType = InputDevice.KEYBOARD_TYPE_ALPHABETIC,
+            isExternal = isExternal,
+            isVirtual = false
+        )
     }
 
     private fun keyEvent(action: Int, keyCode: Int, metaState: Int, scanCode: Int = 1): KeyEvent {

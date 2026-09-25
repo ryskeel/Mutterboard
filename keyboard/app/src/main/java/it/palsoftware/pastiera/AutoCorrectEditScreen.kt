@@ -1,6 +1,7 @@
 package it.palsoftware.pastiera
 
 import android.content.Context
+import android.content.Intent
 import android.content.res.AssetManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -24,10 +25,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import it.palsoftware.pastiera.inputmethod.AutoCorrector
+import it.palsoftware.pastiera.core.suggestions.UserDictionaryStore
 import it.palsoftware.pastiera.R
 import org.json.JSONObject
 import java.util.Locale
@@ -44,20 +45,21 @@ fun AutoCorrectEditScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    
+
     // Load corrections (custom first, then default)
     // Use LinkedHashMap to maintain insertion order (newest first)
     var corrections by remember {
         mutableStateOf(loadCorrectionsForLanguage(context, languageCode).toLinkedHashMap())
     }
-    
+
     // State for the add/edit dialog
     var showAddDialog by remember { mutableStateOf(false) }
     var editingKey by remember { mutableStateOf<String?>(null) }
-    
+    val userDictionaryStore = remember { UserDictionaryStore() }
+
     // State for search query
     var searchQuery by remember { mutableStateOf("") }
-    
+
     // Filter corrections based on search query (searches both original and corrected)
     val filteredCorrections = remember(corrections, searchQuery) {
         if (searchQuery.isBlank()) {
@@ -65,17 +67,14 @@ fun AutoCorrectEditScreen(
         } else {
             val query = searchQuery.lowercase()
             corrections.filter { (original, corrected) ->
-                original.lowercase().contains(query) || 
+                original.lowercase().contains(query) ||
                 corrected.lowercase().contains(query)
             }
         }
     }
-    
+
     // Handle the system back button
-    BackHandler {
-        onBack()
-    }
-    
+
     Scaffold(
         topBar = {
             Surface(
@@ -141,7 +140,7 @@ fun AutoCorrectEditScreen(
                     modifier = Modifier.padding(16.dp)
                 )
             }
-            
+
             // Search field
             Surface(
                 modifier = Modifier.fillMaxWidth()
@@ -172,7 +171,7 @@ fun AutoCorrectEditScreen(
                     }
                 )
             }
-            
+
             // List of corrections
             if (filteredCorrections.isEmpty()) {
                 // Message shown when there are no corrections or no search results
@@ -227,7 +226,7 @@ fun AutoCorrectEditScreen(
             }
         }
     }
-    
+
     // Dialog per aggiungere/modificare una correzione
     if (showAddDialog) {
         AddCorrectionDialog(
@@ -237,27 +236,30 @@ fun AutoCorrectEditScreen(
                 showAddDialog = false
                 editingKey = null
             },
-            onSave = { original, corrected ->
+            onSave = { original, corrected, addReplacementToDictionary ->
                 val newCorrections = LinkedHashMap<String, String>()
                 val key = original.lowercase()
-                
+
                 // If editing, remove the old key first
                 if (editingKey != null && editingKey != key) {
                     newCorrections.remove(editingKey)
                 }
-                
+
                 // Add the new/edited correction at the beginning (newest first)
                 newCorrections[key] = corrected
-                
+
                 // Add all other corrections (excluding the one being edited if it's the same key)
                 corrections.forEach { (k, v) ->
                     if (k != key && k != editingKey) {
                         newCorrections[k] = v
                     }
                 }
-                
+
                 corrections = newCorrections
                 saveCorrections(context, languageCode, corrections, null)
+                if (addReplacementToDictionary) {
+                    addReplacementToUserDictionaryIfNeeded(context, userDictionaryStore, corrected)
+                }
                 // Reload all corrections (including new languages)
                 try {
                     val assets = context.assets
@@ -306,7 +308,7 @@ private fun CorrectionItem(
                     fontWeight = FontWeight.Medium
                 )
             }
-            
+
             // Freccia
             Text(
                 text = "→",
@@ -314,7 +316,7 @@ private fun CorrectionItem(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
-            
+
             // Colonna corretta
             Column(
                 modifier = Modifier.weight(1f),
@@ -327,7 +329,7 @@ private fun CorrectionItem(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            
+
             // Pulsante elimina
             IconButton(
                 onClick = onDelete,
@@ -348,17 +350,19 @@ private fun AddCorrectionDialog(
     originalKey: String?,
     originalValue: String?,
     onDismiss: () -> Unit,
-    onSave: (String, String) -> Unit
+    onSave: (String, String, Boolean) -> Unit
 ) {
     var originalText by remember { mutableStateOf(originalKey ?: "") }
     var correctedText by remember { mutableStateOf(originalValue ?: "") }
-    
+    var addReplacementToDictionary by remember { mutableStateOf(true) }
+
     // Update fields when originalKey changes
     LaunchedEffect(originalKey) {
         originalText = originalKey ?: ""
         correctedText = originalValue ?: ""
+        addReplacementToDictionary = true
     }
-    
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -389,13 +393,28 @@ private fun AddCorrectionDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Checkbox(
+                        checked = addReplacementToDictionary,
+                        onCheckedChange = { addReplacementToDictionary = it }
+                    )
+                    Text(
+                        text = stringResource(R.string.auto_correct_add_replacement_to_dictionary),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
                     if (originalText.isNotBlank() && correctedText.isNotBlank()) {
-                        onSave(originalText.trim(), correctedText.trim())
+                        onSave(originalText.trim(), correctedText.trim(), addReplacementToDictionary)
                     }
                 },
                 enabled = originalText.isNotBlank() && correctedText.isNotBlank()
@@ -417,20 +436,20 @@ private fun AddCorrectionDialog(
  */
 private fun loadCorrectionsForLanguage(context: Context, languageCode: String): Map<String, String> {
     val corrections = mutableMapOf<String, String>()
-    
+
     // First load custom corrections (if any)
     val customCorrections = SettingsManager.getCustomAutoCorrections(context, languageCode)
     if (customCorrections.isNotEmpty()) {
         corrections.putAll(customCorrections)
     }
-    
+
     // Then load default corrections from assets (only if there are no custom ones)
     if (corrections.isEmpty()) {
         try {
             val fileName = "common/autocorrect/auto_corrections_$languageCode.json"
             val jsonString = context.assets.open(fileName).bufferedReader().use { it.readText() }
             val jsonObject = JSONObject(jsonString)
-            
+
             val keys = jsonObject.keys()
             while (keys.hasNext()) {
                 val key = keys.next()
@@ -441,7 +460,7 @@ private fun loadCorrectionsForLanguage(context: Context, languageCode: String): 
             // File not found or parsing error
         }
     }
-    
+
     return corrections
 }
 
@@ -449,12 +468,38 @@ private fun loadCorrectionsForLanguage(context: Context, languageCode: String): 
  * Saves custom corrections for a language.
  */
 private fun saveCorrections(
-    context: Context, 
-    languageCode: String, 
+    context: Context,
+    languageCode: String,
     corrections: Map<String, String>,
     languageName: String? = null
 ) {
     SettingsManager.saveCustomAutoCorrections(context, languageCode, corrections, languageName)
+}
+
+internal fun addReplacementToUserDictionaryIfNeeded(
+    context: Context,
+    userDictionaryStore: UserDictionaryStore,
+    replacement: String
+): Boolean {
+    val word = replacement.trim()
+    if (word.isEmpty() || word.none { it.isLetterOrDigit() }) {
+        return false
+    }
+
+    userDictionaryStore.loadUserEntries(context)
+    val alreadyExists = userDictionaryStore.getSnapshot().any { entry ->
+        entry.word.equals(word, ignoreCase = true)
+    }
+    if (alreadyExists) {
+        return false
+    }
+
+    userDictionaryStore.addWord(context, word)
+    val intent = Intent(AppBroadcastActions.USER_DICTIONARY_UPDATED).apply {
+        setPackage(context.packageName)
+    }
+    context.sendBroadcast(intent)
+    return true
 }
 
 /**
@@ -484,7 +529,7 @@ private fun getLanguageDisplayName(context: Context, languageCode: String): Stri
     if (savedName != null) {
         return savedName
     }
-    
+
     // If there is no saved name, use the name generated from the locale
     return try {
         val locale = Locale.forLanguageTag(languageCode)

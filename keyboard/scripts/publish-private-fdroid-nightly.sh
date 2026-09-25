@@ -2,18 +2,52 @@
 set -euo pipefail
 
 BASE_VERSION="${1:-}"
-PAGES_PUBLIC_DIR="${2:-../palsoftware-web/apps/docs/public}"
-REPO_URL="${3:-https://pastiera.eu/fdroid/nightly/repo}"
-PAGES_REPO_DIR="${PAGES_REPO_DIR:-$PAGES_PUBLIC_DIR/../../..}"
+PAGES_PUBLIC_DIR="../palsoftware-web/apps/docs/public"
+REPO_URL="https://pastiera.eu/fdroid/nightly/repo"
+PAGES_REPO_DIR_OVERRIDE="${PAGES_REPO_DIR:-}"
 AUTO_PUSH_PAGES="${AUTO_PUSH_PAGES:-true}"
+NIGHTLY_TIMESTAMP="${PASTIERA_NIGHTLY_TIMESTAMP:-}"
+NIGHTLY_HIGHLIGHTS_FILE="${NIGHTLY_HIGHLIGHTS_FILE:-}"
 
 if [ -z "$BASE_VERSION" ]; then
-  echo "Usage: $0 <base-version> [pages-public-dir] [repo-url] [--no-push-pages]" >&2
+  echo "Usage: $0 <base-version> [pages-public-dir] [repo-url] [--timestamp YYYYMMDD.HHMMSS] [--no-push-pages]" >&2
   exit 1
 fi
 
-if [ "${4:-}" = "--no-push-pages" ]; then
-  AUTO_PUSH_PAGES=false
+shift
+if [ $# -gt 0 ] && [[ "$1" != --* ]]; then
+  PAGES_PUBLIC_DIR="$1"
+  shift
+fi
+if [ $# -gt 0 ] && [[ "$1" != --* ]]; then
+  REPO_URL="$1"
+  shift
+fi
+PAGES_REPO_DIR="${PAGES_REPO_DIR_OVERRIDE:-$PAGES_PUBLIC_DIR/../../..}"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --timestamp)
+      if [ $# -lt 2 ]; then
+        echo "Missing value for --timestamp" >&2
+        exit 1
+      fi
+      NIGHTLY_TIMESTAMP="$2"
+      shift 2
+      ;;
+    --no-push-pages)
+      AUTO_PUSH_PAGES=false
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [ -n "$NIGHTLY_TIMESTAMP" ]; then
+  export PASTIERA_NIGHTLY_TIMESTAMP="$NIGHTLY_TIMESTAMP"
 fi
 
 if ! command -v fdroid >/dev/null 2>&1; then
@@ -22,6 +56,16 @@ if ! command -v fdroid >/dev/null 2>&1; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -z "$NIGHTLY_HIGHLIGHTS_FILE" ]; then
+  NIGHTLY_HIGHLIGHTS_FILE="$ROOT_DIR/.github/release-templates/nightly-highlights.md"
+fi
+if [ -s "$NIGHTLY_HIGHLIGHTS_FILE" ]; then
+  HIGHLIGHTS_CHARACTER_COUNT="$(wc -m < "$NIGHTLY_HIGHLIGHTS_FILE" | tr -d '[:space:]')"
+  if [ "$HIGHLIGHTS_CHARACTER_COUNT" -gt 500 ]; then
+    echo "Nightly highlights exceed the F-Droid 500-character limit: $HIGHLIGHTS_CHARACTER_COUNT" >&2
+    exit 1
+  fi
+fi
 FDROID_ROOT="${FDROID_ROOT:-$ROOT_DIR/.fdroid/nightly}"
 FDROID_REPO_DIR="$FDROID_ROOT/repo"
 FDROID_METADATA_DIR="$FDROID_ROOT/metadata"
@@ -30,7 +74,9 @@ APK_PATH="$ROOT_DIR/app/build/outputs/apk/nightly/release/app-nightly-release.ap
 APP_ID="it.palsoftware.pastiera.nightly"
 VERSION_INFO="$("$ROOT_DIR/scripts/nightly-version.sh" "$BASE_VERSION")"
 FULL_VERSION="$(printf '%s\n' "$VERSION_INFO" | awk -F= '/^full_version=/{print $2}')"
+VERSION_CODE="$(printf '%s\n' "$VERSION_INFO" | awk -F= '/^version_code=/{print $2}')"
 COMMIT_MESSAGE="${COMMIT_MESSAGE:-Publish Pastiera nightly F-Droid repo ${FULL_VERSION}}"
+FDROID_APK_PATH="$FDROID_REPO_DIR/pastiera-nightly-${FULL_VERSION}.apk"
 
 if [ ! -d "$PAGES_PUBLIC_DIR" ]; then
   echo "Pages public directory not found: $PAGES_PUBLIC_DIR" >&2
@@ -62,6 +108,12 @@ ensure_yaml_value "$FDROID_ROOT/config.yml" "repo_url" "$REPO_URL"
 ensure_yaml_value "$FDROID_ROOT/config.yml" "repo_name" "Pastiera Nightly"
 ensure_yaml_value "$FDROID_ROOT/config.yml" "repo_description" "Nightly builds for Pastiera"
 
+mkdir -p "$FDROID_ROOT/config"
+cat > "$FDROID_ROOT/config/categories.yml" <<EOF
+nightly:
+  name: Nightly
+EOF
+
 mkdir -p "$FDROID_METADATA_DIR"
 find "$FDROID_METADATA_DIR" -maxdepth 1 -type f ! -name "${APP_ID}.yml" -delete
 
@@ -77,11 +129,16 @@ Summary: Nightly builds for Pastiera
 WebSite: https://pastiera.eu
 EOF
 
+if [ -s "$NIGHTLY_HIGHLIGHTS_FILE" ]; then
+  CHANGELOG_DIR="$FDROID_METADATA_DIR/${APP_ID}/en-US/changelogs"
+  mkdir -p "$CHANGELOG_DIR"
+  cp "$NIGHTLY_HIGHLIGHTS_FILE" "$CHANGELOG_DIR/${VERSION_CODE}.txt"
+fi
+
 "$ROOT_DIR/scripts/build-nightly.sh" "$BASE_VERSION" --fdroid
 
 mkdir -p "$FDROID_REPO_DIR"
-rm -f "$FDROID_REPO_DIR"/*.apk "$FDROID_REPO_DIR"/*.apk.sha256
-cp "$APK_PATH" "$FDROID_REPO_DIR/"
+cp "$APK_PATH" "$FDROID_APK_PATH"
 
 (
   cd "$FDROID_ROOT"

@@ -5,7 +5,6 @@ import android.content.res.AssetManager
 import android.util.Log
 import android.view.KeyEvent
 import it.palsoftware.pastiera.SettingsManager
-import it.palsoftware.pastiera.inputmethod.DeviceSpecific
 import org.json.JSONObject
 import java.io.InputStream
 
@@ -14,16 +13,6 @@ import java.io.InputStream
  */
 object KeyMappingLoader {
     private const val TAG = "KeyMappingLoader"
-
-    fun getDeviceName(context: Context? = null): String {
-        if (context != null) {
-            val manualOverride = SettingsManager.getPhysicalKeyboardProfileOverride(context)
-            if (manualOverride != "auto") {
-                return manualOverride
-            }
-        }
-        return DeviceSpecific.physicalKeyboardName()
-    }
 
     private val keyCodeMap = mapOf(
         "KEYCODE_Q" to KeyEvent.KEYCODE_Q,
@@ -72,76 +61,23 @@ object KeyMappingLoader {
         "KEYCODE_COMMA" to KeyEvent.KEYCODE_COMMA,
         "KEYCODE_PERIOD" to KeyEvent.KEYCODE_PERIOD,
         "KEYCODE_SLASH" to KeyEvent.KEYCODE_SLASH,
+        "KEYCODE_CTRL_LEFT" to KeyEvent.KEYCODE_CTRL_LEFT,
         // Minimal Phone (MP01) custom keycodes
         "KEYCODE_EM" to 666,  // Emoji key
         "KEYCODE_MIC" to 667  // Mic key
     )
 
-    fun loadAltKeyMappings(assets: AssetManager, context: Context? = null): Map<Int, String> {
-        val altKeyMap = mutableMapOf<Int, String>()
-        val deviceName = getDeviceName(context)
-        val candidateDeviceNames = if (deviceName == "unknown") {
-            listOf("titan2")
-        } else {
-            listOf(deviceName)
+    internal fun loadStringMappings(assets: AssetManager, filePath: String): Map<Int, String> {
+        val jsonString = assets.open(filePath).bufferedReader().use { it.readText() }
+        val mappingsObject = JSONObject(jsonString).getJSONObject("mappings")
+        val mappings = mutableMapOf<Int, String>()
+        val keys = mappingsObject.keys()
+        while (keys.hasNext()) {
+            val keyName = keys.next()
+            val keyCode = keyCodeMap[keyName] ?: continue
+            mappings[keyCode] = mappingsObject.getString(keyName)
         }
-
-        for (candidateDeviceName in candidateDeviceNames) {
-            try {
-                val filePath = "devices/$candidateDeviceName/alt_key_mappings.json"
-                val inputStream: InputStream = assets.open(filePath)
-                val jsonString = inputStream.bufferedReader().use { it.readText() }
-                val jsonObject = JSONObject(jsonString)
-                val mappingsObject = jsonObject.getJSONObject("mappings")
-
-                val keys = mappingsObject.keys()
-                while (keys.hasNext()) {
-                    val keyName = keys.next()
-                    val keyCode = keyCodeMap[keyName]
-                    val character = mappingsObject.getString(keyName)
-                    if (keyCode != null) {
-                        altKeyMap[keyCode] = character
-                    }
-                }
-                applyCurrencySymbolOverride(altKeyMap, context)
-                Log.d(TAG, "Loaded Alt mappings for device: $candidateDeviceName")
-                return altKeyMap
-            } catch (e: Exception) {
-                Log.w(TAG, "Error loading Alt mappings for device: $candidateDeviceName", e)
-            }
-        }
-
-        try {
-            val filePath = "devices/titan2/alt_key_mappings.json"
-            val inputStream: InputStream = assets.open(filePath)
-            val jsonString = inputStream.bufferedReader().use { it.readText() }
-            val jsonObject = JSONObject(jsonString)
-            val mappingsObject = jsonObject.getJSONObject("mappings")
-
-            val keys = mappingsObject.keys()
-            while (keys.hasNext()) {
-                val keyName = keys.next()
-                val keyCode = keyCodeMap[keyName]
-                val character = mappingsObject.getString(keyName)
-                if (keyCode != null) {
-                    altKeyMap[keyCode] = character
-                }
-            }
-            applyCurrencySymbolOverride(altKeyMap, context)
-            Log.d(TAG, "Loaded fallback Alt mappings for device: titan2")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading Alt mappings", e)
-            altKeyMap[KeyEvent.KEYCODE_T] = "("
-            altKeyMap[KeyEvent.KEYCODE_Y] = ")"
-        }
-        return altKeyMap
-    }
-
-    private fun applyCurrencySymbolOverride(altKeyMap: MutableMap<Int, String>, context: Context?) {
-        if (context == null || !altKeyMap.containsKey(KeyEvent.KEYCODE_GRAVE)) {
-            return
-        }
-        altKeyMap[KeyEvent.KEYCODE_GRAVE] = SettingsManager.getPhysicalKeyboardCurrencySymbol(context)
+        return mappings
     }
 
     fun loadSymKeyMappings(assets: AssetManager): Map<Int, String> {
@@ -311,6 +247,8 @@ object KeyMappingLoader {
                 "DPAD_RIGHT" to KeyEvent.KEYCODE_DPAD_RIGHT,
                 "DPAD_CENTER" to KeyEvent.KEYCODE_DPAD_CENTER,
                 "TAB" to KeyEvent.KEYCODE_TAB,
+                "MOVE_HOME" to KeyEvent.KEYCODE_MOVE_HOME,
+                "MOVE_END" to KeyEvent.KEYCODE_MOVE_END,
                 "PAGE_UP" to KeyEvent.KEYCODE_PAGE_UP,
                 "PAGE_DOWN" to KeyEvent.KEYCODE_PAGE_DOWN,
                 "ESCAPE" to KeyEvent.KEYCODE_ESCAPE,
@@ -338,6 +276,10 @@ object KeyMappingLoader {
                             }
                         }
                         "native_ctrl" -> ctrlKeyMap[keyCode] = CtrlMapping("native_ctrl", "")
+                        "command" -> {
+                            val commandId = mappingObject.getString("command")
+                            ctrlKeyMap[keyCode] = CtrlMapping("command", commandId)
+                        }
                         "none" -> Unit
                     }
                 }

@@ -75,13 +75,21 @@ android {
     namespace = "it.palsoftware.pastiera"
     compileSdk = 36
 
-    val defaultVersionCode = 85
-    val defaultVersionName = "0.85"
+    val defaultVersionCode = 86
+    val defaultVersionName = "0.86"
     val ciVersionCode = providers.gradleProperty("PASTIERA_VERSION_CODE").orNull?.toIntOrNull()
     val ciVersionName = providers.gradleProperty("PASTIERA_VERSION_NAME").orNull
     val nightlyVersionCode = providers.gradleProperty("PASTIERA_NIGHTLY_VERSION_CODE").orNull?.toIntOrNull()
     val nightlyVersionNameSuffix = providers.gradleProperty("PASTIERA_NIGHTLY_VERSION_SUFFIX").orNull ?: "-nightly"
     val isFdroidBuild = gradleBooleanProperty("PASTIERA_FDROID_BUILD")
+    val isUnsignedReleaseBuild = gradleBooleanProperty("PASTIERA_UNSIGNED_RELEASE_BUILD")
+    val successorGithubRepository = providers.gradleProperty("PASTIERA_SUCCESSOR_GITHUB_REPOSITORY")
+        .orNull ?: "pkb-rocks/plektra"
+    if (!successorGithubRepository.matches(Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"))) {
+        throw GradleException(
+            "PASTIERA_SUCCESSOR_GITHUB_REPOSITORY must have the form owner/repository"
+        )
+    }
 
     defaultConfig {
         applicationId = "it.palsoftware.pastiera"
@@ -91,6 +99,7 @@ android {
         versionName = ciVersionName ?: defaultVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "SUCCESSOR_GITHUB_REPOSITORY", "\"$successorGithubRepository\"")
     }
 
     signingConfigs {
@@ -152,7 +161,7 @@ android {
             val storePass = signingProp("nightlyStorePassword", "PASTIERA_NIGHTLY_KEYSTORE_PASSWORD")
             val alias = signingProp("nightlyKeyAlias", "PASTIERA_NIGHTLY_KEY_ALIAS")
             val keyPass = signingProp("nightlyKeyPassword", "PASTIERA_NIGHTLY_KEY_PASSWORD")
-            if (hasSigningConfig(storePath, storePass, alias, keyPass)) {
+            if (!isUnsignedReleaseBuild && hasSigningConfig(storePath, storePass, alias, keyPass)) {
                 signingConfig = signingConfigs.getByName("nightly")
             }
         }
@@ -204,6 +213,10 @@ android {
         }
         if (name.equals("preNightlyReleaseBuild", ignoreCase = true)) {
             doFirst {
+                if (isUnsignedReleaseBuild) {
+                    logger.lifecycle("Building an unsigned nightly release for separate PIV signing.")
+                    return@doFirst
+                }
                 if (!shouldValidateNightlySigning(gradle.startParameter.taskNames)) {
                     logger.lifecycle("Skipping nightly signing validation for non-packaging task(s): ${gradle.startParameter.taskNames}")
                     return@doFirst
@@ -254,6 +267,7 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

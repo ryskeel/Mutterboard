@@ -30,6 +30,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ManageSearch
+import androidx.compose.material.icons.automirrored.filled.Rule
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -137,6 +140,8 @@ sealed class TutorialPageType {
     object QuickLauncher : TutorialPageType()
 
     object MessengerPresets : TutorialPageType()
+
+    object FeatureStatuses : TutorialPageType()
     
     data class EnablePastiera(
         val title: String,
@@ -290,6 +295,7 @@ fun TutorialScreen(
                 iconTint = MaterialTheme.colorScheme.secondary
             )
         )
+        add(TutorialPageType.FeatureStatuses)
         add(
             TutorialPageType.Standard(
                 title = stringResource(R.string.tutorial_page_ready_title),
@@ -306,14 +312,13 @@ fun TutorialScreen(
     // Automatic update check at tutorial start (only once, respecting dismissed releases)
     if (shouldUseGithubUpdateChecks(context)) {
         LaunchedEffect(Unit) {
-            checkForUpdate(
+            it.palsoftware.pastiera.update.checkForUpdateNotices(
                 context = context,
-                currentVersion = BuildConfig.VERSION_NAME,
                 releaseChannel = BuildConfig.RELEASE_CHANNEL,
                 ignoreDismissedReleases = true
-            ) { hasUpdate, latestVersion, downloadUrl, releasePageUrl ->
-                if (hasUpdate && latestVersion != null) {
-                    showUpdateDialog(context, latestVersion, downloadUrl, releasePageUrl)
+            ) { result ->
+                if (result.hasAnnouncement && result.releaseTag != null && result.displayName != null) {
+                    it.palsoftware.pastiera.update.showReleaseNotice(context, result)
                 }
             }
         }
@@ -390,6 +395,9 @@ fun TutorialScreen(
                         }
                         TutorialPageType.MessengerPresets -> {
                             TutorialMessengerPresetsPageContent(modifier = Modifier.fillMaxSize())
+                        }
+                        TutorialPageType.FeatureStatuses -> {
+                            TutorialFeatureStatusesPageContent(modifier = Modifier.fillMaxSize())
                         }
                         is TutorialPageType.EnablePastiera -> {
                             TutorialEnablePastieraPageContent(
@@ -660,7 +668,7 @@ fun TutorialSoftwareKeyboardPageContent(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
             )
             ExposedDropdownMenu(
                 expanded = expanded,
@@ -853,7 +861,7 @@ private fun SoftwareKeyboardAutoDetectionCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Rule,
+                    imageVector = Icons.AutoMirrored.Filled.Rule,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
@@ -1386,12 +1394,11 @@ fun TutorialQuickLauncherPageContent(
     var spaceShortcut by remember {
         mutableStateOf(SettingsManager.getLauncherShortcut(context, KeyEvent.KEYCODE_SPACE))
     }
-    val blocksSymSpace = spaceShortcut != null &&
-        spaceShortcut?.type != SettingsManager.LauncherShortcut.TYPE_QUICK_LAUNCHER
+    val blocksSymSpace = shouldShowQuickLauncherMappingConflict(context)
     TutorialFeaturePageContent(
         title = stringResource(R.string.tutorial_quick_launcher_title),
         description = stringResource(R.string.tutorial_quick_launcher_description),
-        icon = Icons.Filled.ManageSearch,
+        icon = Icons.AutoMirrored.Filled.ManageSearch,
         tint = MaterialTheme.colorScheme.primary,
         bullets = listOf(
             stringResource(R.string.tutorial_quick_launcher_bullet_sym_space),
@@ -1418,6 +1425,11 @@ fun TutorialQuickLauncherPageContent(
     }
 }
 
+internal fun shouldShowQuickLauncherMappingConflict(context: Context): Boolean {
+    val spaceShortcut = SettingsManager.getLauncherShortcut(context, KeyEvent.KEYCODE_SPACE)
+    return spaceShortcut != null && !SettingsManager.isQuickLauncherShortcut(context, KeyEvent.KEYCODE_SPACE)
+}
+
 @Composable
 fun TutorialMessengerPresetsPageContent(
     modifier: Modifier = Modifier
@@ -1426,7 +1438,7 @@ fun TutorialMessengerPresetsPageContent(
     TutorialFeaturePageContent(
         title = stringResource(R.string.tutorial_messenger_presets_title),
         description = stringResource(R.string.tutorial_messenger_presets_description),
-        icon = Icons.Filled.Send,
+        icon = Icons.AutoMirrored.Filled.Send,
         tint = MaterialTheme.colorScheme.tertiary,
         bullets = listOf(
             stringResource(R.string.tutorial_messenger_presets_bullet_enter),
@@ -1574,11 +1586,12 @@ private fun launcherShortcutLabel(shortcut: SettingsManager.LauncherShortcut?): 
     }
 }
 
-private fun applyDevsChoiceSettings(context: Context) {
+internal fun applyDevsChoiceSettings(context: Context) {
     SettingsManager.setAppLanguageTag(context, null)
     SettingsManager.setPhysicalKeyboardProfileOverride(context, "auto")
     SettingsManager.setSoftwareKeyboardMode(context, SettingsManager.SoftwareKeyboardMode.AUTO)
     SettingsManager.setLongPressModifier(context, "variations")
+    SettingsManager.setLongPressThreshold(context, 200L)
     SettingsManager.setTrackpadGesturesEnabled(context, true)
     SettingsManager.setKeyboardLayoutAutoByLocale(context, false)
     SettingsManager.setKeyboardLayout(context, "qwertz")
@@ -1780,6 +1793,99 @@ fun TutorialReadyPageContent(
 }
 
 @Composable
+fun TutorialFeatureStatusesPageContent(
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = stringResource(R.string.tutorial_feature_status_title),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = stringResource(R.string.tutorial_feature_status_description),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(28.dp))
+        TutorialFeatureStatusCard(
+            status = FeatureStatus.Construction,
+            title = stringResource(R.string.tutorial_feature_status_construction_title),
+            description = stringResource(R.string.tutorial_feature_status_construction_description)
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        TutorialFeatureStatusCard(
+            status = FeatureStatus.Experimental,
+            title = stringResource(R.string.tutorial_feature_status_experimental_title),
+            description = stringResource(R.string.tutorial_feature_status_experimental_description)
+        )
+        Spacer(modifier = Modifier.height(22.dp))
+        Text(
+            text = stringResource(R.string.tutorial_feature_status_footer),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun TutorialFeatureStatusCard(
+    status: FeatureStatus,
+    title: String,
+    description: String
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Icon(
+                    imageVector = status.icon,
+                    contentDescription = null,
+                    modifier = Modifier.padding(12.dp).size(30.dp)
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun TutorialNavModePageContent(
     page: TutorialPageType.NavMode,
     modifier: Modifier = Modifier
@@ -1888,6 +1994,8 @@ fun TutorialCustomizationPageContent(
         "shift" -> stringResource(R.string.long_press_modifier_shift)
         "variations" -> stringResource(R.string.long_press_modifier_variations)
         "sym" -> stringResource(R.string.long_press_modifier_sym)
+        "sym_symbols" -> stringResource(R.string.long_press_modifier_sym_symbols)
+        "sym_emoji" -> stringResource(R.string.long_press_modifier_sym_emoji)
         else -> stringResource(R.string.long_press_modifier_alt)
     }
 
@@ -1918,7 +2026,7 @@ fun TutorialCustomizationPageContent(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = appLanguageExpanded) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
             )
 
             ExposedDropdownMenu(
@@ -1958,7 +2066,7 @@ fun TutorialCustomizationPageContent(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modifierExpanded) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
             )
 
             ExposedDropdownMenu(
@@ -1969,7 +2077,9 @@ fun TutorialCustomizationPageContent(
                     "alt" to stringResource(R.string.long_press_modifier_alt),
                     "shift" to stringResource(R.string.long_press_modifier_shift),
                     "variations" to stringResource(R.string.long_press_modifier_variations),
-                    "sym" to stringResource(R.string.long_press_modifier_sym)
+                    "sym" to stringResource(R.string.long_press_modifier_sym),
+                    "sym_symbols" to stringResource(R.string.long_press_modifier_sym_symbols),
+                    "sym_emoji" to stringResource(R.string.long_press_modifier_sym_emoji)
                 ).forEach { (value, label) ->
                     DropdownMenuItem(
                         text = { Text(label) },
@@ -1980,6 +2090,30 @@ fun TutorialCustomizationPageContent(
                         }
                     )
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.tutorial_device_sym_layer_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = stringResource(R.string.tutorial_device_sym_layer_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
@@ -2064,7 +2198,7 @@ fun TutorialCustomizationPageContent(
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typingSoundExpanded) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                         )
                         ExposedDropdownMenu(
                             expanded = typingSoundExpanded,
@@ -2099,7 +2233,7 @@ fun TutorialCustomizationPageContent(
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typingSoundOutputExpanded) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                         )
                         ExposedDropdownMenu(
                             expanded = typingSoundOutputExpanded,

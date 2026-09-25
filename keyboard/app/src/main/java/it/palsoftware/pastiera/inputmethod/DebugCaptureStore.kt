@@ -16,12 +16,15 @@ object DebugCaptureStore {
         val outcome: String,
         val before: String,
         val after: String?,
-        val reason: String?
+        val reason: String?,
+        val distance: Int? = null,
+        val kind: String? = null
     )
 
     data class SuggestionEntry(
         val candidate: String,
-        val source: String
+        val source: String,
+        val kind: String
     )
 
     data class SuggestionsSnapshot(
@@ -38,11 +41,32 @@ object DebugCaptureStore {
         val physicalProfileOverride: String?
     )
 
+    data class RawTrackpadEvent(
+        val timestampMs: Long,
+        val provider: String,
+        val origin: String,
+        val phase: String,
+        val action: String,
+        val outcome: String,
+        val startX: Float?,
+        val startY: Float?,
+        val x: Float?,
+        val y: Float?,
+        val deltaX: Float?,
+        val deltaY: Float?,
+        val threshold: Float?,
+        val deviceId: Int,
+        val source: Int,
+        val eventTimeUptimeMs: Long
+    )
+
     private const val MAX_AUTOCORRECTIONS = 100
     private const val MAX_SUGGESTION_SNAPSHOTS = 50
+    private const val MAX_RAW_TRACKPAD_EVENTS = 200
 
     private val autoCorrections = ArrayDeque<AutoCorrectionEvent>()
     private val suggestions = ArrayDeque<SuggestionsSnapshot>()
+    private val rawTrackpadEvents = ArrayDeque<RawTrackpadEvent>()
     private var imeContextSnapshot: ImeContextSnapshot? = null
 
     @Synchronized
@@ -52,7 +76,9 @@ object DebugCaptureStore {
         source: String = "UNKNOWN",
         after: String? = null,
         outcome: AutoCorrectionOutcome = AutoCorrectionOutcome.NOT_APPLICABLE,
-        reason: String? = null
+        reason: String? = null,
+        distance: Int? = null,
+        kind: String? = null
     ) {
         // Suppress low-signal noise when auto-replace is off and there is no current word context.
         if (
@@ -72,7 +98,9 @@ object DebugCaptureStore {
                 outcome = outcome.name.lowercase(),
                 before = before,
                 after = after,
-                reason = reason
+                reason = reason,
+                distance = distance,
+                kind = kind
             )
         )
         while (autoCorrections.size > MAX_AUTOCORRECTIONS) {
@@ -85,7 +113,9 @@ object DebugCaptureStore {
         before: String,
         after: String,
         trigger: AutoCorrectionTrigger,
-        source: String = "UNKNOWN"
+        source: String = "UNKNOWN",
+        distance: Int? = null,
+        kind: String? = null
     ) {
         autoCorrections.addLast(
             AutoCorrectionEvent(
@@ -96,7 +126,9 @@ object DebugCaptureStore {
                 outcome = AutoCorrectionOutcome.APPLIED.name.lowercase(),
                 before = before,
                 after = after,
-                reason = null
+                reason = null,
+                distance = distance,
+                kind = kind
             )
         )
         while (autoCorrections.size > MAX_AUTOCORRECTIONS) {
@@ -105,11 +137,17 @@ object DebugCaptureStore {
     }
 
     @Synchronized
-    fun recordAutoCorrectionApplied(originalWord: String, correctedWord: String) {
+    fun recordAutoCorrectionApplied(
+        originalWord: String,
+        correctedWord: String,
+        trigger: AutoCorrectionTrigger = AutoCorrectionTrigger.OTHER,
+        source: String = "TEXT_REPLACEMENT"
+    ) {
         recordAutoCorrectionCommit(
             before = originalWord,
             after = correctedWord,
-            trigger = AutoCorrectionTrigger.OTHER
+            trigger = trigger,
+            source = source
         )
     }
 
@@ -118,7 +156,8 @@ object DebugCaptureStore {
         val entries = suggestionResults.map { result ->
             SuggestionEntry(
                 candidate = result.candidate,
-                source = result.source.name
+                source = result.source.name,
+                kind = result.kind.name
             )
         }
         suggestions.addLast(
@@ -151,10 +190,56 @@ object DebugCaptureStore {
     }
 
     @Synchronized
+    fun recordRawTrackpadEvent(
+        provider: String,
+        origin: String,
+        phase: String,
+        action: String,
+        outcome: String,
+        startX: Float? = null,
+        startY: Float? = null,
+        x: Float? = null,
+        y: Float? = null,
+        deltaX: Float? = null,
+        deltaY: Float? = null,
+        threshold: Float? = null,
+        deviceId: Int = -1,
+        source: Int = 0,
+        eventTimeUptimeMs: Long = 0L
+    ) {
+        rawTrackpadEvents.addLast(
+            RawTrackpadEvent(
+                timestampMs = System.currentTimeMillis(),
+                provider = provider,
+                origin = origin,
+                phase = phase,
+                action = action,
+                outcome = outcome,
+                startX = startX,
+                startY = startY,
+                x = x,
+                y = y,
+                deltaX = deltaX,
+                deltaY = deltaY,
+                threshold = threshold,
+                deviceId = deviceId,
+                source = source,
+                eventTimeUptimeMs = eventTimeUptimeMs
+            )
+        )
+        while (rawTrackpadEvents.size > MAX_RAW_TRACKPAD_EVENTS) {
+            rawTrackpadEvents.removeFirst()
+        }
+    }
+
+    @Synchronized
     fun autoCorrectionsSnapshot(): List<AutoCorrectionEvent> = autoCorrections.toList()
 
     @Synchronized
     fun suggestionsSnapshot(): List<SuggestionsSnapshot> = suggestions.toList()
+
+    @Synchronized
+    fun rawTrackpadEventsSnapshot(): List<RawTrackpadEvent> = rawTrackpadEvents.toList()
 
     @Synchronized
     fun imeContextSnapshot(): ImeContextSnapshot? = imeContextSnapshot
@@ -163,6 +248,7 @@ object DebugCaptureStore {
     fun clearAll() {
         autoCorrections.clear()
         suggestions.clear()
+        rawTrackpadEvents.clear()
         imeContextSnapshot = null
     }
 }

@@ -66,7 +66,7 @@ Run regression checks (same unit/UI tests) after each step to confirm behavior p
 - **Principali cambiamenti**:  
   - `PhysicalKeyboardInputMethodService` ora carica layout, nav-mode mappings e variazioni tramite i repository (nessuna logica JSON nel servizio).  
   - `KeyboardLayoutSettingsScreen`, `NavModeSettingsScreen`, `SettingsManager` aggiornati a usare i nuovi moduli.  
-  - `AltSymManager` e `AutoCorrector` continuano a funzionare ma consumano le nuove API.
+  - `AlternateCharacterManager` e `AutoCorrector` continuano a funzionare ma consumano le nuove API.
 - **Testing suggerito**: cambio layout, import/export JSON, long-press/auto-correct con keyboard fisica.
 
 ---
@@ -99,7 +99,7 @@ Run regression checks (same unit/UI tests) after each step to confirm behavior p
   - Fornisce `emojiMapText()` e `currentSymMappings()` per StatusBar/Candidates.
 
 - **Priorità Alt/Ctrl (correzioni successive)**  
-  - **Alt**: chiude sempre SYM all’attivazione per permettere agli Alt mappings di funzionare subito.  
+  - **Alt**: chiude sempre SYM all’attivazione per applicare subito la mappatura associata al modificatore.
   - **Ctrl**: bypassa la griglia SYM; con latch/pressed, i Ctrl shortcuts (es. DPAD, copy/paste) hanno precedenza, mantenendo SYM aperto finché Ctrl resta attivo.
   - Inserimento SYM via tastiera fisica chiude il layout quando auto-close è attivo; gli inserimenti via touchscreen lo lasciano aperto.
 
@@ -198,4 +198,3 @@ Ogni fase continuerà a essere accompagnata da `assembleDebug` e test manuali su
 - Inserimento touch vs fisico per emoji/simboli.
 
 Con questa struttura modulare, le prossime fasi potranno concentrarsi su UI e text pipeline senza toccare nuovamente il servizio principale, riducendo il rischio di regressioni.
-

@@ -5,9 +5,17 @@ import android.content.res.AssetManager
 import android.util.Log
 import android.view.KeyEvent
 import org.json.JSONObject
+import org.json.JSONArray
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.nio.charset.StandardCharsets
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.text.Normalizer
+import java.util.UUID
 
 /**
  * Manages custom keyboard layout files on device storage as well as metadata
@@ -16,6 +24,9 @@ import java.io.InputStream
 object LayoutFileStore {
     private const val TAG = "LayoutFileStore"
     private const val LAYOUTS_DIR_NAME = "keyboard_layouts"
+    private const val STORAGE_ID_PREFIX = "custom-"
+    private const val STORAGE_ID_FIELD = "storage_id"
+    private const val LAYOUT_ID_FIELD = "layout_id"
 
     private val keyboardLayoutNameToKeyCode = mapOf(
         "KEYCODE_Q" to KeyEvent.KEYCODE_Q,
@@ -70,15 +81,53 @@ object LayoutFileStore {
         code to name
     }
 
+    enum class LayoutImportError {
+        MALFORMED_JSON,
+        MISSING_MAPPINGS,
+        MAPPINGS_NOT_OBJECT,
+        EMPTY_MAPPINGS,
+        NO_SUPPORTED_MAPPINGS,
+        INVALID_MAPPING,
+        INVALID_NAME,
+        NAME_CONFLICT,
+        WRITE_FAILED
+    }
+
+    enum class LayoutConflictPolicy {
+        FAIL,
+        REPLACE
+    }
+
+    sealed interface LayoutImportResult {
+        data class Success(val layoutName: String) : LayoutImportResult
+        data class Failure(
+            val error: LayoutImportError,
+            val detail: String? = null
+        ) : LayoutImportResult
+    }
+
+    private sealed interface LayoutParseResult {
+        data class Success(val layout: Map<Int, LayoutMapping>) : LayoutParseResult
+        data class Failure(
+            val error: LayoutImportError,
+            val detail: String? = null
+        ) : LayoutParseResult
+    }
+
     fun getLayoutsDirectory(context: Context): File {
         return File(context.filesDir, LAYOUTS_DIR_NAME).apply {
-            if (!exists()) mkdirs()
+            if (!exists() && !mkdirs()) {
+                throw IllegalStateException("Unable to create layouts directory")
+            }
         }
     }
 
     fun getLayoutFile(context: Context, layoutName: String): File {
-        val layoutsDir = getLayoutsDirectory(context)
-        return File(layoutsDir, "$layoutName.json")
+        findSafeLayoutFileByExactId(context, layoutName)?.let { return it }
+
+        val legacyFile = findLegacyLayoutFile(context, layoutName)
+            ?: return safeLayoutFile(context, layoutName)
+        return migrateLegacyLayoutFile(context, layoutName, legacyFile)
     }
 
     fun loadLayoutFromFile(file: File): Map<Int, LayoutMapping>? {
@@ -106,50 +155,106 @@ object LayoutFileStore {
     }
 
     private fun parseLayoutJson(jsonString: String): Map<Int, LayoutMapping>? {
-        return try {
-            val jsonObject = JSONObject(jsonString)
-            val mappingsObject = jsonObject.getJSONObject("mappings")
-
-            val layout = mutableMapOf<Int, LayoutMapping>()
-            val keys = mappingsObject.keys()
-            while (keys.hasNext()) {
-                val keyName = keys.next()
-                val keyCode = keyboardLayoutNameToKeyCode[keyName]
-                if (keyCode != null) {
-                    val mappingObj = mappingsObject.getJSONObject(keyName)
-                    val lowercase = mappingObj.optString("lowercase", "")
-                    val uppercase = mappingObj.optString("uppercase", "")
-                    val multiTapEnabled = mappingObj.optBoolean("multiTapEnabled", false)
-                    val taps = mutableListOf<TapMapping>()
-                    val tapsArray = mappingObj.optJSONArray("taps")
-                    if (tapsArray != null) {
-                        for (i in 0 until tapsArray.length()) {
-                            val tapObj = tapsArray.optJSONObject(i) ?: continue
-                            val tapLower = tapObj.optString("lowercase", "")
-                            val tapUpper = tapObj.optString("uppercase", "")
-                            if (tapLower.isNotEmpty() || tapUpper.isNotEmpty()) {
-                                taps.add(TapMapping(tapLower, tapUpper))
-                            }
-                        }
-                    }
-                    val normalizedTaps = if (multiTapEnabled && taps.size > 1) taps else emptyList()
-                    val normalizedMultiTapFlag = multiTapEnabled && normalizedTaps.size > 1
-                    if (lowercase.isNotEmpty() && uppercase.isNotEmpty()) {
-                        layout[keyCode] = LayoutMapping(
-                            lowercase = lowercase,
-                            uppercase = uppercase,
-                            multiTapEnabled = normalizedMultiTapFlag,
-                            taps = normalizedTaps
-                        )
-                    }
-                }
+        return when (val result = validateLayoutJson(jsonString)) {
+            is LayoutParseResult.Success -> result.layout
+            is LayoutParseResult.Failure -> {
+                Log.e(TAG, "Invalid layout JSON: ${result.error}${result.detail?.let { " ($it)" }.orEmpty()}")
+                null
             }
-            Log.d(TAG, "Parsed layout with ${layout.size} mappings")
-            layout
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing layout JSON", e)
-            null
         }
+    }
+
+    private fun validateLayoutJson(jsonString: String): LayoutParseResult {
+        val jsonObject = try {
+            JSONObject(jsonString)
+        } catch (e: Exception) {
+            return LayoutParseResult.Failure(LayoutImportError.MALFORMED_JSON, e.message)
+        }
+
+        if (!jsonObject.has("mappings")) {
+            return LayoutParseResult.Failure(LayoutImportError.MISSING_MAPPINGS)
+        }
+        val mappingsObject = jsonObject.opt("mappings") as? JSONObject
+            ?: return LayoutParseResult.Failure(LayoutImportError.MAPPINGS_NOT_OBJECT)
+        if (mappingsObject.length() == 0) {
+            return LayoutParseResult.Failure(LayoutImportError.EMPTY_MAPPINGS)
+        }
+
+        val layout = mutableMapOf<Int, LayoutMapping>()
+        val keys = mappingsObject.keys()
+        while (keys.hasNext()) {
+            val keyName = keys.next()
+            val keyCode = keyboardLayoutNameToKeyCode[keyName] ?: continue
+            val mappingObj = mappingsObject.opt(keyName) as? JSONObject
+                ?: return invalidMapping(keyName, "mapping must be an object")
+            val lowercase = mappingObj.requiredNonEmptyString("lowercase")
+                ?: return invalidMapping(keyName, "lowercase must be a non-empty string")
+            val uppercase = mappingObj.requiredNonEmptyString("uppercase")
+                ?: return invalidMapping(keyName, "uppercase must be a non-empty string")
+
+            val multiTapEnabled = when {
+                !mappingObj.has("multiTapEnabled") -> false
+                mappingObj.opt("multiTapEnabled") is Boolean -> mappingObj.getBoolean("multiTapEnabled")
+                else -> return invalidMapping(keyName, "multiTapEnabled must be a boolean")
+            }
+            val taps = when (val tapsResult = parseTaps(mappingObj, keyName)) {
+                is TapsParseResult.Success -> tapsResult.taps
+                is TapsParseResult.Failure -> return tapsResult.failure
+            }
+            if (multiTapEnabled && taps.size < 2) {
+                return invalidMapping(keyName, "multi-tap mappings require at least two non-empty taps")
+            }
+
+            layout[keyCode] = LayoutMapping(
+                lowercase = lowercase,
+                uppercase = uppercase,
+                multiTapEnabled = multiTapEnabled,
+                taps = if (multiTapEnabled) taps else emptyList()
+            )
+        }
+
+        if (layout.isEmpty()) {
+            return LayoutParseResult.Failure(LayoutImportError.NO_SUPPORTED_MAPPINGS)
+        }
+        Log.d(TAG, "Parsed layout with ${layout.size} mappings")
+        return LayoutParseResult.Success(layout)
+    }
+
+    private sealed interface TapsParseResult {
+        data class Success(val taps: List<TapMapping>) : TapsParseResult
+        data class Failure(val failure: LayoutParseResult.Failure) : TapsParseResult
+    }
+
+    private fun parseTaps(mappingObj: JSONObject, keyName: String): TapsParseResult {
+        if (!mappingObj.has("taps")) return TapsParseResult.Success(emptyList())
+        val tapsArray = mappingObj.opt("taps") as? JSONArray
+            ?: return TapsParseResult.Failure(invalidMapping(keyName, "taps must be an array"))
+        val taps = mutableListOf<TapMapping>()
+        for (index in 0 until tapsArray.length()) {
+            val tapObj = tapsArray.opt(index) as? JSONObject
+                ?: return TapsParseResult.Failure(invalidMapping(keyName, "tap $index must be an object"))
+            val tapLower = tapObj.optionalString("lowercase")
+                ?: return TapsParseResult.Failure(invalidMapping(keyName, "tap $index lowercase must be a string"))
+            val tapUpper = tapObj.optionalString("uppercase")
+                ?: return TapsParseResult.Failure(invalidMapping(keyName, "tap $index uppercase must be a string"))
+            if (tapLower.isNotEmpty() || tapUpper.isNotEmpty()) {
+                taps.add(TapMapping(tapLower, tapUpper))
+            }
+        }
+        return TapsParseResult.Success(taps)
+    }
+
+    private fun invalidMapping(keyName: String, detail: String) =
+        LayoutParseResult.Failure(LayoutImportError.INVALID_MAPPING, "$keyName: $detail")
+
+    private fun JSONObject.requiredNonEmptyString(key: String): String? {
+        val value = opt(key)
+        return (value as? String)?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun JSONObject.optionalString(key: String): String? {
+        if (!has(key)) return ""
+        return opt(key) as? String
     }
 
     fun saveLayout(
@@ -159,18 +264,13 @@ object LayoutFileStore {
         name: String? = null,
         description: String? = null
     ): Boolean {
-        return try {
-            val layoutFile = getLayoutFile(context, layoutName)
-            val jsonString = buildLayoutJsonString(layoutName, layout, name, description)
-            FileOutputStream(layoutFile).use { outputStream ->
-                outputStream.write(jsonString.toByteArray())
-            }
-            Log.d(TAG, "Saved layout: $layoutName to ${layoutFile.absolutePath}")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error saving layout: $layoutName", e)
-            false
-        }
+        val jsonString = buildLayoutJsonString(layoutName, layout, name, description)
+        return saveLayoutFromJson(
+            context = context,
+            layoutName = layoutName,
+            jsonString = jsonString,
+            conflictPolicy = LayoutConflictPolicy.REPLACE
+        ) is LayoutImportResult.Success
     }
 
     fun buildLayoutJsonString(
@@ -212,25 +312,54 @@ object LayoutFileStore {
     fun saveLayoutFromJson(
         context: Context,
         layoutName: String,
-        jsonString: String
-    ): Boolean {
+        jsonString: String,
+        conflictPolicy: LayoutConflictPolicy = LayoutConflictPolicy.FAIL
+    ): LayoutImportResult {
         return try {
-            val layout = parseLayoutJson(jsonString)
-            if (layout == null) {
-                Log.e(TAG, "Invalid JSON format, cannot save layout: $layoutName")
-                return false
+            if (!isValidLayoutName(layoutName)) {
+                return LayoutImportResult.Failure(LayoutImportError.INVALID_NAME)
+            }
+            when (val validation = validateLayoutJson(jsonString)) {
+                is LayoutParseResult.Failure -> {
+                    Log.e(TAG, "Invalid JSON format, cannot save layout $layoutName: ${validation.error}")
+                    return LayoutImportResult.Failure(validation.error, validation.detail)
+                }
+                is LayoutParseResult.Success -> Unit
             }
 
-            val layoutFile = getLayoutFile(context, layoutName)
-            FileOutputStream(layoutFile).use { outputStream ->
-                outputStream.write(jsonString.toByteArray())
+            val exactSafeFile = findSafeLayoutFileByExactId(context, layoutName)
+            val legacyFile = findLegacyLayoutFile(context, layoutName)
+            val canonicalSafeFile = safeLayoutFile(context, layoutName)
+            if (
+                exactSafeFile == null &&
+                legacyFile == null &&
+                canonicalSafeFile.exists()
+            ) {
+                return LayoutImportResult.Failure(LayoutImportError.NAME_CONFLICT)
+            }
+            val existingFile = exactSafeFile ?: legacyFile
+            if (existingFile != null && conflictPolicy == LayoutConflictPolicy.FAIL) {
+                return LayoutImportResult.Failure(LayoutImportError.NAME_CONFLICT)
+            }
+            val layoutFile = exactSafeFile ?: if (legacyFile != null) {
+                safeLayoutFileForLegacyMigration(context, layoutName)
+            } else {
+                canonicalSafeFile
+            }
+            val storedJson = JSONObject(jsonString).apply {
+                put(LAYOUT_ID_FIELD, layoutName)
+                put(STORAGE_ID_FIELD, layoutFile.nameWithoutExtension)
+            }.toString(2)
+            writeAtomically(layoutFile, storedJson.toByteArray(StandardCharsets.UTF_8))
+            if (existingFile != null && existingFile != layoutFile && existingFile.exists() && !existingFile.delete()) {
+                Log.w(TAG, "Saved safe replacement but could not delete legacy file: ${existingFile.name}")
             }
 
             Log.d(TAG, "Saved layout from JSON: $layoutName to ${layoutFile.absolutePath}")
-            true
+            LayoutImportResult.Success(layoutName)
         } catch (e: Exception) {
             Log.e(TAG, "Error saving layout from JSON: $layoutName", e)
-            false
+            LayoutImportResult.Failure(LayoutImportError.WRITE_FAILED, e.message)
         }
     }
 
@@ -240,7 +369,11 @@ object LayoutFileStore {
             val layoutFiles = layoutsDir.listFiles { file ->
                 file.isFile && file.name.endsWith(".json")
             }
-            layoutFiles?.map { it.name.removeSuffix(".json") }?.sorted() ?: emptyList()
+            layoutFiles
+                ?.mapNotNull { file -> logicalLayoutId(context, file) }
+                ?.distinct()
+                ?.sorted()
+                ?: emptyList()
         } catch (e: Exception) {
             Log.e(TAG, "Error getting custom layout names", e)
             emptyList()
@@ -268,8 +401,7 @@ object LayoutFileStore {
 
     fun getLayoutMetadataFromAssets(assets: AssetManager, layoutName: String): LayoutMetadata? {
         return try {
-            val filePath = "common/layouts/$layoutName.json"
-            val inputStream: InputStream = assets.open(filePath)
+            val inputStream = BundledLayoutAssets.openLayout(assets, layoutName) ?: return null
             val jsonString = inputStream.bufferedReader().use { it.readText() }
             val jsonObject = JSONObject(jsonString)
             LayoutMetadata(
@@ -302,7 +434,7 @@ object LayoutFileStore {
     }
 
     fun layoutExists(context: Context, layoutName: String): Boolean {
-        return getLayoutFile(context, layoutName).exists()
+        return findExistingLayoutFile(context, layoutName) != null
     }
 
     fun importLayoutFromFile(
@@ -316,17 +448,13 @@ object LayoutFileStore {
                 return false
             }
 
-            val layout = loadLayoutFromFile(sourceFile)
-            if (layout == null) {
-                Log.e(TAG, "Invalid layout file, cannot import: ${sourceFile.absolutePath}")
-                return false
-            }
-
-            val targetFile = getLayoutFile(context, targetLayoutName)
-            sourceFile.copyTo(targetFile, overwrite = true)
-
-            Log.d(TAG, "Imported layout from ${sourceFile.absolutePath} to ${targetFile.absolutePath}")
-            true
+            val result = saveLayoutFromJson(
+                context = context,
+                layoutName = targetLayoutName,
+                jsonString = sourceFile.readText(),
+                conflictPolicy = LayoutConflictPolicy.REPLACE
+            )
+            result is LayoutImportResult.Success
         } catch (e: Exception) {
             Log.e(TAG, "Error importing layout from file", e)
             false
@@ -337,4 +465,170 @@ object LayoutFileStore {
         val name: String,
         val description: String
     )
+
+    internal fun writeAtomically(
+        targetFile: File,
+        content: ByteArray,
+        moveOperation: (File, File) -> Unit = ::moveReplacingAtomically
+    ) {
+        val root = requireNotNull(targetFile.parentFile) { "Target must have a parent directory" }.canonicalFile
+        val canonicalTarget = targetFile.canonicalFile
+        require(canonicalTarget.parentFile == root) { "Target must remain inside the layouts directory" }
+        val tempFile = File(root, ".${targetFile.name}.${UUID.randomUUID()}.tmp")
+        try {
+            FileOutputStream(tempFile).use { outputStream ->
+                outputStream.write(content)
+                outputStream.fd.sync()
+            }
+            moveOperation(tempFile, canonicalTarget)
+        } finally {
+            if (tempFile.exists()) tempFile.delete()
+        }
+    }
+
+    private fun moveReplacingAtomically(source: File, target: File) {
+        try {
+            Files.move(
+                source.toPath(),
+                target.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    private fun safeLayoutFile(context: Context, layoutName: String): File {
+        val root = getLayoutsDirectory(context).canonicalFile
+        val target = File(root, "${storageIdFor(layoutName)}.json").canonicalFile
+        require(target.parentFile == root) { "Layout path escaped storage root" }
+        return target
+    }
+
+    private fun storageIdFor(layoutName: String): String {
+        val normalizedName = Normalizer.normalize(layoutName, Normalizer.Form.NFC)
+        return storageIdForOpaqueValue(normalizedName)
+    }
+
+    private fun storageIdForOpaqueValue(value: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        return "$STORAGE_ID_PREFIX$digest"
+    }
+
+    private fun isSafeStorageFile(file: File): Boolean {
+        val baseName = file.name.removeSuffix(".json")
+        return baseName.startsWith(STORAGE_ID_PREFIX) &&
+            baseName.length == STORAGE_ID_PREFIX.length + 64 &&
+            baseName.drop(STORAGE_ID_PREFIX.length).all { it in '0'..'9' || it in 'a'..'f' }
+    }
+
+    private fun findLegacyLayoutFile(context: Context, layoutName: String): File? {
+        val root = getLayoutsDirectory(context).canonicalFile
+        return root.listFiles { file ->
+            file.isFile && file.name.endsWith(".json") && !isSafeStorageFile(file)
+        }?.firstOrNull { file ->
+            file.name.removeSuffix(".json") == layoutName &&
+                runCatching { file.canonicalFile.parentFile == root }.getOrDefault(false)
+        }
+    }
+
+    private fun findExistingLayoutFile(context: Context, layoutName: String): File? {
+        return findSafeLayoutFileByExactId(context, layoutName)
+            ?: findLegacyLayoutFile(context, layoutName)
+            ?: safeLayoutFile(context, layoutName).takeIf { it.exists() }
+    }
+
+    private fun findSafeLayoutFileByExactId(context: Context, layoutName: String): File? {
+        val root = getLayoutsDirectory(context).canonicalFile
+        return root.listFiles { file ->
+            file.isFile && file.name.endsWith(".json") && isSafeStorageFile(file)
+        }?.firstOrNull { file ->
+            runCatching {
+                file.canonicalFile.parentFile == root && storedLogicalLayoutId(file) == layoutName
+            }.getOrDefault(false)
+        }
+    }
+
+    private fun safeLayoutFileForLegacyMigration(context: Context, layoutName: String): File {
+        findSafeLayoutFileByExactId(context, layoutName)?.let { return it }
+
+        val primary = safeLayoutFile(context, layoutName)
+        if (!primary.exists()) return primary
+
+        var collisionIndex = 0
+        while (true) {
+            val collisionStorageId = storageIdForOpaqueValue(
+                "legacy-layout-collision:$collisionIndex:$layoutName"
+            )
+            val candidate = safeStorageFile(context, collisionStorageId)
+            if (!candidate.exists() || storedLogicalLayoutId(candidate) == layoutName) {
+                return candidate
+            }
+            collisionIndex += 1
+        }
+    }
+
+    private fun safeStorageFile(context: Context, storageId: String): File {
+        val root = getLayoutsDirectory(context).canonicalFile
+        val target = File(root, "$storageId.json").canonicalFile
+        require(target.parentFile == root) { "Layout path escaped storage root" }
+        return target
+    }
+
+    private fun storedLogicalLayoutId(file: File): String? = runCatching {
+        val jsonObject = JSONObject(file.readText())
+        jsonObject.optString(LAYOUT_ID_FIELD).takeIf { it.isNotBlank() }
+            ?: jsonObject.optString("name").takeIf { it.isNotBlank() }
+    }.getOrNull()
+
+    internal fun migrateLegacyLayoutFile(
+        context: Context,
+        layoutName: String,
+        legacyFile: File
+    ): File {
+        return try {
+            val root = getLayoutsDirectory(context).canonicalFile
+            val canonicalLegacy = legacyFile.canonicalFile
+            val safeFile = safeLayoutFileForLegacyMigration(context, layoutName)
+            if (canonicalLegacy.parentFile != root || safeFile.parentFile != root) return legacyFile
+            if (safeFile.exists()) return safeFile
+            val jsonObject = JSONObject(legacyFile.readText()).apply {
+                put(LAYOUT_ID_FIELD, layoutName)
+                put(STORAGE_ID_FIELD, safeFile.nameWithoutExtension)
+            }
+            writeAtomically(safeFile, jsonObject.toString(2).toByteArray(StandardCharsets.UTF_8))
+            if (!legacyFile.delete()) {
+                Log.w(TAG, "Migrated legacy layout but could not delete old file: ${legacyFile.name}")
+            }
+            Log.i(TAG, "Migrated legacy layout to safe storage: $layoutName")
+            safeFile
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not migrate legacy layout without data loss: $layoutName", e)
+            legacyFile
+        }
+    }
+
+    private fun logicalLayoutId(context: Context, file: File): String? {
+        if (!file.isFile || !file.name.endsWith(".json")) return null
+        val root = getLayoutsDirectory(context).canonicalFile
+        if (runCatching { file.canonicalFile.parentFile }.getOrNull() != root) return null
+        if (!isSafeStorageFile(file)) {
+            val legacyId = file.name.removeSuffix(".json")
+            migrateLegacyLayoutFile(
+                context = context,
+                layoutName = legacyId,
+                legacyFile = file
+            )
+            return legacyId
+        }
+        return storedLogicalLayoutId(file)
+    }
+
+    private fun isValidLayoutName(layoutName: String): Boolean {
+        if (layoutName.isBlank()) return false
+        return layoutName.none(Character::isISOControl)
+    }
 }

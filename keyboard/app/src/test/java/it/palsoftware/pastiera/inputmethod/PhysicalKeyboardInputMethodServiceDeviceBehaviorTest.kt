@@ -5,6 +5,7 @@ import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.ExtractedText
 import android.view.inputmethod.InputConnection
+import it.palsoftware.pastiera.AltModifierBinding
 import it.palsoftware.pastiera.SettingsManager
 import it.palsoftware.pastiera.SymPagesConfig
 import it.palsoftware.pastiera.core.InputContextState
@@ -18,6 +19,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.RuntimeEnvironment
 import java.lang.reflect.Field
@@ -40,6 +42,18 @@ class PhysicalKeyboardInputMethodServiceDeviceBehaviorTest {
         SettingsManager.resetSymMappings(context)
         SettingsManager.resetSymMappingsPage2(context)
         SettingsManager.setStaticVariationBarLayerStickyEnabled(context, true)
+        SettingsManager.setAutoCapitalizeFirstLetter(context, true)
+        SettingsManager.setAutoCapitalizeAfterPeriod(context, true)
+        SettingsManager.setAutoCapitalizeRespectManualShiftOff(context, true)
+        SettingsManager.setAutoCapitalizeRestrictedFields(context, false)
+        SettingsManager.setPhysicalKeyboardProfileOverride(context, "auto")
+        SettingsManager.setAltModifierBinding(context, AltModifierBinding.DeviceSym)
+        SettingsManager.setAppEnterBehaviorEnabled(context, true)
+        SettingsManager.setAppEnterBehaviorPreset(
+            context,
+            SettingsManager.ENTER_BEHAVIOR_PRESET_ENTER_SEND_SHIFT_NEWLINE
+        )
+        SettingsManager.setAppEnterBehaviorOverrides(context, emptyList())
 
         service = Robolectric.buildService(PhysicalKeyboardInputMethodService::class.java)
             .create()
@@ -148,15 +162,15 @@ class PhysicalKeyboardInputMethodServiceDeviceBehaviorTest {
         val t0 = 2_000L
 
         tapAlt(t0)          // one-shot
-        tapAlt(t0 + 120L)   // latch (+ visual altLayerLatched on quick double tap)
+        tapAlt(t0 + 120L)   // latch (+ visual altModifierLayerLatched on quick double tap)
         tapAlt(t0 + 240L)   // user expects off; device reports still active
 
         val modifier = modifierController()
-        val altLayerLatched = getField<Boolean>(service, "altLayerLatched")
+        val altModifierLayerLatched = getField<Boolean>(service, "altModifierLayerLatched")
 
         assertFalse(modifier.altOneShot)
         assertFalse(modifier.altLatchActive)
-        assertFalse(altLayerLatched)
+        assertFalse(altModifierLayerLatched)
     }
 
     @Test
@@ -173,6 +187,332 @@ class PhysicalKeyboardInputMethodServiceDeviceBehaviorTest {
         assertFalse(modifier.shiftOneShot)
         assertFalse(modifier.capsLockEnabled)
         assertFalse(shiftLayerLatched)
+    }
+
+    @Test
+    fun clicksPower_bouncedShiftTapDoesNotEnableCapsLock() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setPhysicalKeyboardProfileOverride(context, "clicks_power")
+        setField(service, "physicalKeyboardProfileOverride", "clicks_power")
+        val t0 = 2_600L
+
+        tapShift(t0)
+        tapShift(t0 + 60L)
+
+        val modifier = modifierController()
+        assertTrue(modifier.shiftOneShot)
+        assertFalse(modifier.capsLockEnabled)
+        assertFalse(getField<Boolean>(service, "shiftLayerLatched"))
+    }
+
+    @Test
+    fun clicksPower_intentionalShiftDoubleTapStillEnablesCapsLock() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setPhysicalKeyboardProfileOverride(context, "clicks_power")
+        setField(service, "physicalKeyboardProfileOverride", "clicks_power")
+        val t0 = 2_700L
+
+        tapShift(t0)
+        tapShift(t0 + 120L)
+
+        val modifier = modifierController()
+        assertFalse(modifier.shiftOneShot)
+        assertTrue(modifier.capsLockEnabled)
+        assertTrue(getField<Boolean>(service, "shiftLayerLatched"))
+    }
+
+    @Test
+    fun clicksPower_sameFrameShiftMacroDoesNotToggleLogicalShift() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setPhysicalKeyboardProfileOverride(context, "clicks_power")
+        setField(service, "physicalKeyboardProfileOverride", "clicks_power")
+
+        repeat(4) { index ->
+            typeClicksSyntheticAtMacro(3_000L + index * 400L)
+            val modifier = modifierController()
+            assertFalse(modifier.shiftOneShot)
+            assertFalse(modifier.capsLockEnabled)
+            assertFalse(modifier.shiftPressed)
+            assertFalse(modifier.shiftPhysicallyPressed)
+        }
+    }
+
+    @Test
+    fun shiftEnter_consumesManualShift_whenAutoCapitalizeAtLineStartIsDisabled() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAutoCapitalizeFirstLetter(context, false)
+        SettingsManager.setAutoCapitalizeAfterPeriod(context, false)
+        editorInfo.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        setField(service, "mInputEditorInfo", editorInfo)
+        setField(service, "inputContextState", InputContextState.fromEditorInfo(editorInfo))
+        val t0 = 2_700L
+
+        service.onKeyDown(
+            KeyEvent.KEYCODE_SHIFT_LEFT,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SHIFT_LEFT, t0, t0)
+        )
+        service.onKeyDown(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_ENTER,
+                downTime = t0,
+                eventTime = t0 + 80L,
+                metaState = KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON
+            )
+        )
+        service.onKeyUp(
+            KeyEvent.KEYCODE_SHIFT_LEFT,
+            keyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SHIFT_LEFT, t0, t0 + 120L)
+        )
+
+        val modifier = modifierController()
+        assertFalse(modifier.shiftPressed)
+        assertFalse(modifier.shiftPhysicallyPressed)
+        assertFalse(modifier.shiftOneShot)
+        assertFalse(modifier.capsLockEnabled)
+
+        service.onKeyDown(
+            KeyEvent.KEYCODE_A,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_A, t0 + 200L, t0 + 200L)
+        )
+        assertTrue("commits=${recorder.committedTexts}", recorder.committedTexts.contains("a"))
+        assertFalse("commits=${recorder.committedTexts}", recorder.committedTexts.contains("A"))
+    }
+
+    @Test
+    fun appEnter_knownFacebookMessengerWithoutOverride_usesEditorAction() {
+        focusNewField(
+            newRecorder = RecordingInputConnection(),
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE,
+            packageName = "com.facebook.orca"
+        )
+        recorder.performEditorActionResult = true
+
+        val handled = service.onKeyDown(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER, 2_750L, 2_750L)
+        )
+
+        assertTrue(handled)
+        assertEquals(listOf(EditorInfo.IME_ACTION_SEND), recorder.editorActions)
+        assertTrue(recorder.sentKeyEvents.isEmpty())
+        assertFalse(recorder.committedTexts.contains("\n"))
+    }
+
+    @Test
+    fun appEnter_facebookMessengerManualEditorStrategy_usesEditorAction() {
+        configureAppEnterOverride(
+            packageName = "com.facebook.orca",
+            strategy = SettingsManager.ENTER_SEND_STRATEGY_EDITOR_ACTION
+        )
+        recorder.performEditorActionResult = true
+
+        val handled = service.onKeyDown(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER, 2_755L, 2_755L)
+        )
+
+        assertTrue(handled)
+        assertEquals(listOf(EditorInfo.IME_ACTION_SEND), recorder.editorActions)
+        assertTrue(recorder.sentKeyEvents.isEmpty())
+        assertFalse(recorder.committedTexts.contains("\n"))
+    }
+
+    @Test
+    fun appEnter_manualPlainEnter_sendsExactKeyPair_forUnlistedApp() {
+        configureAppEnterOverride(
+            packageName = "com.example.unlisted.chat",
+            strategy = SettingsManager.ENTER_SEND_STRATEGY_PLAIN_ENTER
+        )
+        recorder.sendKeyEventResult = false
+
+        val handled = service.onKeyDown(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER, 2_760L, 2_760L)
+        )
+
+        assertTrue(handled)
+        assertEquals(2, recorder.sentKeyEvents.size)
+        assertTrue(recorder.sentKeyEvents.all { it.keyCode == KeyEvent.KEYCODE_ENTER })
+        assertFalse(recorder.sentKeyEvents.any { it.isCtrlPressed })
+        assertTrue(recorder.editorActions.isEmpty())
+        assertFalse(recorder.committedTexts.contains("\n"))
+    }
+
+    @Test
+    fun appEnter_manualCtrlEnter_sendsExactModifiedKeyPair_forUnlistedApp() {
+        configureAppEnterOverride(
+            packageName = "com.example.unlisted.chat",
+            strategy = SettingsManager.ENTER_SEND_STRATEGY_CTRL_ENTER
+        )
+
+        val handled = service.onKeyDown(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER, 2_770L, 2_770L)
+        )
+
+        assertTrue(handled)
+        assertEquals(2, recorder.sentKeyEvents.size)
+        assertTrue(recorder.sentKeyEvents.all { it.keyCode == KeyEvent.KEYCODE_ENTER })
+        assertTrue(recorder.sentKeyEvents.all { it.isCtrlPressed })
+        assertTrue(recorder.editorActions.isEmpty())
+        assertFalse(recorder.committedTexts.contains("\n"))
+    }
+
+    @Test
+    fun appEnter_manualEditorAction_doesNotFallBackToNewline_whenRejected() {
+        configureAppEnterOverride(
+            packageName = "com.example.unlisted.chat",
+            strategy = SettingsManager.ENTER_SEND_STRATEGY_EDITOR_ACTION
+        )
+        recorder.performEditorActionResult = false
+
+        val handled = service.onKeyDown(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER, 2_780L, 2_780L)
+        )
+
+        assertTrue(handled)
+        assertEquals(listOf(EditorInfo.IME_ACTION_SEND), recorder.editorActions)
+        assertTrue(recorder.sentKeyEvents.isEmpty())
+        assertFalse(recorder.committedTexts.contains("\n"))
+    }
+
+    @Test
+    fun capWords_allAutoCapDisabled_clicksPowerAltPThenAStaysLowercase() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAutoCapitalizeFirstLetter(context, false)
+        SettingsManager.setAutoCapitalizeAfterPeriod(context, false)
+        SettingsManager.setPhysicalKeyboardProfileOverride(context, "clicks_power")
+        setField(service, "physicalKeyboardProfileOverride", "clicks_power")
+        getField<AlternateCharacterManager>(service, "alternateCharacterManager")
+            .reloadModifierAndDeviceSymMappings()
+        focusNewField(
+            newRecorder = RecordingInputConnection(),
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+        )
+
+        assertFalse(modifierController().shiftOneShot)
+
+        val t0 = 2_800L
+        tapAlt(t0)
+        service.onKeyDown(
+            KeyEvent.KEYCODE_P,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_P, t0 + 40L, t0 + 40L)
+        )
+        service.onKeyUp(
+            KeyEvent.KEYCODE_P,
+            keyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_P, t0 + 40L, t0 + 60L)
+        )
+        service.onKeyDown(
+            KeyEvent.KEYCODE_A,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_A, t0 + 80L, t0 + 80L)
+        )
+
+        assertEquals("@a", recorder.textBeforeCursor)
+        assertFalse(
+            AutoCapitalizeHelper.shouldCapitalizeAfterBoundary(
+                context = context,
+                state = InputContextState.fromEditorInfo(editorInfo),
+                inputConnection = inputConnection,
+                keyCode = KeyEvent.KEYCODE_SPACE
+            )
+        )
+    }
+
+    @Test
+    fun autoCap_manualShiftOff_doesNotLeakIntoAnotherEmptyField() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAutoCapitalizeFirstLetter(context, true)
+        SettingsManager.setAutoCapitalizeAfterPeriod(context, true)
+
+        service.onStartInput(editorInfo, false)
+        assertTrue(modifierController().shiftOneShot)
+
+        tapShift(2_900L)
+        assertFalse(modifierController().shiftOneShot)
+
+        focusNewField(RecordingInputConnection())
+
+        assertTrue(modifierController().shiftOneShot)
+    }
+
+    @Test
+    fun autoCap_manualShiftOff_survivesRestartOfCurrentField() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAutoCapitalizeFirstLetter(context, true)
+        SettingsManager.setAutoCapitalizeAfterPeriod(context, true)
+
+        service.onStartInput(editorInfo, false)
+        assertTrue(modifierController().shiftOneShot)
+
+        tapShift(3_000L)
+        assertFalse(modifierController().shiftOneShot)
+
+        service.onStartInput(editorInfo, true)
+
+        assertFalse(modifierController().shiftOneShot)
+    }
+
+    @Test
+    fun autoCap_manualShiftOff_doesNotSurviveRestart_whenRespectIsDisabled() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAutoCapitalizeFirstLetter(context, true)
+        SettingsManager.setAutoCapitalizeAfterPeriod(context, true)
+        SettingsManager.setAutoCapitalizeRespectManualShiftOff(context, false)
+
+        service.onStartInput(editorInfo, false)
+        assertTrue(modifierController().shiftOneShot)
+
+        tapShift(3_100L)
+        assertFalse(modifierController().shiftOneShot)
+
+        service.onStartInput(editorInfo, true)
+
+        assertTrue(modifierController().shiftOneShot)
+    }
+
+    @Test
+    fun autoCap_restrictedFieldsSetting_startsUriFieldWithShift() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAutoCapitalizeFirstLetter(context, true)
+        SettingsManager.setAutoCapitalizeRestrictedFields(context, true)
+
+        focusNewField(
+            newRecorder = RecordingInputConnection(),
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+        )
+
+        assertTrue(modifierController().shiftOneShot)
+    }
+
+    @Test
+    fun autoCap_restrictedFieldsSetting_neverStartsPasswordWithShift() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAutoCapitalizeFirstLetter(context, true)
+        SettingsManager.setAutoCapitalizeRestrictedFields(context, true)
+
+        focusNewField(
+            newRecorder = RecordingInputConnection(),
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        )
+
+        assertFalse(modifierController().shiftOneShot)
+    }
+
+    @Test
+    fun autoCap_newFieldAfterNewline_startsWithShift() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAutoCapitalizeFirstLetter(context, true)
+        SettingsManager.setAutoCapitalizeAfterPeriod(context, true)
+        val nextField = RecordingInputConnection().apply {
+            textBeforeCursor = "Previous line\n"
+        }
+
+        focusNewField(nextField)
+
+        assertTrue(modifierController().shiftOneShot)
     }
 
     @Test
@@ -304,7 +644,137 @@ class PhysicalKeyboardInputMethodServiceDeviceBehaviorTest {
     }
 
     @Test
-    fun deviceSanity_symATogglesEmojiThenSymbols_exactMappings() {
+    fun altEnterLayoutSwitch_consumesShortcutAndClearsModifiers_whenEnabled() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAltEnterLayoutSwitchEnabled(context, true)
+        val t0 = 3_900L
+
+        service.onKeyDown(
+            KeyEvent.KEYCODE_ALT_LEFT,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ALT_LEFT, t0, t0)
+        )
+        assertTrue(modifierController().altPressed)
+
+        val handled = service.onKeyDown(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_ENTER,
+                downTime = t0,
+                eventTime = t0 + 80L,
+                metaState = KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON
+            )
+        )
+
+        val modifier = modifierController()
+        assertTrue(handled)
+        assertFalse(modifier.altPressed)
+        assertFalse(modifier.altPhysicallyPressed)
+        assertFalse(modifier.altOneShot)
+        assertFalse(modifier.altLatchActive)
+
+        val keyUpHandled = service.onKeyUp(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(
+                action = KeyEvent.ACTION_UP,
+                keyCode = KeyEvent.KEYCODE_ENTER,
+                downTime = t0,
+                eventTime = t0 + 100L,
+                metaState = KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON
+            )
+        )
+        assertTrue(keyUpHandled)
+    }
+
+    @Test
+    fun altEnterLayoutSwitch_doesNotConsumeWhenDisabled() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAltEnterLayoutSwitchEnabled(context, false)
+        setField(service, "clearAltOnSpaceEnabled", false)
+        val t0 = 3_920L
+
+        service.onKeyDown(
+            KeyEvent.KEYCODE_ALT_LEFT,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ALT_LEFT, t0, t0)
+        )
+        service.onKeyDown(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_ENTER,
+                downTime = t0,
+                eventTime = t0 + 80L,
+                metaState = KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON
+            )
+        )
+
+        assertTrue(modifierController().altPhysicallyPressed)
+    }
+
+    @Test
+    fun altEnterLayoutSwitch_consumesKeyRepeatsUntilKeyUp() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAltEnterLayoutSwitchEnabled(context, true)
+        val t0 = 3_940L
+
+        service.onKeyDown(
+            KeyEvent.KEYCODE_ALT_LEFT,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ALT_LEFT, t0, t0)
+        )
+        service.onKeyDown(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_ENTER,
+                downTime = t0,
+                eventTime = t0 + 80L,
+                metaState = KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON
+            )
+        )
+
+        val repeatedHandled = service.onKeyDown(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_ENTER,
+                downTime = t0,
+                eventTime = t0 + 160L,
+                metaState = KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON,
+                repeatCount = 1
+            )
+        )
+
+        assertTrue(repeatedHandled)
+        assertFalse(recorder.committedTexts.contains("\n"))
+        assertTrue(recorder.sentKeyEvents.isEmpty())
+    }
+
+    @Test
+    fun altEnterLayoutSwitch_doesNotTriggerWhenEnterIsPressedFirst() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAltEnterLayoutSwitchEnabled(context, true)
+        val t0 = 3_960L
+
+        service.onKeyDown(
+            KeyEvent.KEYCODE_ENTER,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER, t0, t0)
+        )
+        service.onKeyDown(
+            KeyEvent.KEYCODE_ALT_LEFT,
+            keyEvent(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_ALT_LEFT,
+                downTime = t0 + 80L,
+                eventTime = t0 + 80L
+            )
+        )
+
+        assertTrue(modifierController().altPressed)
+        assertTrue(modifierController().altPhysicallyPressed)
+    }
+
+    @Test
+    fun deviceSanity_symACyclesDeviceThenEmojiThenSymbols_exactMappings() {
         val t0 = 4_000L
 
         tapSym(t0)
@@ -312,15 +782,73 @@ class PhysicalKeyboardInputMethodServiceDeviceBehaviorTest {
             KeyEvent.KEYCODE_A,
             keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_A, t0 + 20L, t0 + 20L)
         )
-        assertTrue("commits=${recorder.committedTexts}", recorder.committedTexts.contains("😢"))
+        assertTrue("commits=${recorder.committedTexts}", recorder.committedTexts.contains("@"))
 
-        tapSym(t0 + 200L) // re-open SYM (emoji page)
-        tapSym(t0 + 260L) // next page -> symbols
+        tapSym(t0 + 200L) // re-open SYM (Device SYM)
+        tapSym(t0 + 260L) // next page -> emoji
         service.onKeyDown(
             KeyEvent.KEYCODE_A,
             keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_A, t0 + 300L, t0 + 300L)
         )
+        assertTrue("commits=${recorder.committedTexts}", recorder.committedTexts.contains("😢"))
+
+        tapSym(t0 + 400L) // re-open SYM (Device SYM)
+        tapSym(t0 + 460L) // next page -> emoji
+        tapSym(t0 + 520L) // next page -> symbols
+        service.onKeyDown(
+            KeyEvent.KEYCODE_A,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_A, t0 + 560L, t0 + 560L)
+        )
         assertTrue("commits=${recorder.committedTexts}", recorder.committedTexts.contains("="))
+    }
+
+    @Test
+    fun symPlusQuickLauncherShortcut_opensQuickLauncherFromEditableField() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setQuickLauncherTextFieldShortcuts(context, true)
+        SettingsManager.setQuickLauncherShortcut(context, KeyEvent.KEYCODE_SPACE)
+        val t0 = 4_200L
+
+        val symHandled = service.onKeyDown(
+            KeyEvent.KEYCODE_SYM,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SYM, t0, t0)
+        )
+        val spaceHandled = service.onKeyDown(
+            KeyEvent.KEYCODE_SPACE,
+            keyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE, t0, t0 + 40L)
+        )
+
+        val startedIntent = shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity
+        assertTrue(symHandled)
+        assertTrue(spaceHandled)
+        assertEquals(QuickLauncherActivity::class.java.name, startedIntent.component?.className)
+        assertTrue(startedIntent.getBooleanExtra(QuickLauncherActivity.EXTRA_TOGGLE_REQUEST, false))
+        assertFalse("Space should not be committed when opening QuickLauncher", recorder.committedTexts.contains(" "))
+    }
+
+    @Test
+    fun heldSymPlusQuickLauncherShortcut_reopensFromEditableFieldAfterLauncherCloses() {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setQuickLauncherTextFieldShortcuts(context, true)
+        SettingsManager.setQuickLauncherShortcut(context, KeyEvent.KEYCODE_SPACE)
+        val t0 = 4_600L
+
+        val handled = service.onKeyDown(
+            KeyEvent.KEYCODE_SPACE,
+            keyEvent(
+                KeyEvent.ACTION_DOWN,
+                KeyEvent.KEYCODE_SPACE,
+                t0,
+                t0 + 40L,
+                KeyEvent.META_SYM_ON
+            )
+        )
+
+        val startedIntent = shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity
+        assertTrue(handled)
+        assertEquals(QuickLauncherActivity::class.java.name, startedIntent.component?.className)
+        assertTrue(startedIntent.getBooleanExtra(QuickLauncherActivity.EXTRA_TOGGLE_REQUEST, false))
+        assertFalse("Space should not be committed when reopening QuickLauncher", recorder.committedTexts.contains(" "))
     }
 
     @Test
@@ -422,6 +950,49 @@ class PhysicalKeyboardInputMethodServiceDeviceBehaviorTest {
         )
     }
 
+    private fun typeClicksSyntheticAtMacro(start: Long) {
+        val shiftMeta = KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON
+        service.onKeyDown(
+            KeyEvent.KEYCODE_SHIFT_LEFT,
+            keyEvent(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_SHIFT_LEFT,
+                downTime = start,
+                eventTime = start,
+                metaState = shiftMeta
+            )
+        )
+        service.onKeyDown(
+            KeyEvent.KEYCODE_2,
+            keyEvent(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_2,
+                downTime = start,
+                eventTime = start,
+                metaState = shiftMeta
+            )
+        )
+        service.onKeyUp(
+            KeyEvent.KEYCODE_2,
+            keyEvent(
+                action = KeyEvent.ACTION_UP,
+                keyCode = KeyEvent.KEYCODE_2,
+                downTime = start,
+                eventTime = start + 90L,
+                metaState = shiftMeta
+            )
+        )
+        service.onKeyUp(
+            KeyEvent.KEYCODE_SHIFT_LEFT,
+            keyEvent(
+                action = KeyEvent.ACTION_UP,
+                keyCode = KeyEvent.KEYCODE_SHIFT_LEFT,
+                downTime = start,
+                eventTime = start + 120L
+            )
+        )
+    }
+
     private fun tapSym(start: Long) {
         service.onKeyDown(
             63,
@@ -433,14 +1004,52 @@ class PhysicalKeyboardInputMethodServiceDeviceBehaviorTest {
         )
     }
 
+    private fun focusNewField(
+        newRecorder: RecordingInputConnection,
+        inputType: Int = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES,
+        packageName: String = "it.palsoftware.pastiera.test"
+    ) {
+        recorder = newRecorder
+        inputConnection = recorder.asProxy()
+        editorInfo = EditorInfo().apply {
+            this.inputType = inputType
+            this.packageName = packageName
+        }
+        setField(service, "mInputConnection", inputConnection)
+        setField(service, "mStartedInputConnection", inputConnection)
+        setField(service, "mInputEditorInfo", editorInfo)
+        service.onStartInput(editorInfo, false)
+    }
+
+    private fun configureAppEnterOverride(packageName: String, strategy: String) {
+        val context = RuntimeEnvironment.getApplication()
+        SettingsManager.setAppEnterBehaviorEnabled(context, true)
+        SettingsManager.setAppEnterBehaviorOverrides(
+            context,
+            listOf(
+                SettingsManager.AppEnterBehaviorOverride(
+                    packageName = packageName,
+                    behavior = SettingsManager.ENTER_BEHAVIOR_ENTER_SEND_SHIFT_NEWLINE,
+                    sendStrategy = strategy
+                )
+            )
+        )
+        focusNewField(
+            newRecorder = RecordingInputConnection(),
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE,
+            packageName = packageName
+        )
+    }
+
     private fun keyEvent(
         action: Int,
         keyCode: Int,
         downTime: Long,
         eventTime: Long,
-        metaState: Int = 0
+        metaState: Int = 0,
+        repeatCount: Int = 0
     ): KeyEvent {
-        return KeyEvent(downTime, eventTime, action, keyCode, 0, metaState)
+        return KeyEvent(downTime, eventTime, action, keyCode, repeatCount, metaState)
     }
 
     private fun modifierController(): ModifierStateController {
@@ -479,8 +1088,11 @@ class PhysicalKeyboardInputMethodServiceDeviceBehaviorTest {
 
     private class RecordingInputConnection {
         var textBeforeCursor: String = ""
+        var sendKeyEventResult: Boolean = true
+        var performEditorActionResult: Boolean = false
         val committedTexts = mutableListOf<String>()
         val sentKeyEvents = mutableListOf<KeyEvent>()
+        val editorActions = mutableListOf<Int>()
         val contextMenuActions = mutableListOf<Int>()
         val deleteSurroundingTextCalls = mutableListOf<Pair<Int, Int>>()
 
@@ -511,7 +1123,12 @@ class PhysicalKeyboardInputMethodServiceDeviceBehaviorTest {
                     "sendKeyEvent" -> {
                         val event = args?.getOrNull(0) as? KeyEvent
                         if (event != null) sentKeyEvents += event
-                        true
+                        sendKeyEventResult
+                    }
+                    "performEditorAction" -> {
+                        val action = args?.getOrNull(0) as? Int
+                        if (action != null) editorActions += action
+                        performEditorActionResult
                     }
                     "performContextMenuAction" -> {
                         val id = args?.getOrNull(0) as? Int

@@ -37,6 +37,7 @@ class HamburgerMenuView(
         StatusBarButtonId.Redo,
         StatusBarButtonId.Language,
         StatusBarButtonId.MinimalUi,
+        StatusBarButtonId.SoftwareKeyboardMode,
         StatusBarButtonId.Settings
     )
 
@@ -44,10 +45,30 @@ class HamburgerMenuView(
     private var row: LinearLayout? = null
     private val buttonHost = StatusBarButtonHost(context, buttonRegistry)
     private var currentButtons: List<StatusBarButtonHost.HostedButton> = emptyList()
+    private var closeButton: ImageView? = null
     private var lastClipboardCount: Int? = null
     private var lastMicrophoneActive: Boolean? = null
     private var lastMicrophoneRms: Float? = null
     private var lastMinimalUiActive: Boolean? = null
+    var themeOverride: KeyboardThemeColors? = null
+        set(value) {
+            if (field == value) {
+                return
+            }
+            field = value
+            buttonHost.themeOverride = value?.let {
+                StatusBarButtonStyles.ThemeOverride(
+                    normalColor = it.statusBarButton,
+                    pressedColor = it.accent,
+                    iconColor = it.textAndIcons,
+                    cornerRadiusRatio = it.chromeCornerRadiusRatio,
+                    borderColor = it.divider,
+                    borderWidthPx = dpToPx(1f)
+                )
+            }
+            root?.setBackgroundColor(value?.background ?: Color.BLACK)
+            closeButton?.let { applyCloseButtonTheme(it) }
+        }
 
     fun attachTo(parent: FrameLayout) {
         val view = ensureView()
@@ -114,7 +135,7 @@ class HamburgerMenuView(
         }
         row = rowView
         root = FrameLayout(context).apply {
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(themeOverride?.background ?: Color.BLACK)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -133,31 +154,42 @@ class HamburgerMenuView(
 
         val menuCallbacks = StatusBarCallbacks(
             onClipboardRequested = {
+                onClose()
                 callbacks.onClipboardRequested?.invoke()
             },
             onSpeechRecognitionRequested = {
+                onClose()
                 callbacks.onSpeechRecognitionRequested?.invoke()
             },
             onEmojiPickerRequested = {
+                onClose()
                 callbacks.onEmojiPickerRequested?.invoke()
             },
             onLanguageSwitchRequested = {
+                onClose()
                 callbacks.onLanguageSwitchRequested?.invoke()
             },
             onHamburgerMenuRequested = null,
             onMinimalUiToggleRequested = {
                 callbacks.onMinimalUiToggleRequested?.invoke()
             },
+            onSoftwareKeyboardModeToggleRequested = {
+                callbacks.onSoftwareKeyboardModeToggleRequested?.invoke()
+            },
             onOpenSettings = {
+                onClose()
                 callbacks.onOpenSettings?.invoke()
             },
             onSymbolsPageRequested = {
+                onClose()
                 callbacks.onSymbolsPageRequested?.invoke()
             },
             onUndoRequested = {
+                onClose()
                 callbacks.onUndoRequested?.invoke()
             },
             onRedoRequested = {
+                onClose()
                 callbacks.onRedoRequested?.invoke()
             },
             onHapticFeedback = callbacks.onHapticFeedback
@@ -165,8 +197,9 @@ class HamburgerMenuView(
 
         applyDynamicPadding(rowView)
         val buttonHeight = resolveButtonHeight(rowView)
-        val closeButton = createCloseButton(onClose, buttonHeight)
-        rowView.addView(closeButton)
+        val closeButtonView = createCloseButton(onClose, buttonHeight)
+        closeButton = closeButtonView
+        rowView.addView(closeButtonView)
         val fallbackWidth = buttonHeight
         val hostedButtons = mutableListOf<StatusBarButtonHost.HostedButton>()
         menuButtonIds.forEach { id ->
@@ -253,10 +286,9 @@ class HamburgerMenuView(
     ): ImageView {
         return ImageView(context).apply {
             setImageResource(R.drawable.ic_close_24)
-            setColorFilter(Color.WHITE)
             contentDescription = context.getString(R.string.status_bar_button_close_menu_description)
-            background = StatusBarButtonStyles.createButtonDrawable(heightPx)
             scaleType = ImageView.ScaleType.CENTER
+            applyCloseButtonTheme(this, heightPx)
             isClickable = true
             isFocusable = true
             setOnClickListener {
@@ -264,6 +296,23 @@ class HamburgerMenuView(
                 onClose()
             }
         }
+    }
+
+    private fun applyCloseButtonTheme(button: ImageView, heightPx: Int? = null) {
+        val theme = themeOverride
+        val height = heightPx?.takeIf { it > 0 }
+            ?: button.layoutParams?.height?.takeIf { it > 0 }
+            ?: button.height.takeIf { it > 0 }
+            ?: dpToPx(39f)
+        button.setColorFilter(theme?.textAndIcons ?: Color.WHITE)
+        button.background = StatusBarButtonStyles.createButtonDrawable(
+            heightPx = height,
+            normalColor = theme?.statusBarButton ?: StatusBarButtonStyles.NORMAL_COLOR,
+            pressedColor = theme?.accent ?: StatusBarButtonStyles.PRESSED_BLUE,
+            cornerRadiusRatio = theme?.chromeCornerRadiusRatio ?: StatusBarButtonStyles.BUTTON_CORNER_RADIUS_RATIO,
+            borderColor = theme?.divider,
+            borderWidthPx = if (theme != null) dpToPx(1f) else 0
+        )
     }
 
     private fun dpToPx(dp: Float): Int {

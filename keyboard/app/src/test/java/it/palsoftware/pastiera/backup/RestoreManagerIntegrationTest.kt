@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -44,6 +45,14 @@ class RestoreManagerIntegrationTest {
             .edit()
             .remove("user_dictionary_entries")
             .remove("keyboard_layout")
+            .remove("custom_input_styles")
+            .remove("clicks_power_keyboard_snapshots_v1")
+            .remove("clicks_power_soc_calibration_PK-42")
+            .remove("physical_keyboard_profile_override")
+            .remove("titan2_layout_enabled")
+            .remove("titan2_elite_rounded_corner_insets")
+            .remove("pastierina_mode_active")
+            .remove("software_keyboard_mode_runtime_override")
             .commit()
         if (userDefaultsFile.exists()) {
             userDefaultsFile.delete()
@@ -56,6 +65,14 @@ class RestoreManagerIntegrationTest {
             .edit()
             .remove("user_dictionary_entries")
             .remove("keyboard_layout")
+            .remove("custom_input_styles")
+            .remove("clicks_power_keyboard_snapshots_v1")
+            .remove("clicks_power_soc_calibration_PK-42")
+            .remove("physical_keyboard_profile_override")
+            .remove("titan2_layout_enabled")
+            .remove("titan2_elite_rounded_corner_insets")
+            .remove("pastierina_mode_active")
+            .remove("software_keyboard_mode_runtime_override")
             .commit()
 
         if (originalUserDefaultsExisted) {
@@ -166,6 +183,184 @@ class RestoreManagerIntegrationTest {
         }
 
         assertEquals(0, broadcastCount)
+    }
+
+    @Test
+    fun restore_customInputStyles_triggersRuntimeRegistration() = runBlocking {
+        val backupZip = createBackupZip(
+            includeMetadata = true,
+            prefsFiles = mapOf(
+                "pastiera_prefs.json" to prefsBackupJson(
+                    prefName = "pastiera_prefs",
+                    entries = mapOf(
+                        "custom_input_styles" to PreferenceValue(
+                            PreferenceValueType.STRING,
+                            "de:qwertz;ru:custom-russian"
+                        )
+                    )
+                )
+            ),
+            fileEntries = emptyMap()
+        )
+
+        val result = RestoreManager.restore(context, Uri.fromFile(backupZip))
+        val success = result as RestoreResult.Success
+
+        assertEquals(
+            setOf(RestoreManager.PostRestoreAction.REGISTER_CUSTOM_INPUT_STYLES),
+            success.postActionsTriggered
+        )
+        assertEquals(
+            "de:qwertz;ru:custom-russian",
+            context.getSharedPreferences("pastiera_prefs", Context.MODE_PRIVATE)
+                .getString("custom_input_styles", null)
+        )
+    }
+
+    @Test
+    fun restore_clicksPowerStateAndCalibration_onFreshInstall() {
+        val snapshot = "[{\"deviceName\":\"Power Keyboard\"}]"
+        val calibration = "3:8,4:9"
+
+        val summary = PreferencesBackupHelper.restorePreferences(
+            context,
+            mapOf(
+                "pastiera_prefs" to mapOf(
+                    "clicks_power_keyboard_snapshots_v1" to PreferenceValue(
+                        PreferenceValueType.STRING,
+                        snapshot
+                    ),
+                    "clicks_power_soc_calibration_PK-42" to PreferenceValue(
+                        PreferenceValueType.STRING,
+                        calibration
+                    )
+                )
+            )
+        )
+
+        assertTrue(summary.skippedKeys.isEmpty())
+        assertEquals(
+            setOf(
+                "pastiera_prefs:clicks_power_keyboard_snapshots_v1",
+                "pastiera_prefs:clicks_power_soc_calibration_PK-42"
+            ),
+            summary.appliedKeys.toSet()
+        )
+        val preferences = context.getSharedPreferences("pastiera_prefs", Context.MODE_PRIVATE)
+        assertEquals(snapshot, preferences.getString("clicks_power_keyboard_snapshots_v1", null))
+        assertEquals(calibration, preferences.getString("clicks_power_soc_calibration_PK-42", null))
+    }
+
+    @Test
+    fun restore_existingUnknownKeyIsSkippedWhileRestoreOnlyLegacyKeyIsApplied() {
+        val preferences = context.getSharedPreferences("pastiera_prefs", Context.MODE_PRIVATE)
+        val unknownKey = "unclassified_existing_restore_test"
+        val restoreOnlyKey = "restore_sym_page"
+        preferences.edit()
+            .putString(unknownKey, "keep-existing")
+            .remove(restoreOnlyKey)
+            .commit()
+
+        try {
+            val summary = PreferencesBackupHelper.restorePreferences(
+                context,
+                mapOf(
+                    "pastiera_prefs" to mapOf(
+                        unknownKey to PreferenceValue(PreferenceValueType.STRING, "backup-value"),
+                        restoreOnlyKey to PreferenceValue(PreferenceValueType.INT, 4)
+                    )
+                )
+            )
+
+            assertEquals(listOf("pastiera_prefs:$restoreOnlyKey"), summary.appliedKeys)
+            assertEquals(listOf("pastiera_prefs:$unknownKey"), summary.skippedKeys)
+            assertEquals("keep-existing", preferences.getString(unknownKey, null))
+            assertEquals(4, preferences.getInt(restoreOnlyKey, -1))
+        } finally {
+            preferences.edit().remove(unknownKey).remove(restoreOnlyKey).commit()
+        }
+    }
+
+    @Test
+    fun inspect_doesNotApplyPreferences() = runBlocking {
+        val preferences = context.getSharedPreferences("pastiera_prefs", Context.MODE_PRIVATE)
+        preferences.edit().putString("keyboard_layout", "qwertz").commit()
+        val backupZip = createBackupZip(
+            includeMetadata = true,
+            prefsFiles = mapOf(
+                "pastiera_prefs.json" to prefsBackupJson(
+                    prefName = "pastiera_prefs",
+                    entries = mapOf(
+                        "keyboard_layout" to PreferenceValue(PreferenceValueType.STRING, "azerty")
+                    )
+                )
+            ),
+            fileEntries = emptyMap()
+        )
+
+        val result = RestoreManager.inspect(context, Uri.fromFile(backupZip))
+
+        assertTrue(result is RestoreInspectionResult.Success)
+        assertEquals("qwertz", preferences.getString("keyboard_layout", null))
+    }
+
+    @Test
+    fun adaptiveRestore_preservesTargetDeviceValuesButImportsPortableSettings() = runBlocking {
+        val preferences = context.getSharedPreferences("pastiera_prefs", Context.MODE_PRIVATE)
+        preferences.edit()
+            .putString("physical_keyboard_profile_override", "auto")
+            .putBoolean("titan2_layout_enabled", true)
+            .putBoolean("titan2_elite_rounded_corner_insets", true)
+            .putBoolean("pastierina_mode_active", false)
+            .putString("software_keyboard_mode_runtime_override", "force_hardware")
+            .commit()
+        val backupZip = createBackupZip(
+            includeMetadata = true,
+            prefsFiles = mapOf(
+                "pastiera_prefs.json" to prefsBackupJson(
+                    prefName = "pastiera_prefs",
+                    entries = mapOf(
+                        "physical_keyboard_profile_override" to PreferenceValue(
+                            PreferenceValueType.STRING,
+                            "titan2"
+                        ),
+                        "titan2_layout_enabled" to PreferenceValue(PreferenceValueType.BOOLEAN, false),
+                        "titan2_elite_rounded_corner_insets" to PreferenceValue(
+                            PreferenceValueType.BOOLEAN,
+                            false
+                        ),
+                        "pastierina_mode_active" to PreferenceValue(PreferenceValueType.BOOLEAN, true),
+                        "software_keyboard_mode_runtime_override" to PreferenceValue(
+                            PreferenceValueType.STRING,
+                            "force_virtual"
+                        ),
+                        "keyboard_layout" to PreferenceValue(PreferenceValueType.STRING, "azerty")
+                    )
+                )
+            ),
+            fileEntries = emptyMap()
+        )
+
+        val result = RestoreManager.restore(
+            context,
+            Uri.fromFile(backupZip),
+            RestoreManager.ImportMode.ADAPT_TO_CURRENT_DEVICE
+        ) as RestoreResult.Success
+
+        assertEquals("auto", preferences.getString("physical_keyboard_profile_override", null))
+        assertTrue(preferences.getBoolean("titan2_layout_enabled", false))
+        assertTrue(preferences.getBoolean("titan2_elite_rounded_corner_insets", false))
+        assertFalse(preferences.getBoolean("pastierina_mode_active", true))
+        assertEquals(
+            "force_hardware",
+            preferences.getString("software_keyboard_mode_runtime_override", null)
+        )
+        assertEquals("azerty", preferences.getString("keyboard_layout", null))
+        assertTrue(
+            result.preferencesSummary.skippedKeys.containsAll(
+                BackupPreferencePolicy.runtimeDerivedKeys + BackupPreferencePolicy.targetDeviceDerivedKeys
+            )
+        )
     }
 
     private suspend fun countUserDictionaryBroadcastsDuring(block: suspend () -> Unit): Int {

@@ -5,6 +5,7 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.inputmethod.InputConnection
 import it.palsoftware.pastiera.inputmethod.AutoCorrector
+import it.palsoftware.pastiera.inputmethod.DebugCaptureStore
 import it.palsoftware.pastiera.inputmethod.NotificationHelper
 import it.palsoftware.pastiera.core.AutoSpaceTracker
 
@@ -78,7 +79,8 @@ class AutoCorrectionManager(
         isAutoCorrectEnabled: Boolean,
         commitBoundary: Boolean,
         onStatusBarUpdate: () -> Unit,
-        boundaryCharOverride: Char? = null
+        boundaryCharOverride: Char? = null,
+        isKnownWord: ((String) -> Boolean)? = null
     ): Boolean {
         Log.d(
             TAG,
@@ -86,7 +88,7 @@ class AutoCorrectionManager(
                     "commitBoundary=$commitBoundary, isAutoCorrectEnabled=$isAutoCorrectEnabled, " +
                     "eventKeyCode=${event?.keyCode}"
         )
-        if (!isAutoCorrectEnabled || inputConnection == null) {
+        if (inputConnection == null) {
             return false
         }
 
@@ -117,14 +119,30 @@ class AutoCorrectionManager(
             return false
         }
 
+        fun commitCommaSpaceIfEnabled(): Boolean {
+            return commitBoundary &&
+                it.palsoftware.pastiera.SettingsManager.getCommaSpace(context) &&
+                Punctuation.commitCommaSpace(inputConnection, boundaryChar)
+        }
+
+        if (!isAutoCorrectEnabled) {
+            return commitCommaSpaceIfEnabled()
+        }
+
         val punctuationChars = it.palsoftware.pastiera.core.Punctuation.BOUNDARY
         val isSpaceBoundary = boundaryChar == ' '
         val isEnterBoundary = boundaryChar == '\n'
         val isPunctuationBoundary = boundaryChar in punctuationChars
 
-        if (inputConnection != null && isPunctuationBoundary && AutoSpaceTracker.isPending()) {
+        if (isPunctuationBoundary && AutoSpaceTracker.isPending()) {
             val bracketSet = "()[]{}"
-            if (boundaryChar in it.palsoftware.pastiera.core.Punctuation.AUTO_SPACE) {
+            if (
+                it.palsoftware.pastiera.SettingsManager.getCommaSpace(context) &&
+                Punctuation.commitCommaSpace(inputConnection, boundaryChar)
+            ) {
+                return true
+            }
+            if (boundaryChar in it.palsoftware.pastiera.SettingsManager.getAutoSpacePunctuation(context)) {
                 val applied = AutoSpaceTracker.replaceAutoSpaceWithPunctuation(
                     inputConnection,
                     boundaryChar.toString()
@@ -141,11 +159,15 @@ class AutoCorrectionManager(
         inputConnection.finishComposingText()
 
         val textBeforeCursor = inputConnection.getTextBeforeCursor(100, 0)
-        val correction = AutoCorrector.processText(textBeforeCursor, context = context) ?: return false
+        val correction = AutoCorrector.processText(
+            textBeforeCursor,
+            context = context,
+            isKnownWord = isKnownWord
+        ) ?: return commitCommaSpaceIfEnabled()
 
         val (wordToReplace, correctedWord) = correction
         if (correctedWord == wordToReplace) {
-            return false
+            return commitCommaSpaceIfEnabled()
         }
         val boundaryAtEnd = textBeforeCursor?.lastOrNull() == boundaryChar
         var deleteCount = wordToReplace.length
@@ -155,7 +177,12 @@ class AutoCorrectionManager(
 
         inputConnection.deleteSurroundingText(deleteCount, 0)
         inputConnection.commitText(correctedWord, 1)
-        AutoCorrector.recordCorrection(wordToReplace, correctedWord)
+        val trigger = when {
+            isSpaceBoundary -> DebugCaptureStore.AutoCorrectionTrigger.SPACE
+            isEnterBoundary -> DebugCaptureStore.AutoCorrectionTrigger.ENTER
+            else -> DebugCaptureStore.AutoCorrectionTrigger.OTHER
+        }
+        AutoCorrector.recordCorrection(wordToReplace, correctedWord, trigger)
         
         // Trigger haptic feedback when autocorrection occurs
         NotificationHelper.triggerHapticFeedback(context)
@@ -170,7 +197,17 @@ class AutoCorrectionManager(
                 }
                 isEnterBoundary -> inputConnection.commitText("\n", 1)
                 isPunctuationBoundary -> {
-                    inputConnection.commitText(boundaryChar.toString(), 1)
+                    if (
+                        !it.palsoftware.pastiera.SettingsManager.shouldApplyFrenchPunctuationSpacing(context) ||
+                        !Punctuation.commitFrenchSpacedPunctuation(inputConnection, boundaryChar)
+                    ) {
+                        if (
+                            !it.palsoftware.pastiera.SettingsManager.getCommaSpace(context) ||
+                            !Punctuation.commitCommaSpace(inputConnection, boundaryChar)
+                        ) {
+                            inputConnection.commitText(boundaryChar.toString(), 1)
+                        }
+                    }
                 }
             }
         }

@@ -2,7 +2,7 @@ package it.palsoftware.pastiera
 
 import android.content.Intent
 import android.content.SharedPreferences
-import androidx.activity.compose.BackHandler
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -37,12 +37,15 @@ import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
@@ -68,6 +71,7 @@ import it.palsoftware.pastiera.BuildConfig
 import it.palsoftware.pastiera.R
 import it.palsoftware.pastiera.backup.BackupManager
 import it.palsoftware.pastiera.backup.RestoreManager
+import it.palsoftware.pastiera.backup.RestoreInspectionResult
 import androidx.compose.material3.Surface
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -93,7 +97,7 @@ fun AdvancedSettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val prefs = remember { SettingsManager.getPreferences(context) }
-    
+
     // Store the actual value (3 to 25), but display it inverted in the slider (25 to 3)
     var swipeIncrementalThreshold by remember {
         mutableStateOf(SettingsManager.getSwipeIncrementalThreshold(context))
@@ -102,14 +106,19 @@ fun AdvancedSettingsScreen(
         mutableStateOf(SettingsManager.getClipboardRetentionTime(context).toString())
     }
     var shizukuStatus by remember { mutableStateOf(ShizukuStatus.NotConnected) }
-    var navigationDirection by remember { mutableStateOf(AdvancedNavigationDirection.Push) }
-    val navigationStack = remember {
-        mutableStateListOf<AdvancedDestination>(AdvancedDestination.Main)
+    var trackpadProvider by remember { mutableStateOf(SettingsManager.getTrackpadProvider(context)) }
+    var experimentalCandidatesViewEnabled by remember {
+        mutableStateOf(SettingsManager.getExperimentalCandidatesViewEnabled(context))
     }
-    val currentDestination by remember {
-        derivedStateOf { navigationStack.last() }
+    var pendingDeviceChangeRestore by remember {
+        mutableStateOf<Pair<Uri, RestoreManager.DeviceChange>?>(null)
     }
-    
+    val currentDestination = remember { when (settingsChild(context, "advanced")) {
+        "ImeTest" -> AdvancedDestination.ImeTest
+        "TrackpadGestures" -> AdvancedDestination.TrackpadGestures
+        else -> if (context.settingsActivity().intent.data?.let(SettingLinkRegistry::parseSettingLinkUri) in TRACKPAD_SETTING_LINK_IDS) AdvancedDestination.TrackpadGestures else AdvancedDestination.Main
+    } }
+    val highlightedSettingId = LocalSettingHighlightId.current
     // Listen to SharedPreferences changes to update UI when values are restored
     DisposableEffect(prefs) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -119,6 +128,12 @@ fun AdvancedSettingsScreen(
                 }
                 "clipboard_retention_time" -> {
                     clipboardRetentionTime = SettingsManager.getClipboardRetentionTime(context).toString()
+                }
+                "trackpad_provider" -> {
+                    trackpadProvider = SettingsManager.getTrackpadProvider(context)
+                }
+                "experimental_candidates_view_enabled" -> {
+                    experimentalCandidatesViewEnabled = SettingsManager.getExperimentalCandidatesViewEnabled(context)
                 }
             }
         }
@@ -137,21 +152,11 @@ fun AdvancedSettingsScreen(
     }
 
     fun navigateTo(destination: AdvancedDestination) {
-        navigationDirection = AdvancedNavigationDirection.Push
-        navigationStack.add(destination)
+        openSettingsChild(context, "advanced", when (destination) { AdvancedDestination.Main -> "Main"; AdvancedDestination.ImeTest -> "ImeTest"; AdvancedDestination.TrackpadGestures -> "TrackpadGestures" })
     }
-    
-    fun navigateBack() {
-        if (navigationStack.size > 1) {
-            navigationDirection = AdvancedNavigationDirection.Pop
-            navigationStack.removeAt(navigationStack.lastIndex)
-        } else {
-            onBack()
-        }
-    }
-    
-    BackHandler { navigateBack() }
-    
+    fun navigateBack() { context.settingsActivity().finish() }
+
+
     fun defaultBackupName(): String {
         val formatter = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US)
         return "pastiera-backup-${formatter.format(Date())}.zip"
@@ -174,56 +179,90 @@ fun AdvancedSettingsScreen(
         }
     }
 
+    fun performRestore(uri: Uri, importMode: RestoreManager.ImportMode) {
+        scope.launch {
+            val result = RestoreManager.restore(context, uri, importMode)
+            val message = when (result) {
+                is it.palsoftware.pastiera.backup.RestoreResult.Success ->
+                    context.getString(R.string.restore_completed)
+                is it.palsoftware.pastiera.backup.RestoreResult.Failure ->
+                    context.getString(R.string.restore_failed, result.reason)
+            }
+            snackbarHostState.showSnackbar(message)
+
+            // Wait a bit for SharedPreferences to be written (apply() is asynchronous)
+            kotlinx.coroutines.delay(100)
+
+            // Explicitly reload values after restore to ensure UI is updated
+            swipeIncrementalThreshold = SettingsManager.getSwipeIncrementalThreshold(context)
+            clipboardRetentionTime = SettingsManager.getClipboardRetentionTime(context).toString()
+        }
+    }
+
     val restoreLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                val result = RestoreManager.restore(context, uri)
-                val message = when (result) {
-                    is it.palsoftware.pastiera.backup.RestoreResult.Success ->
-                        context.getString(R.string.restore_completed)
-                    is it.palsoftware.pastiera.backup.RestoreResult.Failure ->
-                        context.getString(R.string.restore_failed, result.reason)
+                when (val inspection = RestoreManager.inspect(context, uri)) {
+                    is RestoreInspectionResult.Success -> {
+                        val deviceChange = inspection.deviceChange
+                        if (deviceChange == null) {
+                            performRestore(uri, RestoreManager.ImportMode.UNCHANGED)
+                        } else {
+                            pendingDeviceChangeRestore = uri to deviceChange
+                        }
+                    }
+                    is RestoreInspectionResult.Failure -> {
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.restore_failed, inspection.reason)
+                        )
+                    }
                 }
-                snackbarHostState.showSnackbar(message)
-                
-                // Wait a bit for SharedPreferences to be written (apply() is asynchronous)
-                kotlinx.coroutines.delay(100)
-                
-                // Explicitly reload values after restore to ensure UI is updated
-                swipeIncrementalThreshold = SettingsManager.getSwipeIncrementalThreshold(context)
-                clipboardRetentionTime = SettingsManager.getClipboardRetentionTime(context).toString()
             }
         }
     }
-    
-    AnimatedContent(
-        targetState = currentDestination,
-        transitionSpec = {
-            if (navigationDirection == AdvancedNavigationDirection.Push) {
-                // Forward navigation: new screen enters from right, old screen exits to left
-                slideInHorizontally(
-                    initialOffsetX = { fullWidth -> fullWidth },
-                    animationSpec = tween(250)
-                ) togetherWith slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> -fullWidth },
-                    animationSpec = tween(250)
+
+    pendingDeviceChangeRestore?.let { (uri, deviceChange) ->
+        AlertDialog(
+            onDismissRequest = { pendingDeviceChangeRestore = null },
+            title = { Text(stringResource(R.string.restore_device_change_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.restore_device_change_message,
+                        deviceChange.source.displayName,
+                        deviceChange.target.displayName
+                    )
                 )
-            } else {
-                // Back navigation: current screen exits to right, previous screen enters from left
-                slideInHorizontally(
-                    initialOffsetX = { fullWidth -> -fullWidth },
-                    animationSpec = tween(250)
-                ) togetherWith slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> fullWidth },
-                    animationSpec = tween(250)
-                )
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(
+                        onClick = {
+                            pendingDeviceChangeRestore = null
+                            performRestore(uri, RestoreManager.ImportMode.ADAPT_TO_CURRENT_DEVICE)
+                        }
+                    ) {
+                        Text(stringResource(R.string.restore_device_change_adapt))
+                    }
+                    TextButton(
+                        onClick = {
+                            pendingDeviceChangeRestore = null
+                            performRestore(uri, RestoreManager.ImportMode.UNCHANGED)
+                        }
+                    ) {
+                        Text(stringResource(R.string.restore_device_change_unchanged))
+                    }
+                    TextButton(onClick = { pendingDeviceChangeRestore = null }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
+                }
             }
-        },
-        label = "advanced_navigation",
-        contentKey = { it::class }
-    ) { destination ->
+        )
+    }
+
+    val destination = currentDestination
         when (destination) {
             AdvancedDestination.Main -> {
                 Scaffold(
@@ -267,7 +306,9 @@ fun AdvancedSettingsScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { navigateTo(AdvancedDestination.TrackpadGestures) }
+                                .settingRow(SettingLinkIds.ADVANCED_TRACKPAD_GESTURES) {
+                                    navigateTo(AdvancedDestination.TrackpadGestures)
+                                }
                         ) {
                             Column(
                                 modifier = Modifier
@@ -300,13 +341,14 @@ fun AdvancedSettingsScreen(
                                             maxLines = 1
                                         )
                                     }
+                                    FeatureStatusIcon(FeatureStatus.Experimental)
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                // Shizuku Status Row
+                                // Trackpad provider status row
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -315,30 +357,34 @@ fun AdvancedSettingsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Icon(
-                                        imageVector = when (shizukuStatus) {
-                                            ShizukuStatus.Connected -> Icons.Filled.CheckCircle
-                                            ShizukuStatus.NotAuthorized -> Icons.Filled.Warning
-                                            ShizukuStatus.NotConnected -> Icons.Filled.Error
+                                        imageVector = when {
+                                            trackpadProvider == SettingsManager.TRACKPAD_PROVIDER_NATIVE_IME -> Icons.Filled.CheckCircle
+                                            shizukuStatus == ShizukuStatus.Connected -> Icons.Filled.CheckCircle
+                                            shizukuStatus == ShizukuStatus.NotAuthorized -> Icons.Filled.Warning
+                                            else -> Icons.Filled.Error
                                         },
                                         contentDescription = null,
-                                        tint = when (shizukuStatus) {
-                                            ShizukuStatus.Connected -> MaterialTheme.colorScheme.primary
-                                            ShizukuStatus.NotAuthorized -> MaterialTheme.colorScheme.tertiary
-                                            ShizukuStatus.NotConnected -> MaterialTheme.colorScheme.error
+                                        tint = when {
+                                            trackpadProvider == SettingsManager.TRACKPAD_PROVIDER_NATIVE_IME -> MaterialTheme.colorScheme.primary
+                                            shizukuStatus == ShizukuStatus.Connected -> MaterialTheme.colorScheme.primary
+                                            shizukuStatus == ShizukuStatus.NotAuthorized -> MaterialTheme.colorScheme.tertiary
+                                            else -> MaterialTheme.colorScheme.error
                                         },
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Text(
-                                        text = when (shizukuStatus) {
-                                            ShizukuStatus.Connected -> stringResource(R.string.trackpad_gestures_shizuku_connected)
-                                            ShizukuStatus.NotAuthorized -> stringResource(R.string.trackpad_gestures_shizuku_not_authorized)
-                                            ShizukuStatus.NotConnected -> stringResource(R.string.trackpad_gestures_shizuku_not_connected)
+                                        text = when {
+                                            trackpadProvider == SettingsManager.TRACKPAD_PROVIDER_NATIVE_IME -> stringResource(R.string.trackpad_provider_native_ime_status)
+                                            shizukuStatus == ShizukuStatus.Connected -> stringResource(R.string.trackpad_gestures_shizuku_connected)
+                                            shizukuStatus == ShizukuStatus.NotAuthorized -> stringResource(R.string.trackpad_gestures_shizuku_not_authorized)
+                                            else -> stringResource(R.string.trackpad_gestures_shizuku_not_connected)
                                         },
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = when (shizukuStatus) {
-                                            ShizukuStatus.Connected -> MaterialTheme.colorScheme.primary
-                                            ShizukuStatus.NotAuthorized -> MaterialTheme.colorScheme.tertiary
-                                            ShizukuStatus.NotConnected -> MaterialTheme.colorScheme.error
+                                        color = when {
+                                            trackpadProvider == SettingsManager.TRACKPAD_PROVIDER_NATIVE_IME -> MaterialTheme.colorScheme.primary
+                                            shizukuStatus == ShizukuStatus.Connected -> MaterialTheme.colorScheme.primary
+                                            shizukuStatus == ShizukuStatus.NotAuthorized -> MaterialTheme.colorScheme.tertiary
+                                            else -> MaterialTheme.colorScheme.error
                                         }
                                     )
                                 }
@@ -350,7 +396,7 @@ fun AdvancedSettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp)
-                                .clickable {
+                                .settingRow(SettingLinkIds.ADVANCED_BACKUP) {
                                     backupLauncher.launch(defaultBackupName())
                                 }
                         ) {
@@ -388,13 +434,13 @@ fun AdvancedSettingsScreen(
                                 )
                             }
                         }
-                    
+
                         // Restore
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp)
-                                .clickable {
+                                .settingRow(SettingLinkIds.ADVANCED_RESTORE) {
                                     restoreLauncher.launch(arrayOf("application/zip"))
                                 }
                         ) {
@@ -432,12 +478,13 @@ fun AdvancedSettingsScreen(
                                 )
                             }
                         }
-                    
+
                         // Swipe Incremental Threshold
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp)
+                                .settingRow(SettingLinkIds.ADVANCED_SWIPE_INCREMENTAL_THRESHOLD)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -467,11 +514,11 @@ fun AdvancedSettingsScreen(
                                     )
                                 }
                                 Slider(
-                                    value = SettingsManager.getMaxSwipeIncrementalThreshold() + 
+                                    value = SettingsManager.getMaxSwipeIncrementalThreshold() +
                                         SettingsManager.getMinSwipeIncrementalThreshold() - swipeIncrementalThreshold,
                                     onValueChange = { newInvertedValue ->
                                         // Invert the slider value (25 to 3) back to stored value (3 to 25)
-                                        val actualValue = SettingsManager.getMaxSwipeIncrementalThreshold() + 
+                                        val actualValue = SettingsManager.getMaxSwipeIncrementalThreshold() +
                                             SettingsManager.getMinSwipeIncrementalThreshold() - newInvertedValue
                                         swipeIncrementalThreshold = actualValue
                                         SettingsManager.setSwipeIncrementalThreshold(context, actualValue)
@@ -484,12 +531,13 @@ fun AdvancedSettingsScreen(
                                 )
                             }
                         }
-                    
+
                         // Clipboard Retention Time
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 8.dp)
+                                .settingRow(SettingLinkIds.ADVANCED_CLIPBOARD_RETENTION_TIME)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -549,7 +597,59 @@ fun AdvancedSettingsScreen(
                                 }
                             }
                         }
-                    
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .settingRow(SettingLinkIds.ADVANCED_EXPERIMENTAL_CANDIDATES_VIEW)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.experimental_candidates_view_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.experimental_candidates_view_description),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = experimentalCandidatesViewEnabled,
+                                    onCheckedChange = { enabled ->
+                                        experimentalCandidatesViewEnabled = enabled
+                                        SettingsManager.setExperimentalCandidatesViewEnabled(context, enabled)
+                                    }
+                                )
+                            }
+                        }
+
+                        if (it.palsoftware.pastiera.inputmethod.DeviceSpecific.isTitan2EliteDevice() ||
+                            SettingsManager.getTitan2EliteRoundedCornerInsetsEnabled(context)) {
+                            Surface(modifier = Modifier.fillMaxWidth()
+                                .settingRow("advanced.corner_calibration") {
+                                    context.startActivity(Intent(context, CornerCalibrationActivity::class.java))
+                                }) {
+                                Column(Modifier.padding(16.dp)) {
+                                    Text(stringResource(R.string.corner_calibration_title),
+                                        style = MaterialTheme.typography.titleMedium)
+                                    Text(stringResource(R.string.corner_calibration_description),
+                                        style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+
                         // IME Test Screen (only in debug builds)
                         if (BuildConfig.DEBUG) {
                             Surface(
@@ -593,13 +693,13 @@ fun AdvancedSettingsScreen(
                                 }
                             }
                         }
-                    
+
                         // Show Tutorial
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp)
-                                .clickable {
+                                .settingRow(SettingLinkIds.ADVANCED_SHOW_TUTORIAL) {
                                     SettingsManager.resetTutorialCompleted(context)
                                     val intent = Intent(context, TutorialActivity::class.java)
                                     context.startActivity(intent)
@@ -644,7 +744,7 @@ fun AdvancedSettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp)
-                                .clickable {
+                                .settingRow(SettingLinkIds.ADVANCED_SHOW_RELEASE_NOTES_TUTORIAL) {
                                     val intent = Intent(context, TutorialActivity::class.java).apply {
                                         putExtra(TutorialActivity.EXTRA_UPDATE_TUTORIAL, true)
                                         putExtra(TutorialActivity.EXTRA_PREVIEW_UPDATE_TUTORIAL, true)
@@ -706,7 +806,7 @@ fun AdvancedSettingsScreen(
             }
 
         }
-    }
+
 }
 
 private sealed class AdvancedDestination {
@@ -715,7 +815,18 @@ private sealed class AdvancedDestination {
     object TrackpadGestures : AdvancedDestination()
 }
 
-private enum class AdvancedNavigationDirection {
-    Push,
-    Pop
-}
+
+
+private val TRACKPAD_SETTING_LINK_IDS = setOf(
+    "trackpad.add_word",
+    "trackpad.add_word_full_width",
+    "trackpad.swipe_to_delete",
+    "trackpad.swipe_to_delete_provider",
+    SettingLinkIds.TRACKPAD_GESTURES_ENABLED,
+    SettingLinkIds.TRACKPAD_PROVIDER,
+    SettingLinkIds.TRACKPAD_SHIZUKU_DEVICE,
+    SettingLinkIds.TRACKPAD_SENSITIVITY,
+    SettingLinkIds.TRACKPAD_SUGGESTION_SWIPE_THRESHOLD,
+    SettingLinkIds.TRACKPAD_DELETE_SWIPE_THRESHOLD,
+    SettingLinkIds.TRACKPAD_DEBUG
+)

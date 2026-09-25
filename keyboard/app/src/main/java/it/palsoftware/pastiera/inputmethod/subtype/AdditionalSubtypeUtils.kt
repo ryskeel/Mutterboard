@@ -10,6 +10,7 @@ import android.view.inputmethod.InputMethodManager
 import android.view.inputmethod.InputMethodSubtype
 import it.palsoftware.pastiera.R
 import it.palsoftware.pastiera.SettingsManager
+import it.palsoftware.pastiera.data.layout.LayoutFileStore
 import it.palsoftware.pastiera.data.layout.LayoutMappingRepository
 import it.palsoftware.pastiera.inputmethod.PhysicalKeyboardInputMethodService
 import org.json.JSONObject
@@ -32,6 +33,45 @@ object AdditionalSubtypeUtils {
         "en_US", "it_IT", "fr_FR", "de_DE", "pl_PL", "da_DK",
         "no_NO", "es_ES", "pt_PT", "ru_RU", "sr_RS", "uk_UA"
     )
+
+    fun InputMethodSubtype.localeString(): String =
+        languageTag.takeIf { it.isNotBlank() }
+            ?: legacyLocaleString()
+
+    fun InputMethodSubtype.languageCode(): String? =
+        localeString()
+            .replace('_', '-')
+            .split('-')
+            .firstOrNull()
+            ?.takeIf { it.isNotBlank() }
+
+    fun localeFromSubtypeString(localeString: String): Locale {
+        val normalized = localeString.replace('_', '-')
+        return Locale.forLanguageTag(normalized).takeIf { it.language.isNotBlank() }
+            ?: Locale.ITALIAN
+    }
+
+    @Suppress("DEPRECATION")
+    private fun InputMethodSubtype.legacyLocaleString(): String = locale.orEmpty()
+
+    @Suppress("DEPRECATION")
+    fun setAdditionalInputMethodSubtypesCompat(
+        imm: InputMethodManager,
+        imeId: String,
+        subtypes: Array<InputMethodSubtype>
+    ) {
+        imm.setAdditionalInputMethodSubtypes(imeId, subtypes)
+    }
+
+    @Suppress("DEPRECATION")
+    fun setInputMethodAndSubtypeCompat(
+        imm: InputMethodManager,
+        token: android.os.IBinder,
+        imeId: String,
+        subtype: InputMethodSubtype
+    ) {
+        imm.setInputMethodAndSubtype(token, imeId, subtype)
+    }
     
     /**
      * Parses a preference string and creates an array of InputMethodSubtype objects.
@@ -86,7 +126,7 @@ object AdditionalSubtypeUtils {
                 }
                 
                 // Create subtype
-                val subtype = createSubtype(localeStr, layoutName, extra)
+                val subtype = createSubtype(localeStr, layoutName, extra, assets, context)
                 if (subtype != null) {
                     subtypes.add(subtype)
                 }
@@ -104,7 +144,7 @@ object AdditionalSubtypeUtils {
      */
     fun createPrefSubtypes(subtypeArray: Array<InputMethodSubtype>): String {
         return subtypeArray.joinToString(";") { subtype ->
-            val locale = subtype.locale ?: ""
+            val locale = subtype.localeString()
             val extraValue = subtype.extraValue ?: ""
             val layoutName = extractLayoutFromExtraValue(extraValue) ?: ""
             val otherExtras = extractOtherExtras(extraValue)
@@ -131,7 +171,9 @@ object AdditionalSubtypeUtils {
     private fun createSubtype(
         localeStr: String,
         layoutName: String,
-        extra: String
+        extra: String,
+        assets: AssetManager,
+        context: Context
     ): InputMethodSubtype? {
         return try {
             // Parse locale
@@ -161,19 +203,57 @@ object AdditionalSubtypeUtils {
             // Get name resource ID for locale
             val nameResId = getLocaleNameResId(localeStr)
             
-            // Create subtype
-            InputMethodSubtype.InputMethodSubtypeBuilder()
-                .setSubtypeNameResId(nameResId)
+            val supportsNameOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+            val builder = InputMethodSubtype.InputMethodSubtypeBuilder()
+                .setSubtypeNameResId(if (supportsNameOverride) 0 else nameResId)
                 .setSubtypeLocale(localeStr)
+                .setLanguageTag(locale.toLanguageTag())
                 .setSubtypeMode("keyboard")
                 .setSubtypeExtraValue(extraValue)
+                .setSubtypeId(stableSubtypeId(localeStr, layoutName))
                 .setIsAuxiliary(false)
                 .setOverridesImplicitlyEnabledSubtype(false)
-                .build()
+
+            if (supportsNameOverride) {
+                builder.setSubtypeNameOverride(
+                    buildSubtypeDisplayName(context, assets, locale, localeStr, layoutName)
+                )
+            }
+
+            builder.build()
         } catch (e: Exception) {
             Log.e(TAG, "Error creating subtype for $localeStr:$layoutName", e)
             null
         }
+    }
+
+    internal fun buildSubtypeDisplayName(
+        context: Context,
+        assets: AssetManager,
+        locale: Locale,
+        localeStr: String,
+        layoutName: String
+    ): String {
+        val languageLabel = getLocaleNameResId(localeStr)
+            .takeIf { it != 0 }
+            ?.let(context::getString)
+            ?: locale.getDisplayLanguage(context.resources.configuration.locales[0])
+                .replaceFirstChar { character ->
+                    if (character.isLowerCase()) character.titlecase() else character.toString()
+                }
+        val layoutLabel = (
+            LayoutFileStore.getLayoutMetadataFromAssets(assets, layoutName)
+                ?: LayoutFileStore.getLayoutMetadata(context, layoutName)
+            )?.name
+            ?.takeIf { it.isNotBlank() }
+            ?.substringBefore(" | ")
+            ?: layoutName
+
+        return "$languageLabel · $layoutLabel"
+    }
+
+    private fun stableSubtypeId(locale: String, layout: String): Int {
+        return "pastiera-subtype-v2|$locale|$layout".hashCode().takeUnless { it == 0 } ?: 1
     }
     
     /**
@@ -192,12 +272,8 @@ object AdditionalSubtypeUtils {
      */
     private fun parseLocale(localeStr: String): Locale? {
         return try {
-            val parts = localeStr.split("_")
-            when (parts.size) {
-                2 -> Locale(parts[0], parts[1])
-                1 -> Locale(parts[0])
-                else -> null
-            }
+            Locale.forLanguageTag(localeStr.replace('_', '-'))
+                .takeIf { it.language.isNotBlank() }
         } catch (e: Exception) {
             null
         }
@@ -256,7 +332,7 @@ object AdditionalSubtypeUtils {
         subtypes: Array<InputMethodSubtype>,
         locale: String
     ): InputMethodSubtype? {
-        return subtypes.firstOrNull { it.locale == locale }
+        return subtypes.firstOrNull { localesMatch(it.localeString(), locale) }
     }
     
     /**
@@ -268,7 +344,7 @@ object AdditionalSubtypeUtils {
         layoutName: String
     ): InputMethodSubtype? {
         return subtypes.firstOrNull { subtype ->
-            subtype.locale == locale && 
+            localesMatch(subtype.localeString(), locale) &&
             extractLayoutFromExtraValue(subtype.extraValue ?: "") == layoutName
         }
     }
@@ -285,8 +361,14 @@ object AdditionalSubtypeUtils {
         locale: String,
         layoutName: String
     ): Boolean {
-        return subtype.locale == locale &&
+        return localesMatch(subtype.localeString(), locale) &&
             getKeyboardLayoutFromSubtype(subtype) == layoutName
+    }
+
+    private fun localesMatch(left: String, right: String): Boolean {
+        val leftTag = localeFromSubtypeString(left).toLanguageTag()
+        val rightTag = localeFromSubtypeString(right).toLanguageTag()
+        return leftTag.equals(rightTag, ignoreCase = true)
     }
 
     private fun isRedundantWithBaseSubtype(
@@ -320,12 +402,28 @@ object AdditionalSubtypeUtils {
             if (!layoutFromSubtype.isNullOrEmpty()) {
                 return layoutFromSubtype
             }
-            val locale = subtype.locale ?: "en_US"
+            val locale = subtype.localeString().ifBlank { "en_US" }
             return getLayoutForLocale(assets, locale, context)
         }
 
         // No subtype available: keep current selection to avoid unexpected jumps.
         return SettingsManager.getKeyboardLayout(context)
+    }
+
+    /**
+     * Resolves the concrete layout declared by an input style, when present.
+     * Falls back to the normal active-layout resolver for base/system subtypes.
+     */
+    fun resolveInputStyleLayout(
+        assets: AssetManager,
+        context: Context,
+        subtype: InputMethodSubtype?
+    ): String {
+        val layoutFromSubtype = subtype?.let { getKeyboardLayoutFromSubtype(it) }
+        if (!layoutFromSubtype.isNullOrEmpty()) {
+            return layoutFromSubtype
+        }
+        return resolveActiveLayout(assets, context, subtype)
     }
     
     /**
@@ -436,14 +534,38 @@ object AdditionalSubtypeUtils {
      * Checks if a subtype should be kept based on current system locales.
      * Returns true if the subtype should be kept, false if it should be removed.
      */
-    fun shouldKeepSubtype(subtype: InputMethodSubtype, currentSystemLocales: Set<String>, systemLanguageCodes: Set<String>): Boolean {
+    fun shouldKeepSubtype(
+        subtype: InputMethodSubtype,
+        currentSystemLocales: Set<String>,
+        systemLanguageCodes: Set<String>
+    ): Boolean {
         // Keep ALL additional (custom) subtypes. They may not be present in system locales.
         if (isAdditionalSubtype(subtype)) return true
 
         // For system subtypes (from method.xml), keep only if locale (or language root) is still in system.
-        val subtypeLocale = subtype.locale ?: ""
+        val subtypeLocale = subtype.localeString()
         val languageCode = subtypeLocale.split("_").first().lowercase()
         return currentSystemLocales.contains(subtypeLocale) || systemLanguageCodes.contains(languageCode)
+    }
+
+    fun shouldKeepSubtype(
+        context: Context,
+        assets: AssetManager,
+        subtype: InputMethodSubtype,
+        currentSystemLocales: Set<String>,
+        systemLanguageCodes: Set<String>
+    ): Boolean {
+        if (!shouldKeepSubtype(subtype, currentSystemLocales, systemLanguageCodes)) {
+            return false
+        }
+        if (isAdditionalSubtype(subtype)) {
+            return true
+        }
+
+        val locale = subtype.localeString()
+        val layout = getKeyboardLayoutFromSubtype(subtype)
+            ?: getLayoutForLocale(assets, locale, context)
+        return !SettingsManager.isSystemInputStyleHidden(context, locale, layout)
     }
     
     /**
@@ -668,7 +790,7 @@ object AdditionalSubtypeUtils {
             Log.d(TAG, "Created ${subtypes.size} additional subtypes")
             
             // Always call setAdditionalInputMethodSubtypes, even with empty array to remove old subtypes
-            imm.setAdditionalInputMethodSubtypes(imeId, subtypes)
+            setAdditionalInputMethodSubtypesCompat(imm, imeId, subtypes)
             Log.d(TAG, "Successfully called setAdditionalInputMethodSubtypes with ${subtypes.size} subtypes")
             
             if (subtypes.isNotEmpty()) {
@@ -690,7 +812,22 @@ object AdditionalSubtypeUtils {
                             
                             // Get currently enabled subtypes (include implicit ones from method.xml)
                             val currentlyEnabled = imm.getEnabledInputMethodSubtypeList(updatedInfo, true)
-                            val enabledHashCodes = currentlyEnabled.map { it.hashCode() }.toMutableSet()
+                            val currentSystemLocales = getSystemEnabledLocales(context).toSet()
+                            val systemLanguageCodes = currentSystemLocales.map { locale ->
+                                locale.split("_").first().lowercase(Locale.ROOT)
+                            }.toSet()
+                            val enabledHashCodes = currentlyEnabled
+                                .filter { subtype ->
+                                    shouldKeepSubtype(
+                                        context,
+                                        context.assets,
+                                        subtype,
+                                        currentSystemLocales,
+                                        systemLanguageCodes
+                                    )
+                                }
+                                .map { it.hashCode() }
+                                .toMutableSet()
                             
                             // Add hash codes of additional subtypes to enabled set
                             subtypes.forEach { additionalSubtype ->
@@ -701,17 +838,17 @@ object AdditionalSubtypeUtils {
                                         isAdditionalSubtype(subtype) &&
                                         matchesLocaleAndKeyboardLayoutSet(
                                             subtype,
-                                            additionalSubtype.locale ?: "",
+                                            additionalSubtype.localeString(),
                                             additionalLayout
                                         )
                                 }
                                 if (matchingSubtype != null) {
                                     enabledHashCodes.add(matchingSubtype.hashCode())
-                                    Log.d(TAG, "Adding subtype to enabled list: locale=${matchingSubtype.locale}, hashCode=${matchingSubtype.hashCode()}")
+                                    Log.d(TAG, "Adding subtype to enabled list: locale=${matchingSubtype.localeString()}, hashCode=${matchingSubtype.hashCode()}")
                                 }
                             }
                             
-                            // Enable all subtypes (original + additional)
+                            // Enable visible base subtypes plus all configured additional subtypes.
                             if (enabledHashCodes.isNotEmpty()) {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                                     imm.setExplicitlyEnabledInputMethodSubtypes(
@@ -741,9 +878,20 @@ object AdditionalSubtypeUtils {
                         if (updatedInfo != null) {
                             // Get currently enabled subtypes (include implicit ones from method.xml)
                             val currentlyEnabled = imm.getEnabledInputMethodSubtypeList(updatedInfo, true)
-                            // Filter out additional subtypes (keep only system subtypes)
-                            val systemSubtypes = currentlyEnabled.filterNot { subtype ->
-                                isAdditionalSubtype(subtype)
+                            val currentSystemLocales = getSystemEnabledLocales(context).toSet()
+                            val systemLanguageCodes = currentSystemLocales.map { locale ->
+                                locale.split("_").first().lowercase(Locale.ROOT)
+                            }.toSet()
+
+                            val systemSubtypes = currentlyEnabled.filter { subtype ->
+                                !isAdditionalSubtype(subtype) &&
+                                    shouldKeepSubtype(
+                                        context,
+                                        context.assets,
+                                        subtype,
+                                        currentSystemLocales,
+                                        systemLanguageCodes
+                                    )
                             }
                             
                             if (systemSubtypes.isNotEmpty()) {

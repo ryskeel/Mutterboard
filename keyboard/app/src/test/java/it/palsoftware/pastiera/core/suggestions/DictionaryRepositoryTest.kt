@@ -106,4 +106,3 @@ class DictionaryRepositoryTest {
         assertEquals(150, bestHello?.frequency)
     }
 }
-

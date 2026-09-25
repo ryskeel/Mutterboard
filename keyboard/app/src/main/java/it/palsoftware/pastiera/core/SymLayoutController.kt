@@ -8,12 +8,12 @@ import android.view.KeyEvent
 import android.view.inputmethod.InputConnection
 import it.palsoftware.pastiera.SettingsManager
 import it.palsoftware.pastiera.SymPagesConfig
-import it.palsoftware.pastiera.inputmethod.AltSymManager
+import it.palsoftware.pastiera.inputmethod.AlternateCharacterManager
 
 class SymLayoutController(
     private val context: Context,
     private val prefs: SharedPreferences,
-    private val altSymManager: AltSymManager
+    private val alternateCharacterManager: AlternateCharacterManager
 ) {
 
     companion object {
@@ -21,6 +21,7 @@ class SymLayoutController(
     }
 
     private enum class SymPage {
+        DEVICE,
         EMOJI,
         SYMBOLS,
         CLIPBOARD,
@@ -50,17 +51,15 @@ class SymLayoutController(
         val config = SettingsManager.getSymPagesConfig(context)
         alignSymPageToConfig(config)
         val pages = buildActivePages(config)
-        val cycle = mutableListOf(0)
-        cycle.addAll(pages.map { it.toPrefValue() })
-        if (cycle.size > 1) {
-            val currentIndex = cycle.indexOf(symPage).takeIf { it >= 0 } ?: 0
-            val nextIndex = (currentIndex + 1) % cycle.size
-            symPage = cycle[nextIndex]
-        } else {
-            symPage = 0
-        }
+        symPage = nextSymPageValue(pages)
         persistSymPage()
         return symPage
+    }
+
+    fun peekNextSymPage(): Int {
+        val config = SettingsManager.getSymPagesConfig(context)
+        alignSymPageToConfig(config)
+        return nextSymPageValue(buildActivePages(config))
     }
 
     fun closeSymPage(): Boolean {
@@ -151,16 +150,78 @@ class SymLayoutController(
     }
 
     fun emojiMapText(): String {
-        return if (currentPageType() == SymPage.EMOJI) altSymManager.buildEmojiMapText() else ""
+        return if (currentPageType() == SymPage.EMOJI) alternateCharacterManager.buildEmojiMapText() else ""
     }
 
     fun currentSymMappings(): Map<Int, String>? {
         return when (currentPageType()) {
-            SymPage.EMOJI -> altSymManager.getSymMappings()
-            SymPage.SYMBOLS -> altSymManager.getSymMappings2()
+            SymPage.DEVICE -> alternateCharacterManager.getDeviceSymMappings()
+            SymPage.EMOJI -> alternateCharacterManager.getSymMappings()
+            SymPage.SYMBOLS -> alternateCharacterManager.getSymMappings2()
             SymPage.CLIPBOARD -> null // Clipboard doesn't use mappings
             SymPage.EMOJI_PICKER -> null // Emoji picker doesn't use mappings
             else -> null
+        }
+    }
+
+    fun previewChordMappings(shiftPressed: Boolean): Map<Int, String> {
+        val pageToUse = when (currentPageType()) {
+            SymPage.DEVICE, SymPage.EMOJI, SymPage.SYMBOLS -> currentPageType()
+            else -> preferredChordPage()
+        } ?: return emptyMap()
+
+        return mappingsForPage(pageToUse, shiftPressed)
+    }
+
+    fun previewNextSoftwareSymPageMappings(shiftPressed: Boolean): Map<Int, String> {
+        val nextTextPage = nextSoftwareTextPageType() ?: return emptyMap()
+        return mappingsForPage(nextTextPage, shiftPressed)
+    }
+
+    fun nextSoftwareTextSymPage(): Int {
+        return nextSoftwareTextPageType()?.toPrefValue() ?: 0
+    }
+
+    private fun nextSoftwareTextPageType(): SymPage? {
+        val config = SettingsManager.getSymPagesConfig(context)
+        alignSymPageToConfig(config)
+        val pages = buildActivePages(config)
+        if (pages.isEmpty()) {
+            return null
+        }
+        val cycle = listOf(null) + pages
+        val currentPage = currentPageType()
+        val currentIndex = cycle.indexOf(currentPage).takeIf { it >= 0 } ?: 0
+        return (1..cycle.size).asSequence()
+            .map { offset -> cycle[(currentIndex + offset) % cycle.size] }
+            .firstOrNull { it == SymPage.DEVICE || it == SymPage.EMOJI || it == SymPage.SYMBOLS }
+    }
+
+    private fun nextSymPageValue(pages: List<SymPage>): Int {
+        val cycle = mutableListOf(0)
+        cycle.addAll(pages.map { it.toPrefValue() })
+        if (cycle.size <= 1) {
+            return 0
+        }
+        val currentIndex = cycle.indexOf(symPage).takeIf { it >= 0 } ?: 0
+        val nextIndex = (currentIndex + 1) % cycle.size
+        return cycle[nextIndex]
+    }
+
+    private fun mappingsForPage(pageToUse: SymPage, shiftPressed: Boolean): Map<Int, String> {
+        return when (pageToUse) {
+            SymPage.DEVICE -> alternateCharacterManager.getDeviceSymMappings()
+            SymPage.EMOJI -> if (shiftPressed) {
+                alternateCharacterManager.getSymMappings() + alternateCharacterManager.getSymMappingsUppercase()
+            } else {
+                alternateCharacterManager.getSymMappings()
+            }
+            SymPage.SYMBOLS -> if (shiftPressed) {
+                alternateCharacterManager.getSymMappings2() + alternateCharacterManager.getSymMappings2Uppercase()
+            } else {
+                alternateCharacterManager.getSymMappings2()
+            }
+            else -> emptyMap()
         }
     }
 
@@ -171,23 +232,24 @@ class SymLayoutController(
      */
     fun resolveChordSymbol(keyCode: Int, shiftPressed: Boolean): String? {
         val pageToUse = when (currentPageType()) {
-            SymPage.EMOJI, SymPage.SYMBOLS -> currentPageType()
+            SymPage.DEVICE, SymPage.EMOJI, SymPage.SYMBOLS -> currentPageType()
             else -> preferredChordPage()
         } ?: return null
 
         return when (pageToUse) {
+            SymPage.DEVICE -> alternateCharacterManager.getDeviceSymMappings()[keyCode]
             SymPage.EMOJI -> {
                 if (shiftPressed) {
-                    altSymManager.getSymMappingsUppercase()[keyCode] ?: altSymManager.getSymMappings()[keyCode]
+                    alternateCharacterManager.getSymMappingsUppercase()[keyCode] ?: alternateCharacterManager.getSymMappings()[keyCode]
                 } else {
-                    altSymManager.getSymMappings()[keyCode]
+                    alternateCharacterManager.getSymMappings()[keyCode]
                 }
             }
             SymPage.SYMBOLS -> {
                 if (shiftPressed) {
-                    altSymManager.getSymMappings2Uppercase()[keyCode] ?: altSymManager.getSymMappings2()[keyCode]
+                    alternateCharacterManager.getSymMappings2Uppercase()[keyCode] ?: alternateCharacterManager.getSymMappings2()[keyCode]
                 } else {
-                    altSymManager.getSymMappings2()[keyCode]
+                    alternateCharacterManager.getSymMappings2()[keyCode]
                 }
             }
             else -> null
@@ -200,7 +262,8 @@ class SymLayoutController(
         inputConnection: InputConnection?,
         ctrlLatchActive: Boolean,
         altLatchActive: Boolean,
-        updateStatusBar: () -> Unit
+        updateStatusBar: () -> Unit,
+        handleBoundaryText: (String, InputConnection?) -> Boolean = { _, _ -> false }
     ): SymKeyResult {
         val autoCloseEnabled = SettingsManager.getSymAutoClose(context)
         val page = currentPageType()
@@ -223,15 +286,25 @@ class SymLayoutController(
         }
 
         val symChar = when (page) {
-            SymPage.EMOJI -> altSymManager.getSymMappings()[keyCode]
-            SymPage.SYMBOLS -> altSymManager.getSymMappings2()[keyCode]
+            SymPage.DEVICE -> alternateCharacterManager.getDeviceSymMappings()[keyCode]
+            SymPage.EMOJI -> alternateCharacterManager.getSymMappings()[keyCode]
+            SymPage.SYMBOLS -> alternateCharacterManager.getSymMappings2()[keyCode]
             SymPage.CLIPBOARD -> null // Clipboard doesn't use key mappings
             SymPage.EMOJI_PICKER -> null // Emoji picker doesn't use key mappings
             else -> null
         }
 
         if (symChar != null && inputConnection != null) {
-            inputConnection.commitText(symChar, 1)
+            if (
+                !handleBoundaryText(symChar, inputConnection) &&
+                (
+                    symChar.length != 1 ||
+                        !SettingsManager.shouldApplyFrenchPunctuationSpacing(context) ||
+                        !it.palsoftware.pastiera.core.Punctuation.commitFrenchSpacedPunctuation(inputConnection, symChar[0])
+                )
+            ) {
+                inputConnection.commitText(symChar, 1)
+            }
             if (autoCloseEnabled) {
                 closeSymAndUpdate(updateStatusBar)
             }
@@ -242,10 +315,10 @@ class SymLayoutController(
     }
 
     fun handleKeyUp(keyCode: Int, shiftPressed: Boolean): Boolean {
-        return altSymManager.handleKeyUp(keyCode, isSymActive(), shiftPressed)
+        return alternateCharacterManager.handleKeyUp(keyCode, isSymActive(), shiftPressed)
     }
 
-    fun emojiMapTextForLayout(): String = altSymManager.buildEmojiMapText()
+    fun emojiMapTextForLayout(): String = alternateCharacterManager.buildEmojiMapText()
 
     private fun closeSymAndUpdate(updateStatusBar: () -> Unit) {
         if (closeSymPage()) {
@@ -256,6 +329,7 @@ class SymLayoutController(
     private fun buildActivePages(config: SymPagesConfig = SettingsManager.getSymPagesConfig(context)): List<SymPage> {
         return config.enabledOrderedPages().mapNotNull { pageId ->
             when (pageId) {
+                SymPagesConfig.PAGE_DEVICE -> SymPage.DEVICE
                 SymPagesConfig.PAGE_EMOJI -> SymPage.EMOJI
                 SymPagesConfig.PAGE_SYMBOLS -> SymPage.SYMBOLS
                 SymPagesConfig.PAGE_CLIPBOARD -> SymPage.CLIPBOARD
@@ -266,12 +340,15 @@ class SymLayoutController(
     }
 
     private fun preferredChordPage(config: SymPagesConfig = SettingsManager.getSymPagesConfig(context)): SymPage? {
-        return buildActivePages(config).firstOrNull { it == SymPage.EMOJI || it == SymPage.SYMBOLS }
+        return buildActivePages(config).firstOrNull {
+            it == SymPage.DEVICE || it == SymPage.EMOJI || it == SymPage.SYMBOLS
+        }
     }
 
     private fun currentPageType(): SymPage? {
         alignSymPageToConfig()
         return when (symPage) {
+            5 -> SymPage.DEVICE
             1 -> SymPage.EMOJI
             2 -> SymPage.SYMBOLS
             3 -> SymPage.CLIPBOARD
@@ -281,6 +358,7 @@ class SymLayoutController(
     }
 
     private fun SymPage.toPrefValue(): Int = when (this) {
+        SymPage.DEVICE -> 5
         SymPage.EMOJI -> 1
         SymPage.SYMBOLS -> 2
         SymPage.CLIPBOARD -> 3
@@ -290,7 +368,7 @@ class SymLayoutController(
     private fun alignSymPageToConfig(config: SymPagesConfig = SettingsManager.getSymPagesConfig(context)) {
         val allowedValues = buildActivePages(config).map { it.toPrefValue() }
         if (allowedValues.isEmpty()) {
-            if (symPage != 0 && symPage != 2 && symPage != 3 && symPage != 4) {
+            if (symPage != 0 && symPage !in 2..5) {
                 // Allow symbols page (2), clipboard page (3) and emoji picker page (4) even if all cycling pages are disabled
                 symPage = 0
                 persistSymPage()
@@ -303,7 +381,7 @@ class SymLayoutController(
         }
 
         // Allow symbols page (2), clipboard page (3) and emoji picker page (4) to remain active even if disabled in cycling settings
-        if (symPage == 2 || symPage == 3 || symPage == 4) {
+        if (symPage in 2..5) {
             return
         }
 

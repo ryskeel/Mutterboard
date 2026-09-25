@@ -13,7 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,20 +26,20 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import it.palsoftware.pastiera.data.layout.BundledLayoutAssets
 import it.palsoftware.pastiera.data.layout.LayoutFileStore
+import it.palsoftware.pastiera.data.layout.LayoutFileStore.LayoutImportError
+import it.palsoftware.pastiera.data.layout.LayoutFileStore.LayoutImportResult
 import it.palsoftware.pastiera.data.layout.LayoutMappingRepository
 import it.palsoftware.pastiera.layout.OnlineLayoutsActivity
-import it.palsoftware.pastiera.inputmethod.DeviceSpecific
 import it.palsoftware.pastiera.inputmethod.subtype.AdditionalSubtypeUtils
 import it.palsoftware.pastiera.R
 import kotlinx.coroutines.launch
 import java.util.Locale
 import android.content.res.AssetManager
 import org.json.JSONObject
-import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -53,36 +53,28 @@ import androidx.lifecycle.LifecycleEventObserver
 fun KeyboardLayoutSettingsScreen(
     modifier: Modifier = Modifier,
     locale: String,
+    initialLayout: String? = null,
+    pickerMode: Boolean = false,
     onBack: () -> Unit,
     onLayoutSelected: (String, String) -> Unit
 ) {
     val context = LocalContext.current
-    
+
     var automaticLayoutMode by remember {
         mutableStateOf(SettingsManager.isKeyboardLayoutAutoByLocale(context))
     }
-    var physicalKeyboardProfileOverride by remember {
-        mutableStateOf(SettingsManager.getPhysicalKeyboardProfileOverride(context))
-    }
-    var physicalKeyboardCurrencySymbol by remember {
-        mutableStateOf(SettingsManager.getPhysicalKeyboardCurrencySymbol(context))
-    }
-    var toastOnLayoutSwitch by remember {
-        mutableStateOf(SettingsManager.isToastOnLayoutSwitchEnabled(context))
-    }
-    val detectedPhysicalProfile = remember { DeviceSpecific.physicalKeyboardName() }
-    var showPhysicalProfileMenu by remember { mutableStateOf(false) }
-    var showCurrencySymbolMenu by remember { mutableStateOf(false) }
-    var selectedLayout by remember(locale, automaticLayoutMode) {
+    var selectedLayout by remember(locale, automaticLayoutMode, initialLayout, pickerMode) {
         mutableStateOf(
-            if (automaticLayoutMode) {
+            if (pickerMode && initialLayout != null) {
+                initialLayout
+            } else if (automaticLayoutMode) {
                 AdditionalSubtypeUtils.getLayoutForLocale(context.assets, locale, context)
             } else {
                 SettingsManager.getKeyboardLayout(context)
             }
         )
     }
-    
+
     // Refresh trigger for custom layouts
     var refreshTrigger by remember { mutableStateOf(0) }
     var showAddMenu by remember { mutableStateOf(false) }
@@ -98,18 +90,30 @@ fun KeyboardLayoutSettingsScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    
+
     // Get all keyboard layouts (assets + custom, excluding qwerty as it's the default)
-    val allLayouts = remember(refreshTrigger) {
+    val allLayouts = remember(refreshTrigger, locale) {
         LayoutMappingRepository.getAvailableLayouts(context.assets, context)
             .filter { it != "qwerty" }
-            .sorted()
+            .sortedWith(
+                compareBy<String> { layout ->
+                    if (locale.startsWith("de", ignoreCase = true)) {
+                        when (layout) {
+                            "qwertz" -> 0
+                            "german_multitap_qwertz" -> 1
+                            else -> 2
+                        }
+                    } else {
+                        0
+                    }
+                }.thenBy { it }
+            )
     }
-    
+
     // Snackbar host state for showing messages
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
-    var previewLayout by remember { mutableStateOf<String?>(null) }
+    val previewLayout = settingsChild(context, "layout_preview")
     var layoutToDelete by remember { mutableStateOf<String?>(null) }
 
     // Launcher per importare layout JSON via SAF
@@ -118,40 +122,34 @@ fun KeyboardLayoutSettingsScreen(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val uri = result.data?.data
-            if (uri != null) {
-                try {
-                    val jsonString = context.contentResolver.openInputStream(uri)?.use { input ->
+            try {
+                val jsonString = uri?.let { selectedUri ->
+                    context.contentResolver.openInputStream(selectedUri)?.use { input ->
                         input.bufferedReader(Charsets.UTF_8).readText()
                     }
-                    if (!jsonString.isNullOrBlank()) {
-                        val layoutName = runCatching {
-                            val obj = JSONObject(jsonString)
-                            obj.optString("name").takeIf { it.isNotBlank() }
-                        }.getOrNull() ?: "imported_${System.currentTimeMillis()}"
-                        
-                        val saved = LayoutFileStore.saveLayoutFromJson(context, layoutName, jsonString)
-                        if (saved) {
-                            refreshTrigger++            // ricarica lista layout
-                            selectedLayout = layoutName // seleziona l'importato
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar(
-                                    context.getString(R.string.layout_imported_successfully)
-                                )
-                            }
-                        } else {
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar(
-                                    context.getString(R.string.layout_import_failed)
-                                )
-                            }
+                }
+                when (val importResult = importKeyboardLayoutDocument(context, jsonString)) {
+                    is LayoutImportResult.Success -> {
+                        refreshTrigger++            // ricarica lista layout
+                        selectedLayout = importResult.layoutName // seleziona l'importato
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(
+                                context.getString(R.string.layout_imported_successfully)
+                            )
                         }
                     }
-                } catch (e: Exception) {
-                    coroutineScope.launch {
-                        snackbarHostState.showSnackbar(
-                            context.getString(R.string.layout_import_error, e.message ?: "")
-                        )
+                    is LayoutImportResult.Failure -> {
+                        val message = context.getString(importResult.error.messageResource())
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(message)
+                        }
                     }
+                }
+            } catch (e: Exception) {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(
+                        context.getString(R.string.layout_import_error, e.message ?: "")
+                    )
                 }
             }
         }
@@ -169,14 +167,23 @@ fun KeyboardLayoutSettingsScreen(
         KeyboardLayoutViewerScreen(
             layoutName = previewLayout!!,
             modifier = modifier,
-            onBack = { previewLayout = null }
+            onBack = { context.settingsActivity().finish() }
         )
         return
     }
-    
+
+    fun navigateBack() {
+        if (pickerMode) {
+            onLayoutSelected(locale, selectedLayout)
+        }
+        onBack()
+    }
+
     // Handle system back button
-    BackHandler { onBack() }
-    
+    LaunchedEffect(pickerMode, locale, selectedLayout) {
+        if (pickerMode) onLayoutSelected(locale, selectedLayout)
+    }
+
     Scaffold(
         topBar = {
             Surface(
@@ -191,7 +198,7 @@ fun KeyboardLayoutSettingsScreen(
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { navigateBack() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.settings_back_content_description)
@@ -234,25 +241,22 @@ fun KeyboardLayoutSettingsScreen(
                             )
                         }
                     }
-                    // Save button
-                    IconButton(
-                        onClick = {
-                            SettingsManager.setKeyboardLayoutAutoByLocale(context, automaticLayoutMode)
-                            SettingsManager.setPhysicalKeyboardProfileOverride(context, physicalKeyboardProfileOverride)
-                            SettingsManager.setPhysicalKeyboardCurrencySymbol(context, physicalKeyboardCurrencySymbol)
-                            SettingsManager.setToastOnLayoutSwitchEnabled(context, toastOnLayoutSwitch)
-                            if (automaticLayoutMode) {
+                    if (!pickerMode) {
+                        IconButton(
+                            onClick = {
+                                SettingsManager.setKeyboardLayoutAutoByLocale(context, automaticLayoutMode)
+                                if (!automaticLayoutMode) {
+                                    SettingsManager.setKeyboardLayout(context, selectedLayout)
+                                }
                                 onLayoutSelected(locale, selectedLayout)
-                            } else {
-                                SettingsManager.setKeyboardLayout(context, selectedLayout)
+                                onBack()
                             }
-                            onBack()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Save,
+                                contentDescription = stringResource(R.string.layout_save_content_description)
+                            )
                         }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Save,
-                            contentDescription = stringResource(R.string.layout_save_content_description)
-                        )
                     }
                 }
             }
@@ -272,7 +276,7 @@ fun KeyboardLayoutSettingsScreen(
                     .padding(paddingValues)
                     .verticalScroll(rememberScrollState())
             ) {
-                
+
                 // Online Layout Editor link
                 Row(
                     modifier = Modifier
@@ -301,185 +305,8 @@ fun KeyboardLayoutSettingsScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.keyboard_layout_mode_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = if (automaticLayoutMode) {
-                                    stringResource(R.string.keyboard_layout_mode_auto_description)
-                                } else {
-                                    stringResource(R.string.keyboard_layout_mode_manual_description)
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = automaticLayoutMode,
-                            onCheckedChange = { enabled ->
-                                automaticLayoutMode = enabled
-                            }
-                        )
-                    }
-                }
-                
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.keyboard_profile_override_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = if (physicalKeyboardProfileOverride == "auto") {
-                                    stringResource(
-                                        R.string.keyboard_profile_override_auto_description,
-                                        detectedPhysicalProfile
-                                    )
-                                } else {
-                                    stringResource(R.string.keyboard_profile_override_manual_description)
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Box {
-                            TextButton(onClick = { showPhysicalProfileMenu = true }) {
-                                Text(text = keyboardProfileLabel(context, physicalKeyboardProfileOverride))
-                                Icon(
-                                    imageVector = Icons.Filled.ArrowDropDown,
-                                    contentDescription = null
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = showPhysicalProfileMenu,
-                                onDismissRequest = { showPhysicalProfileMenu = false }
-                            ) {
-                                listOf("auto", "key2", "Q25", "titan2", "titan2elite_qwerty", "mp01").forEach { profile ->
-                                    DropdownMenuItem(
-                                        text = { Text(keyboardProfileLabel(context, profile)) },
-                                        onClick = {
-                                            physicalKeyboardProfileOverride = profile
-                                            showPhysicalProfileMenu = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.keyboard_currency_symbol_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = stringResource(R.string.keyboard_currency_symbol_description),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Box {
-                            TextButton(onClick = { showCurrencySymbolMenu = true }) {
-                                Text(text = physicalKeyboardCurrencySymbol)
-                                Icon(
-                                    imageVector = Icons.Filled.ArrowDropDown,
-                                    contentDescription = null
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = showCurrencySymbolMenu,
-                                onDismissRequest = { showCurrencySymbolMenu = false }
-                            ) {
-                                SettingsManager.physicalKeyboardCurrencySymbols().forEach { symbol ->
-                                    DropdownMenuItem(
-                                        text = { Text(symbol) },
-                                        onClick = {
-                                            physicalKeyboardCurrencySymbol = symbol
-                                            showCurrencySymbolMenu = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.toast_on_layout_switch_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = stringResource(R.string.toast_on_layout_switch_description),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = toastOnLayoutSwitch,
-                            onCheckedChange = { enabled ->
-                                toastOnLayoutSwitch = enabled
-                            }
-                        )
-                    }
-                }
 
                 // No Conversion (QWERTY - default, passes keycodes as-is)
                 Surface(
@@ -522,7 +349,7 @@ fun KeyboardLayoutSettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             IconButton(
-                                onClick = { previewLayout = "qwerty" }
+                                onClick = { openSettingsChild(context, "layout_preview", "qwerty") }
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Visibility,
@@ -539,18 +366,18 @@ fun KeyboardLayoutSettingsScreen(
                         }
                     }
                 }
-                
+
                 // All layouts (assets + custom, unified list)
                 allLayouts.forEach { layout ->
                     val metadata = LayoutFileStore.getLayoutMetadataFromAssets(
                         context.assets,
                         layout
                     ) ?: LayoutFileStore.getLayoutMetadata(context, layout)
-                    
+
                     val hasMultiTap = hasLayoutMultiTap(context.assets, context, layout)
                     val isCustomLayout = LayoutFileStore.layoutExists(context, layout)
                     val canDelete = layout != "qwerty" && isCustomLayout
-                    
+
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -619,7 +446,7 @@ fun KeyboardLayoutSettingsScreen(
                                     }
                                 }
                                 IconButton(
-                                    onClick = { previewLayout = layout }
+                                    onClick = { openSettingsChild(context, "layout_preview", layout) }
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Visibility,
@@ -637,18 +464,18 @@ fun KeyboardLayoutSettingsScreen(
                         }
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
-    
+
     // Delete confirmation dialog
     layoutToDelete?.let { layoutName ->
         val metadata = LayoutFileStore.getLayoutMetadata(context, layoutName)
             ?: LayoutFileStore.getLayoutMetadataFromAssets(context.assets, layoutName)
         val displayName = metadata?.name ?: layoutName.replaceFirstChar { it.uppercase() }
-        
+
         AlertDialog(
             onDismissRequest = { layoutToDelete = null },
             title = {
@@ -662,18 +489,19 @@ fun KeyboardLayoutSettingsScreen(
                     onClick = {
                         val success = LayoutFileStore.deleteLayout(context, layoutName)
                         layoutToDelete = null
-                        
+
                         if (success) {
                             // If deleted layout was selected, switch to qwerty
                             if (selectedLayout == layoutName) {
                                 selectedLayout = "qwerty"
-                                if (automaticLayoutMode) {
-                                    onLayoutSelected(locale, "qwerty")
-                                } else {
+                                if (!pickerMode && !automaticLayoutMode) {
                                     SettingsManager.setKeyboardLayout(context, "qwerty")
                                 }
+                                if (!pickerMode) {
+                                    onLayoutSelected(locale, "qwerty")
+                                }
                             }
-                            
+
                             refreshTrigger++
                             coroutineScope.launch {
                                 snackbarHostState.showSnackbar(context.getString(R.string.layout_delete_success))
@@ -699,18 +527,30 @@ fun KeyboardLayoutSettingsScreen(
     }
 }
 
-/**
- * User-facing label for physical keyboard profile override values.
- */
-private fun keyboardProfileLabel(context: Context, profile: String): String {
-    return when (profile) {
-        "key2" -> context.getString(R.string.keyboard_profile_option_key2)
-        "Q25" -> context.getString(R.string.keyboard_profile_option_q25)
-        "titan2" -> context.getString(R.string.keyboard_profile_option_titan2)
-        "titan2elite_qwerty" -> context.getString(R.string.keyboard_profile_option_titan2elite_qwerty)
-        "mp01" -> context.getString(R.string.keyboard_profile_option_mp01)
-        else -> context.getString(R.string.keyboard_profile_option_auto)
+private fun LayoutImportError.messageResource(): Int = when (this) {
+    LayoutImportError.MALFORMED_JSON -> R.string.layout_import_malformed_json
+    LayoutImportError.MISSING_MAPPINGS -> R.string.layout_import_missing_mappings
+    LayoutImportError.MAPPINGS_NOT_OBJECT -> R.string.layout_import_mappings_not_object
+    LayoutImportError.EMPTY_MAPPINGS -> R.string.layout_import_empty_mappings
+    LayoutImportError.NO_SUPPORTED_MAPPINGS -> R.string.layout_import_no_supported_mappings
+    LayoutImportError.INVALID_MAPPING -> R.string.layout_import_invalid_mapping
+    LayoutImportError.INVALID_NAME -> R.string.layout_import_invalid_name
+    LayoutImportError.NAME_CONFLICT -> R.string.layout_import_name_conflict
+    LayoutImportError.WRITE_FAILED -> R.string.layout_import_write_failed
+}
+
+internal fun importKeyboardLayoutDocument(
+    context: Context,
+    jsonString: String?
+): LayoutImportResult {
+    if (jsonString.isNullOrBlank()) {
+        return LayoutImportResult.Failure(LayoutImportError.MALFORMED_JSON)
     }
+    val layoutName = runCatching {
+        val obj = JSONObject(jsonString)
+        obj.optString("name").takeIf { it.isNotBlank() }
+    }.getOrNull() ?: "imported_${System.currentTimeMillis()}"
+    return LayoutFileStore.saveLayoutFromJson(context, layoutName, jsonString)
 }
 
 /**
@@ -723,7 +563,7 @@ private fun getLayoutDescription(context: Context, layoutName: String): String {
     if (customMetadata != null) {
         return customMetadata.description
     }
-    
+
     // Fallback to assets
     val assetsMetadata = LayoutFileStore.getLayoutMetadataFromAssets(
         context.assets,
@@ -744,7 +584,7 @@ private fun hasLayoutMultiTap(assets: AssetManager, context: Context, layoutName
             val jsonString = customFile.readText()
             val jsonObject = JSONObject(jsonString)
             val mappingsObject = jsonObject.optJSONObject("mappings") ?: return false
-            
+
             val keys = mappingsObject.keys()
             while (keys.hasNext()) {
                 val keyName = keys.next()
@@ -756,12 +596,11 @@ private fun hasLayoutMultiTap(assets: AssetManager, context: Context, layoutName
             false
         } else {
             // Fallback to assets
-            val filePath = "common/layouts/$layoutName.json"
-            val inputStream: InputStream = assets.open(filePath)
+            val inputStream = BundledLayoutAssets.openLayout(assets, layoutName) ?: return false
             val jsonString = inputStream.bufferedReader().use { it.readText() }
             val jsonObject = JSONObject(jsonString)
             val mappingsObject = jsonObject.optJSONObject("mappings") ?: return false
-            
+
             val keys = mappingsObject.keys()
             while (keys.hasNext()) {
                 val keyName = keys.next()
@@ -782,14 +621,7 @@ private fun hasLayoutMultiTap(assets: AssetManager, context: Context, layoutName
  */
 private fun getLocaleDisplayNameForTitle(locale: String): String {
     return try {
-        val parts = locale.split("_")
-        val lang = parts[0]
-        val country = if (parts.size > 1) parts[1] else ""
-        val localeObj = if (country.isNotEmpty()) {
-            Locale(lang, country)
-        } else {
-            Locale(lang)
-        }
+        val localeObj = Locale.forLanguageTag(locale.replace('_', '-'))
         localeObj.getDisplayName(Locale.ENGLISH)
     } catch (e: Exception) {
         locale

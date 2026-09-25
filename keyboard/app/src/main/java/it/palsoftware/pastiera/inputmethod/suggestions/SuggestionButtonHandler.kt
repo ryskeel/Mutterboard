@@ -8,7 +8,6 @@ import it.palsoftware.pastiera.SettingsManager
 import it.palsoftware.pastiera.core.suggestions.CasingHelper
 import it.palsoftware.pastiera.inputmethod.AutoCapitalizeHelper
 import it.palsoftware.pastiera.inputmethod.DebugCaptureStore
-import it.palsoftware.pastiera.inputmethod.NotificationHelper
 import it.palsoftware.pastiera.inputmethod.VariationButtonHandler
 import it.palsoftware.pastiera.core.AutoSpaceTracker
 import it.palsoftware.pastiera.core.Punctuation
@@ -23,7 +22,8 @@ object SuggestionButtonHandler {
         suggestion: String,
         inputConnection: InputConnection?,
         listener: VariationButtonHandler.OnVariationSelectedListener? = null,
-        shouldDisableAutoCapitalize: Boolean
+        shouldDisableAutoCapitalize: Boolean,
+        onSuggestionCommitted: (() -> Unit)? = null
     ): View.OnClickListener {
         return View.OnClickListener {
             Log.d(TAG, "Click on suggestion button: $suggestion")
@@ -42,7 +42,7 @@ object SuggestionButtonHandler {
 
             val committed = replaceCurrentWord(inputConnection, suggestion, forceLeadingCapital)
             if (committed) {
-                NotificationHelper.triggerHapticFeedback(context)
+                onSuggestionCommitted?.invoke()
             }
             listener?.onVariationSelected(suggestion)
         }

@@ -1,6 +1,7 @@
 package it.palsoftware.pastiera.inputmethod
 
 import android.content.Context
+import android.content.Intent
 import android.view.KeyEvent
 import android.view.inputmethod.InputConnection
 import it.palsoftware.pastiera.SettingsManager
@@ -21,6 +22,7 @@ import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -193,6 +195,92 @@ class InputEventRouterCtrlHoldNavModeTest {
     }
 
     @Test
+    fun heldCtrlNavGrid_staysPhysicalWhenLayoutAwareShortcutsAreEnabled() {
+        SettingsManager.setNavModeCtrlHoldEnabled(context, true)
+        SettingsManager.setLayoutAwareCtrlShortcutsEnabled(context, true)
+        LayoutMappingRepository.loadLayout(context.assets, "qwertz", context)
+        val inputConnection = mockInputConnection()
+        val mapping = mapOf(
+            KeyEvent.KEYCODE_Y to KeyMappingLoader.CtrlMapping("keycode", "PAGE_UP"),
+            KeyEvent.KEYCODE_Z to KeyMappingLoader.CtrlMapping("keycode", "PAGE_DOWN")
+        )
+
+        val handled = router.handleCtrlModifiedKey(
+            keyCode = KeyEvent.KEYCODE_Y,
+            event = ctrlKeyDown(KeyEvent.KEYCODE_Y),
+            inputConnection = inputConnection,
+            ctrlKeyMap = mapping,
+            ctrlLatchFromNavMode = false,
+            ctrlOneShot = false,
+            ctrlPhysicallyPressed = true,
+            clearCtrlOneShot = {},
+            updateStatusBar = {},
+            callSuper = { false },
+            toggleMinimalUi = {}
+        )
+
+        assertTrue(handled)
+        val sentEvents = captureSentKeyEvents(inputConnection, expectedCount = 2)
+        assertEquals(listOf(KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_PAGE_UP), sentEvents.map { it.keyCode })
+    }
+
+    @Test
+    fun latchedNavGrid_staysPhysicalWhenLayoutAwareShortcutsAreEnabled() {
+        SettingsManager.setLayoutAwareCtrlShortcutsEnabled(context, true)
+        LayoutMappingRepository.loadLayout(context.assets, "qwertz", context)
+        val inputConnection = mockInputConnection()
+        val mapping = mapOf(
+            KeyEvent.KEYCODE_Y to KeyMappingLoader.CtrlMapping("keycode", "PAGE_UP"),
+            KeyEvent.KEYCODE_Z to KeyMappingLoader.CtrlMapping("keycode", "PAGE_DOWN")
+        )
+
+        val handled = router.handleCtrlModifiedKey(
+            keyCode = KeyEvent.KEYCODE_Y,
+            event = keyDown(KeyEvent.KEYCODE_Y),
+            inputConnection = inputConnection,
+            ctrlKeyMap = mapping,
+            ctrlLatchFromNavMode = true,
+            ctrlOneShot = false,
+            ctrlPhysicallyPressed = false,
+            clearCtrlOneShot = {},
+            updateStatusBar = {},
+            callSuper = { false },
+            toggleMinimalUi = {}
+        )
+
+        assertTrue(handled)
+        val sentEvents = captureSentKeyEvents(inputConnection, expectedCount = 2)
+        assertEquals(listOf(KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_PAGE_UP), sentEvents.map { it.keyCode })
+    }
+
+    @Test
+    fun heldCtrl_whenEnabledAndShiftHeld_sendsSelectionNavKey() {
+        SettingsManager.setNavModeCtrlHoldEnabled(context, true)
+        val inputConnection = mockInputConnection()
+
+        val handled = router.handleCtrlModifiedKey(
+            keyCode = KeyEvent.KEYCODE_D,
+            event = ctrlShiftKeyDown(KeyEvent.KEYCODE_D),
+            inputConnection = inputConnection,
+            ctrlKeyMap = navMapping,
+            ctrlLatchFromNavMode = false,
+            ctrlOneShot = false,
+            ctrlPhysicallyPressed = true,
+            selectionShiftActive = true,
+            clearCtrlOneShot = {},
+            updateStatusBar = {},
+            callSuper = { false },
+            toggleMinimalUi = {}
+        )
+
+        assertTrue(handled)
+        val sentEvents = captureSentKeyEvents(inputConnection, expectedCount = 2)
+        assertEquals(listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP), sentEvents.map { it.action })
+        assertEquals(listOf(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_LEFT), sentEvents.map { it.keyCode })
+        assertTrue(sentEvents.all { it.isShiftPressed })
+    }
+
+    @Test
     fun latchedNavMode_performsActionMappings() {
         modifierStateController.ctrlLatchActive = true
         modifierStateController.ctrlLatchFromNavMode = true
@@ -246,6 +334,109 @@ class InputEventRouterCtrlHoldNavModeTest {
         assertTrue(handled)
         val sentEvent = captureSentKeyEvents(inputConnection, expectedCount = 1).single()
         assertEquals(KeyEvent.KEYCODE_B, sentEvent.keyCode)
+    }
+
+    @Test
+    fun heldCtrl_whenMappingIsCommand_executesPastieraCommand() {
+        SettingsManager.setNavModeCtrlHoldEnabled(context, true)
+        SettingsManager.setSoftwareKeyboardMode(context, SettingsManager.SoftwareKeyboardMode.FORCE_HARDWARE)
+        val inputConnection = mockInputConnection()
+        val mapping = mapOf(
+            KeyEvent.KEYCODE_B to KeyMappingLoader.CtrlMapping(
+                "command",
+                "pastiera.toggle_software_keyboard_mode"
+            )
+        )
+
+        val handled = router.handleCtrlModifiedKey(
+            keyCode = KeyEvent.KEYCODE_B,
+            event = ctrlKeyDown(KeyEvent.KEYCODE_B),
+            inputConnection = inputConnection,
+            ctrlKeyMap = mapping,
+            ctrlLatchFromNavMode = false,
+            ctrlOneShot = false,
+            ctrlPhysicallyPressed = true,
+            clearCtrlOneShot = {},
+            updateStatusBar = {},
+            callSuper = { false },
+            toggleMinimalUi = {}
+        )
+
+        assertTrue(handled)
+        assertEquals(
+            SettingsManager.SoftwareKeyboardMode.FORCE_HARDWARE,
+            SettingsManager.getSoftwareKeyboardMode(context)
+        )
+        assertEquals(
+            SettingsManager.SoftwareKeyboardMode.FORCE_VIRTUAL,
+            SettingsManager.getSoftwareKeyboardModeRuntimeOverride(context)
+        )
+    }
+
+    @Test
+    fun heldCtrl_whenMappingIsDeviceCommand_executesWithoutInputConnection() {
+        SettingsManager.setNavModeCtrlHoldEnabled(context, true)
+        val mapping = mapOf(
+            KeyEvent.KEYCODE_K to KeyMappingLoader.CtrlMapping(
+                "command",
+                "device.home"
+            )
+        )
+
+        val handled = router.handleCtrlModifiedKey(
+            keyCode = KeyEvent.KEYCODE_K,
+            event = ctrlKeyDown(KeyEvent.KEYCODE_K),
+            inputConnection = null,
+            ctrlKeyMap = mapping,
+            ctrlLatchFromNavMode = false,
+            ctrlOneShot = false,
+            ctrlPhysicallyPressed = true,
+            clearCtrlOneShot = {},
+            updateStatusBar = {},
+            callSuper = { false },
+            toggleMinimalUi = {}
+        )
+
+        assertTrue(handled)
+        val intent = shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity
+        assertEquals(Intent.ACTION_MAIN, intent.action)
+        assertTrue(intent.categories?.contains(Intent.CATEGORY_HOME) == true)
+    }
+
+    @Test
+    fun latchedNavMode_whenMappingIsDeviceCommand_executesWithoutInputConnection() {
+        modifierStateController.ctrlLatchActive = true
+        modifierStateController.ctrlLatchFromNavMode = true
+        val mapping = mapOf(
+            KeyEvent.KEYCODE_K to KeyMappingLoader.CtrlMapping(
+                "command",
+                "device.home"
+            )
+        )
+
+        val handled = router.handleKeyDownWithNoEditableField(
+            keyCode = KeyEvent.KEYCODE_K,
+            event = keyDown(KeyEvent.KEYCODE_K),
+            ctrlKeyMap = mapping,
+            callbacks = InputEventRouter.NoEditableFieldCallbacks(
+                isShortcutKey = { false },
+                isLauncherPackage = { false },
+                handleLauncherShortcut = { false },
+                handlePowerShortcut = { false },
+                togglePowerShortcutMode = { _, _ -> },
+                callSuper = { false },
+                currentInputConnection = { null }
+            ),
+            ctrlLatchActive = true,
+            editorInfo = null,
+            currentPackageName = null,
+            powerShortcutsEnabled = false
+        )
+
+        assertTrue(handled)
+        val intent = shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity
+        assertEquals(Intent.ACTION_MAIN, intent.action)
+        assertTrue(intent.categories?.contains(Intent.CATEGORY_HOME) == true)
     }
 
     @Test
@@ -331,6 +522,18 @@ class InputEventRouterCtrlHoldNavModeTest {
             keyCode,
             0,
             KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON
+        )
+    }
+
+    private fun ctrlShiftKeyDown(keyCode: Int): KeyEvent {
+        return KeyEvent(
+            0L,
+            0L,
+            KeyEvent.ACTION_DOWN,
+            keyCode,
+            0,
+            KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON or
+                KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON
         )
     }
 
