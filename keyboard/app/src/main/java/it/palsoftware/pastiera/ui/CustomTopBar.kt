@@ -83,7 +83,7 @@ fun CustomTopBar(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Pastiera",
+                        text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.White

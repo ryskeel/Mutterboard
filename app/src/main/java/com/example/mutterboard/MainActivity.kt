@@ -514,9 +514,12 @@ private fun SetupScreen(
                     imeEnabled = isImeEnabled(context, dictationImeComponent(context))
                 },
                 onOpenImeSettings = onOpenImeSettings,
+                // Straight to the settings, not Pastiera's MainActivity: that is
+                // its own tutorial and enable-the-keyboard setup, which this
+                // screen already does.
                 onOpenKeyboardSettings = {
                     context.startActivity(
-                        Intent(context, it.palsoftware.pastiera.MainActivity::class.java)
+                        Intent(context, it.palsoftware.pastiera.SettingsActivity::class.java)
                     )
                 }
             )
