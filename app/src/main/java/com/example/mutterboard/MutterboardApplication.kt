@@ -6,6 +6,7 @@ import android.os.Looper
 import it.palsoftware.pastiera.AppPackageChangeMonitor
 import it.palsoftware.pastiera.ClicksPowerKeyboardController
 import it.palsoftware.pastiera.SettingsManager
+import it.palsoftware.pastiera.inputmethod.mutterboard.PillBar
 import it.palsoftware.pastiera.inputmethod.mutterboard.voice.ExternalDictation
 import it.palsoftware.pastiera.inputmethod.subtype.AdditionalSubtypeUtils
 
@@ -24,6 +25,7 @@ class MutterboardApplication : Application() {
     private fun startKeyboard() {
         SettingsManager.initializeAltShiftLayoutSwitchDefault(this)
         SettingsManager.enforceTitan2EliteRoundedCornersOnce(this)
+        PillBar.applyOneRowLayoutOnce(this)
         AppPackageChangeMonitor.register(this)
         ClicksPowerKeyboardController.initialize(this)
         Handler(Looper.getMainLooper()).post {

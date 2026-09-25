@@ -244,7 +244,7 @@ class StatusBarController(
     // Mutterboard: see mutterboard/voice/DictationBar.
     val dictationBar by lazy {
         it.palsoftware.pastiera.inputmethod.mutterboard.voice.DictationBar(
-            context, { statusBarLayout }, { fullSuggestionsBar?.ensureView() }
+            context, { statusBarLayout }, { fullSuggestionsBar?.ensureView() }, { fullSuggestionsBar?.wordsView }
         )
     }
 
@@ -3914,14 +3914,11 @@ class StatusBarController(
             }
 
         private fun applyPillClip(insets: android.graphics.Rect) {
-            val maxRadius = it.palsoftware.pastiera.inputmethod.mutterboard.PillBar.let { pill ->
-                pill.dp(context, pill.MAX_RADIUS_DP).toFloat()
-            }
             outlineProvider = object : ViewOutlineProvider() {
                 override fun getOutline(view: View, outline: Outline) {
                     val right = view.width - insets.right
                     val bottom = view.height - insets.bottom
-                    val radius = minOf((bottom - insets.top) / 2f, maxRadius)
+                    val radius = (bottom - insets.top) / 2f
                     outline.setRoundRect(insets.left, insets.top, right, bottom, radius)
                 }
             }

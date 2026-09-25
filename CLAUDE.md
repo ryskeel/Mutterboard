@@ -294,6 +294,13 @@ session read it that way and wrote it into the backlog.
   out, and the Clicks launcher accessibility service is removed in the app
   manifest - a second Mutterboard accessibility service beside the paste one
   would leave people guessing which to enable.
+- **The bar is a one-row pill (`mutterboard/PillBar`).** Menu left,
+  suggestions middle, mic right: nightly's Pastierina presentation with its
+  buttons chosen, written once on first run so a later choice in settings
+  sticks. The pill is an outline clip inset from the sides and bottom, and it
+  switches nightly's Titan 2 Elite traced corners off entirely - they never
+  sat flush, and the app showed through slivers at the edges. Dictation covers
+  only the words, never the row: the mic in that row is the stop button.
 - **Mutterboard is the host, Pastiera is the guest.** Its source sits under
   `keyboard/` (the name is ours to pick; GPL only asks that the copyright
   notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag and then from nightly `474fa10`,

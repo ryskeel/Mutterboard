@@ -58,6 +58,9 @@ class FullSuggestionsBar(
     }
 
     private var container: LinearLayout? = null
+    // Mutterboard: the words alone, so dictation can cover them and leave the
+    // row's buttons (mic/stop among them) where they are.
+    val wordsView: LinearLayout? get() = container
     private var frameContainer: FrameLayout? = null
     private var minimalLeftButtonsContainer: LinearLayout? = null
     private var minimalRightButtonsContainer: LinearLayout? = null

@@ -9,14 +9,19 @@ import android.util.Log
 import android.view.View
 import android.view.ViewTreeObserver
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import it.palsoftware.pastiera.inputmethod.StatusBarController
 
 /**
  * Puts one of the keyboard's bars into its dictating look and takes it out
- * again: the suggestion row gives way to the wave and a cancel button, and the
- * whole bar sits in the overlay's mist, which thins away when the dictation
- * ends rather than switching off.
+ * again: the suggested words give way to the wave and a cancel button, and the
+ * whole bar sits in the overlay's mist.
+ *
+ * Only the words are covered, not the row they sit in. In the one-row bar the
+ * menu and the mic share that row, and the mic is the stop button while
+ * recording, so hiding the row took stop away with it.
  *
  * The keyboard keeps two bars (full, and candidates-only), so there is one of
  * these per bar. Owned by Pastiera's StatusBarController, which only forwards.
@@ -25,6 +30,7 @@ class DictationBar(
     private val context: Context,
     private val layout: () -> LinearLayout?,
     private val suggestions: () -> View?,
+    private val words: () -> View?,
 ) {
     private var strip: DictationStripView? = null
     private var aura: AuraDrawable? = null
@@ -39,7 +45,8 @@ class DictationBar(
      */
     private val holdSuggestionsDown = ViewTreeObserver.OnPreDrawListener {
         keepMistVisible()
-        val view = suggestions()
+        fitStripToWords()
+        val view = words()
         if (view != null && view.visibility != View.GONE) {
             suggestionsVisibilityBefore = view.visibility
             view.visibility = View.GONE
@@ -132,16 +139,21 @@ class DictationBar(
     fun begin(onCancel: () -> Unit) {
         trace("begin")
         val bar = layout() ?: return
+        val row = suggestions() as? FrameLayout ?: return
         val strip = strip ?: DictationStripView(context, dp(36f)).also {
             strip = it
-            bar.addView(it, 0)
+            row.addView(it, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         }
+        // Drawn over the words, under the row's buttons.
+        row.removeView(strip)
+        row.addView(strip, 1, strip.layoutParams)
+        fitStripToWords()
         strip.onCancel = onCancel
         strip.setCaption(null)
         strip.setLevel(0f)
         strip.setPosture(DictationStripView.Posture.LISTENING)
         strip.visibility = View.VISIBLE
-        val suggestionsView = suggestions()
+        val suggestionsView = words()
         if (!holding) {
             suggestionsVisibilityBefore = suggestionsView?.visibility
             bar.viewTreeObserver.addOnPreDrawListener(holdSuggestionsDown)
@@ -211,8 +223,21 @@ class DictationBar(
             layout()?.viewTreeObserver?.removeOnPreDrawListener(holdSuggestionsDown)
             holding = false
         }
-        suggestionsVisibilityBefore?.let { suggestions()?.visibility = it }
+        suggestionsVisibilityBefore?.let { words()?.visibility = it }
         suggestionsVisibilityBefore = null
+    }
+
+    // The words' container is padded clear of the row's side buttons; the
+    // strip takes the same margins so it sits exactly where the words were.
+    private fun fitStripToWords() {
+        val strip = strip ?: return
+        val words = words() ?: return
+        val params = strip.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (params.leftMargin != words.paddingLeft || params.rightMargin != words.paddingRight) {
+            params.leftMargin = words.paddingLeft
+            params.rightMargin = words.paddingRight
+            strip.layoutParams = params
+        }
     }
 
     private companion object {

@@ -2,6 +2,7 @@ package it.palsoftware.pastiera.inputmethod.mutterboard
 
 import android.content.Context
 import android.util.TypedValue
+import it.palsoftware.pastiera.SettingsManager
 
 /**
  * Mutterboard: the bar is a floating pill, the way Gboard draws itself over a
@@ -27,15 +28,25 @@ object PillBar {
      */
     const val BOTTOM_GAP_DP = 8f
 
-    /**
-     * Corner radius cap. A single row comes out a true pill (radius = half its
-     * height); two rows stacked come out a rounded rectangle, because a radius
-     * of half the whole bar would cut into the buttons at its corners.
-     */
-    const val MAX_RADIUS_DP = 26f
-
     private const val PREFS = "mutterboard_keyboard"
     private const val KEY_ENABLED = "pill_bar_enabled"
+
+    private const val KEY_LAYOUT_APPLIED = "one_row_layout_applied_v1"
+
+    /**
+     * The pill is one row, like Gboard's: menu on the left, suggestions in the
+     * middle, mic on the right. That is nightly's Pastierina presentation with
+     * its buttons chosen, so it is set once rather than enforced: anyone who
+     * later picks the two-row bar in settings keeps it.
+     */
+    fun applyOneRowLayoutOnce(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_LAYOUT_APPLIED, false)) return
+        SettingsManager.setStatusBarPresentationMode(context, SettingsManager.StatusBarPresentationMode.PASTIERINA)
+        SettingsManager.setPastierinaStatusBarSlotsLeft(context, listOf(SettingsManager.STATUS_BAR_BUTTON_HAMBURGER))
+        SettingsManager.setPastierinaStatusBarSlotsRight(context, listOf(SettingsManager.STATUS_BAR_BUTTON_MICROPHONE))
+        prefs.edit().putBoolean(KEY_LAYOUT_APPLIED, true).apply()
+    }
 
     fun isEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ENABLED, true)
