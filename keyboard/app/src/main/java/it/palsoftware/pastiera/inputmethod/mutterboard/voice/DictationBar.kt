@@ -6,6 +6,7 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.util.TypedValue
 import android.view.View
+import android.view.ViewTreeObserver
 import android.widget.LinearLayout
 
 /**
@@ -27,6 +28,24 @@ class DictationBar(
     private var backgroundBefore: Drawable? = null
     private var suggestionsVisibilityBefore: Int? = null
 
+    /**
+     * Keeps the suggestion row down for as long as the strip is up. Pastiera
+     * re-shows it whenever suggestions refresh, which the text landing does;
+     * with the strip still settling that stacked both rows and the bar jumped
+     * taller for a moment. Whatever it asked for is remembered and restored.
+     */
+    private val holdSuggestionsDown = ViewTreeObserver.OnPreDrawListener {
+        val view = suggestions()
+        if (view != null && view.visibility != View.GONE) {
+            suggestionsVisibilityBefore = view.visibility
+            view.visibility = View.GONE
+            false
+        } else {
+            true
+        }
+    }
+    private var holding = false
+
     fun begin(onCancel: () -> Unit) {
         val bar = layout() ?: return
         val strip = strip ?: DictationStripView(context, dp(36f)).also {
@@ -39,7 +58,11 @@ class DictationBar(
         strip.setPosture(DictationStripView.Posture.LISTENING)
         strip.visibility = View.VISIBLE
         val suggestionsView = suggestions()
-        if (suggestionsVisibilityBefore == null) suggestionsVisibilityBefore = suggestionsView?.visibility
+        if (!holding) {
+            suggestionsVisibilityBefore = suggestionsView?.visibility
+            bar.viewTreeObserver.addOnPreDrawListener(holdSuggestionsDown)
+            holding = true
+        }
         suggestionsView?.visibility = View.GONE
 
         // A dictation started while the last one's mist is still thinning takes
@@ -67,7 +90,7 @@ class DictationBar(
             }
             ExternalDictation.Phase.TRANSCRIBING -> {
                 strip.setPosture(DictationStripView.Posture.THINKING)
-                strip.setCaption(null)
+                strip.setCaption(caption ?: "Transcribing…")
             }
             ExternalDictation.Phase.NEEDS_ATTENTION -> {
                 strip.setPosture(DictationStripView.Posture.MISSED)
@@ -81,35 +104,45 @@ class DictationBar(
         aura?.setLevel(level)
     }
 
-    /** The wave settles flat, the mist thins away, and the suggestions return. */
-    fun end() {
+    /**
+     * The dictation is over. With text [committed], the mist poofs; thrown
+     * away, it just thins. Either way the strip stays until the mist has gone,
+     * so the suggestions come back into a bar that is already still.
+     */
+    fun end(committed: Boolean) {
         val strip = strip ?: return
         strip.onCancel = null
         strip.setCaption(null)
         strip.setPosture(DictationStripView.Posture.DONE)
         strip.setLevel(0f)
-        strip.postDelayed({
+        val restore = restore@{
             // Only if no new dictation has started in the meantime.
-            if (strip.onCancel != null) return@postDelayed
+            if (strip.onCancel != null) return@restore
             strip.visibility = View.GONE
+            if (holding) {
+                layout()?.viewTreeObserver?.removeOnPreDrawListener(holdSuggestionsDown)
+                holding = false
+            }
             suggestionsVisibilityBefore?.let { suggestions()?.visibility = it }
             suggestionsVisibilityBefore = null
-        }, SETTLE_MS)
-        val fading = aura ?: return
-        fading.dissipate {
-            if (aura !== fading) return@dissipate
-            fading.stop()
-            layout()?.background = backgroundBefore
-            aura = null
-            backgroundBefore = null
         }
+        val fading = aura
+        if (fading == null) {
+            restore()
+            return
+        }
+        val gone = {
+            if (aura === fading) {
+                fading.stop()
+                layout()?.background = backgroundBefore
+                aura = null
+                backgroundBefore = null
+                restore()
+            }
+        }
+        if (committed) fading.poof(gone) else fading.dissipate(gone)
     }
 
     private fun dp(v: Float) =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics).toInt()
-
-    private companion object {
-        /** Long enough to see the wave go flat, which is the "got it". */
-        const val SETTLE_MS = 450L
-    }
 }

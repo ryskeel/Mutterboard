@@ -23,6 +23,7 @@ class ExternalDictationController(
     private val handler = Handler(Looper.getMainLooper())
     private var current: ExternalDictation? = null
     private var recording = false
+    private var committed = false
 
     private val levelTicker = object : Runnable {
         override fun run() {
@@ -52,7 +53,9 @@ class ExternalDictationController(
             private fun mine() = dictation != null && current === dictation
 
             override fun commit(text: String) {
-                if (mine()) inputConnection()?.commitText(text, 1)
+                if (!mine()) return
+                committed = true
+                inputConnection()?.commitText(text, 1)
             }
 
             override fun onUpdate(update: ExternalDictation.Update) {
@@ -65,6 +68,7 @@ class ExternalDictationController(
         })
         dictation = created
         current = created
+        committed = false
         bar().dictationBars.forEach { it.begin(onCancel = { cancel() }) }
         bar().setMicrophoneButtonActive(true)
         created.start()
@@ -101,7 +105,7 @@ class ExternalDictationController(
         recording = false
         handler.removeCallbacks(levelTicker)
         d.destroy()
-        bar().dictationBars.forEach { it.end() }
+        bar().dictationBars.forEach { it.end(committed) }
         bar().setMicrophoneButtonActive(false)
     }
 
