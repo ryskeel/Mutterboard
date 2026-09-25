@@ -214,6 +214,30 @@ All of this lives on `feature/dictation-overlay`, unmerged.
   the time. If it recurs, suspect `OverlayLauncherActivity` coming up
   FLAG_NOT_FOCUSABLE and the field never re-requesting the keyboard.
 
+## The Pastiera keyboard experiment (started 2026-09-25)
+
+On `feature/pastiera-keyboard`: turn Mutterboard into a full keyboard, so that
+on a phone with a physical keyboard (Ry's Titan II Elite) it replaces the
+on-screen keyboard entirely, and on any other phone it is still just
+dictation. The stock Kika keyboard is bad, Gboard misbehaves on hardware
+keyboards (phantom Alt shortcuts, double-space-period then backspace wiping all
+the text), and Pastiera nightly has quirks like staying up over Niagara after
+going home. The goal is Pastiera stable's behaviour, Gboard's look, and the
+nightly features Ry picks one at a time.
+
+- **Pastiera is GPL-3.0, so Mutterboard is too.** Ry agreed; it is a hobby
+  project and stays open source.
+- **Mutterboard is the host, Pastiera is the guest.** Its source sits under
+  `pastiera/`, subtree-merged from the `v0.85` tag (the last stable; the 0.86
+  Ry ran was a nightly) with full history. Remotes: `pastiera` is Ry's fork,
+  `pastiera-upstream` is palsoftware. Nightly is not a separate repo, it is
+  upstream `main`. Pick a nightly change across with
+  `git cherry-pick -Xsubtree=pastiera <sha>`.
+- **Upstream tags are fetched under `pastiera/*`** and both remotes are
+  `--no-tags`, so they never mix with Mutterboard's own release tags.
+- `pastiera/` still builds on its own (`./gradlew assembleStableDebug` inside
+  it). Nothing is wired into Mutterboard's app yet.
+
 ## The refiners are the heart of this app
 
 The dictation quality is the product, and it comes from the system prompts in
