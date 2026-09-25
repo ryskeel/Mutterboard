@@ -668,11 +668,25 @@ class StatusBarController(
                             null
                         }
                     ledStatusView.bottomCornerRadiiPx = (view as? ImeChromeLayout)?.bottomCornerRadiiPx
-                    view.updatePadding(
-                        left = baseLeftPadding,
-                        right = baseRightPadding,
-                        bottom = appliedBottomPadding
-                    )
+                    // Mutterboard: see mutterboard/PillBar.
+                    val pill = it.palsoftware.pastiera.inputmethod.mutterboard.PillBar
+                    if (pill.isEnabled(context)) {
+                        val side = pill.dp(context, pill.SIDE_GAP_DP)
+                        val bottom = max(pill.dp(context, pill.BOTTOM_GAP_DP), bottomInset)
+                        (view as? ImeChromeLayout)?.pillInsetsPx = android.graphics.Rect(side, 0, side, bottom)
+                        view.updatePadding(
+                            left = baseLeftPadding + side,
+                            right = baseRightPadding + side,
+                            bottom = baseBottomPadding + bottom
+                        )
+                    } else {
+                        (view as? ImeChromeLayout)?.pillInsetsPx = null
+                        view.updatePadding(
+                            left = baseLeftPadding,
+                            right = baseRightPadding,
+                            bottom = appliedBottomPadding
+                        )
+                    }
                     logImeOverlayInsetsIfEnabled(
                         navBottom = navAndGestures.bottom,
                         imeBottom = 0,
@@ -3890,7 +3904,38 @@ class StatusBarController(
 
         // Extend the shape above the view so even a bar shorter than the display
         // radius follows the original arc, rather than shrinking it to fit the bar.
+        // Mutterboard: the pill's gaps from the display edges; null when off.
+        var pillInsetsPx: android.graphics.Rect? = null
+            set(value) {
+                if (field == value) return
+                field = value
+                applyBottomCornerClip()
+                requestLayout()
+            }
+
+        private fun applyPillClip(insets: android.graphics.Rect) {
+            val maxRadius = it.palsoftware.pastiera.inputmethod.mutterboard.PillBar.let { pill ->
+                pill.dp(context, pill.MAX_RADIUS_DP).toFloat()
+            }
+            outlineProvider = object : ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: Outline) {
+                    val right = view.width - insets.right
+                    val bottom = view.height - insets.bottom
+                    val radius = minOf((bottom - insets.top) / 2f, maxRadius)
+                    outline.setRoundRect(insets.left, insets.top, right, bottom, radius)
+                }
+            }
+            clipToOutline = true
+            invalidateOutline()
+        }
+
+        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+            super.onSizeChanged(w, h, oldw, oldh)
+            if (pillInsetsPx != null) invalidateOutline()
+        }
+
         private fun applyBottomCornerClip() {
+            pillInsetsPx?.let { applyPillClip(it); return }
             val radii = bottomCornerRadiiPx
             val radius = radii?.let { maxOf(it.first, it.second) } ?: 0
             if (radius <= 0) {

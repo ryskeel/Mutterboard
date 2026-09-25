@@ -1440,6 +1440,8 @@ object SettingsManager {
     }
 
     fun getTitan2EliteRoundedCornerInsetsEnabled(context: Context): Boolean =
+        // Mutterboard: the pill replaces the traced corners. See mutterboard/PillBar.
+        !it.palsoftware.pastiera.inputmethod.mutterboard.PillBar.isEnabled(context) &&
         getPreferences(context).getBoolean(
             KEY_TITAN2_ELITE_ROUNDED_CORNER_INSETS,
             DeviceSpecific.isTitan2EliteDevice()
