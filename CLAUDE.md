@@ -246,8 +246,14 @@ nightly features Ry picks one at a time.
   of the two IME services is enabled; the physical one ships disabled so updates
   keep the dictation keyboard. Touchscreen (Gboard-style) is the planned third
   option and stays hidden until it exists.
-- **Not done yet:** the physical keyboard's mic key still uses Android's speech
-  recognizer, not `DictationSession`.
+- **The mic button runs `DictationSession`** through
+  `keyboard/.../inputmethod/voice/` (Mutterboard's own package inside the
+  library) and `KeyboardDictation`, installed by `MutterboardApplication`. While
+  dictating, the suggestion row becomes the wave plus cancel and the mic button
+  becomes stop. Built but not yet tried on a phone.
+- **Its strings are rebranded from the app**, generated per locale by
+  `scripts/rebrand-keyboard-strings.py`; rerun it after picking nightly changes.
+  The About line keeps the Pastiera credit on purpose.
 
 ## The refiners are the heart of this app
 
