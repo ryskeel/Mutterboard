@@ -240,9 +240,10 @@ nightly features Ry picks one at a time.
   `keyboard/app/mutterboard.gradle.kts`, never Pastiera's own build file, which
   stays upstream-identical (it is AGP 8; we are AGP 9). Its GitHub updater is
   off and its launcher icon is stripped in the app manifest.
-- **Settings has a Keyboard section: Dictation only / Physical keyboard.** Its
-  own section, not nested under Overlay/Keyboard, because the physical keyboard
-  types and happily coexists with the overlay (Ry's call). The choice is which
+- **Under "How you dictate" -> Keyboard: Dictation only / Physical keyboard.**
+  Nested, not a section of its own: as two sections it read as two unrelated
+  questions with two "Enable keyboard" ticks (Ry's call, reversing his first
+  pick after using it). The choice is which
   of the two IME services is enabled; the physical one ships disabled so updates
   keep the dictation keyboard. Touchscreen (Gboard-style) is the planned third
   option and stays hidden until it exists.

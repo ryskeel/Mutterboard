@@ -484,6 +484,21 @@ private fun SetupScreen(
                 overlayChosen = overlayEnabled,
                 imeEnabled = imeEnabled,
                 chosenImeEnabled = chosenImeEnabled,
+                physicalKeyboard = physicalKeyboard,
+                onChooseKeyboard = { physical ->
+                    setPhysicalKeyboardChosen(context, physical)
+                    physicalKeyboard = physical
+                    chosenImeEnabled = isImeEnabled(context, chosenImeComponent(context))
+                    imeEnabled = isImeEnabled(context, dictationImeComponent(context))
+                },
+                // Straight to the settings, not Pastiera's MainActivity: that is
+                // its own tutorial and enable-the-keyboard setup, which this
+                // screen already does.
+                onOpenKeyboardSettings = {
+                    context.startActivity(
+                        Intent(context, it.palsoftware.pastiera.SettingsActivity::class.java)
+                    )
+                },
                 canDrawOverlays = canDrawOverlays,
                 accessibilityEnabled = accessibilityEnabled,
                 onChoose = { overlay ->
@@ -499,30 +514,6 @@ private fun SetupScreen(
                 onOpenShortcutSettings = onOpenShortcutSettings
             )
 
-
-            Spacer(Modifier.height(40.dp))
-
-            SectionHeader("Keyboard")
-            Spacer(Modifier.height(12.dp))
-            KeyboardTypeCard(
-                physicalKeyboard = physicalKeyboard,
-                imeEnabled = chosenImeEnabled,
-                onChoose = { physical ->
-                    setPhysicalKeyboardChosen(context, physical)
-                    physicalKeyboard = physical
-                    chosenImeEnabled = isImeEnabled(context, chosenImeComponent(context))
-                    imeEnabled = isImeEnabled(context, dictationImeComponent(context))
-                },
-                onOpenImeSettings = onOpenImeSettings,
-                // Straight to the settings, not Pastiera's MainActivity: that is
-                // its own tutorial and enable-the-keyboard setup, which this
-                // screen already does.
-                onOpenKeyboardSettings = {
-                    context.startActivity(
-                        Intent(context, it.palsoftware.pastiera.SettingsActivity::class.java)
-                    )
-                }
-            )
 
             Spacer(Modifier.height(40.dp))
 
@@ -1350,6 +1341,9 @@ private fun DictationModeCard(
     overlayChosen: Boolean,
     imeEnabled: Boolean,
     chosenImeEnabled: Boolean,
+    physicalKeyboard: Boolean,
+    onChooseKeyboard: (Boolean) -> Unit,
+    onOpenKeyboardSettings: () -> Unit,
     canDrawOverlays: Boolean,
     accessibilityEnabled: Boolean,
     onChoose: (Boolean) -> Unit,
@@ -1447,15 +1441,41 @@ private fun DictationModeCard(
         )
         if (!overlayChosen) {
             OptionSteps {
+                // Which keyboard, as a choice inside this option rather than a
+                // section of its own. As two sections it read as two unrelated
+                // questions, each with its own "Enable keyboard" ticked.
+                ModeChoiceRow(
+                    label = "Dictation only",
+                    description = "Just a microphone. You type with your " +
+                        "phone's usual keyboard.",
+                    selected = !physicalKeyboard,
+                    onSelect = { onChooseKeyboard(false) }
+                )
+                ModeChoiceRow(
+                    label = "Physical keyboard",
+                    description = "Replaces your phone's keyboard, for phones " +
+                        "with real keys. Its mic button dictates.",
+                    selected = physicalKeyboard,
+                    onSelect = { onChooseKeyboard(true) }
+                )
                 StepRow(
                     label = "Enable keyboard",
-                    // Whichever keyboard the Keyboard section picked: with the
-                    // physical one, its mic key is how this option dictates.
+                    // Whichever of the two is chosen; switching drops the other
+                    // from Android's list, so this can go back to undone.
                     done = chosenImeEnabled,
                     actionLabel = "Enable",
                     onAction = onOpenImeSettings,
                     step = 1
                 )
+                if (physicalKeyboard) {
+                    StepRow(
+                        label = "Layout, suggestions and shortcuts",
+                        done = false,
+                        actionLabel = "Open",
+                        onAction = onOpenKeyboardSettings,
+                        required = false
+                    )
+                }
             }
         }
         // Sits below both options because it belongs to neither, and only when
@@ -1465,73 +1485,6 @@ private fun DictationModeCard(
         if (!overlayChosen && shortcutAttached) {
             HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
             ShortcutStepRow(done = false, step = null, onAction = onOpenShortcutSettings)
-        }
-    }
-}
-
-/**
- * Which keyboard Mutterboard is: the dictation-only one it has always been, or a
- * full keyboard for phones with real keys (built from Pastiera).
- *
- * Its own section rather than a sub-choice of "Keyboard" above, because the
- * physical keyboard is a typing keyboard first and sits happily alongside the
- * overlay - that is the setup it was built for.
- *
- * Like the overlay, the component state is the choice: exactly one of the two
- * input method services is enabled, so Android's keyboard list only ever shows
- * one Mutterboard. Switching drops the old one from that list, which is why the
- * enable step follows the choice.
- *
- * Touchscreen will be the third option once it exists. Offering it before then
- * would be a radio naming a keyboard that isn't there.
- */
-@Composable
-private fun KeyboardTypeCard(
-    physicalKeyboard: Boolean,
-    imeEnabled: Boolean,
-    onChoose: (Boolean) -> Unit,
-    onOpenImeSettings: () -> Unit,
-    onOpenKeyboardSettings: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    ) {
-        ModeChoiceRow(
-            label = "Dictation only",
-            description = "Mutterboard's keyboard is just a microphone. You type " +
-                "with your phone's usual keyboard.",
-            selected = !physicalKeyboard,
-            onSelect = { onChoose(false) }
-        )
-        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
-        ModeChoiceRow(
-            label = "Physical keyboard",
-            description = "Replaces your phone's keyboard, for phones with real " +
-                "keys. Suggestions, symbols and shortcuts sit in a bar above them.",
-            selected = physicalKeyboard,
-            onSelect = { onChoose(true) }
-        )
-        if (physicalKeyboard) {
-            OptionSteps {
-                StepRow(
-                    label = "Enable keyboard",
-                    done = imeEnabled,
-                    actionLabel = "Enable",
-                    onAction = onOpenImeSettings,
-                    step = 1
-                )
-                StepRow(
-                    label = "Layout, suggestions and shortcuts",
-                    done = false,
-                    actionLabel = "Open",
-                    onAction = onOpenKeyboardSettings,
-                    required = false
-                )
-            }
         }
     }
 }
