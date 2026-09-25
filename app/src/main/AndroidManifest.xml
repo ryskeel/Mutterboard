@@ -26,7 +26,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Mutterboard"
-        tools:replace="android:label,android:theme">
+        tools:replace="android:name,android:label,android:theme">
 
         <!-- Pastiera's own settings screen, minus its LAUNCHER filter: a third
              app icon would break the one-icon rule below, and Mutterboard's
@@ -46,6 +46,14 @@
             android:name="it.palsoftware.pastiera.inputmethod.PhysicalKeyboardInputMethodService"
             android:enabled="false"
             tools:node="merge" />
+
+        <!-- Pastiera nightly's second accessibility service, for the Clicks
+             case keyboard's launcher button. Left in, it lists a second
+             Mutterboard service in Android's accessibility settings beside the
+             one that pastes, and nobody could tell which to turn on. -->
+        <service
+            android:name="it.palsoftware.pastiera.inputmethod.ClicksLauncherButtonAccessibilityService"
+            tools:node="remove" />
 
         <!-- Settings. Reached through the alias below rather than a filter of
              its own, because which of the two entry points owns the app icon is
@@ -151,7 +159,8 @@
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
+                android:resource="@xml/file_paths"
+                tools:replace="android:resource" />
         </provider>
 
     </application>
