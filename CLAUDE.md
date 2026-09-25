@@ -265,8 +265,18 @@ the text), and Pastiera nightly has quirks like staying up over Niagara after
 going home. The goal is Pastiera stable's behaviour, Gboard's look, and the
 nightly features Ry picks one at a time.
 
+"Gboard's look" means the look of Gboard's *bar* on a hardware keyboard: a slim
+white rounded pill, with the menu on the left, suggestions in the middle and
+mic/emoji on the right. It never meant building an on-screen keyboard. One
+session read it that way and wrote it into the backlog.
+
 - **Pastiera is GPL-3.0, so Mutterboard is too.** Ry agreed; it is a hobby
   project and stays open source.
+- **Pastiera's settings screens stay; only their canvas is ours.** They are
+  Compose screens over one `SettingsManager`, and rebuilding them would mean
+  re-porting every nightly feature's UI. `PastieraTheme` paints `background`
+  and `surface` in Mutterboard's peach/charcoal (the values are copied, since
+  the library cannot see the app module) and leaves everything else alone.
 - **Mutterboard is the host, Pastiera is the guest.** Its source sits under
   `keyboard/` (the name is ours to pick; GPL only asks that the copyright
   notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag (the last stable; the 0.86
@@ -286,8 +296,7 @@ nightly features Ry picks one at a time.
   "separate sections" and "nested under Keyboard" before landing here; the only
   real either/or is which keyboard fits the phone. The radio is which of the two
   IME services is enabled; the physical one ships disabled so updates keep the
-  dictation keyboard. Touchscreen is today's dictation keyboard until a
-  Gboard-style one exists.
+  dictation keyboard. Touchscreen is the dictation keyboard.
 - **The mic button runs `DictationSession`** through
   `keyboard/.../inputmethod/voice/` (Mutterboard's own package inside the
   library) and `KeyboardDictation`, installed by `MutterboardApplication`. While
