@@ -82,9 +82,8 @@ internal class AuraDrawable(
             interpolator = DecelerateInterpolator(1.4f)
             addUpdateListener {
                 burst = it.animatedValue as Float
-                // A brief lift at the start, then gone. Never above 1.25x, or
-                // the containers bleach to white.
-                presence = (1f - burst).pow(1.6f) * (1f + 0.25f * sin(PI.toFloat() * burst))
+                // A flash of brightness at the start, then gone: the "poof".
+                presence = (1f - burst).pow(1.3f) * (1f + 0.9f * sin(PI.toFloat() * burst))
                 invalidateSelf()
             }
             addListener(endListener(onGone))
@@ -154,7 +153,7 @@ internal class AuraDrawable(
         val t = (now - startedAt) / 1000f
         val scale = (w * 0.42f).coerceAtMost(h * 2.4f)
         for (cloud in clouds) {
-            val swell = (1f + level * 0.42f) * (1f + burst * 0.9f)
+            val swell = (1f + level * 0.42f) * (1f + burst * 1.4f)
             val wander = cloud.orbit * w * (1f + level * 0.30f)
             val x = b.left + cloud.baseX * w + cos(t * cloud.speed + cloud.phase) * wander
             val y = b.top + cloud.baseY * h + sin(t * cloud.speed * 0.78f + cloud.phase * 1.37f) * wander * 0.25f
@@ -187,6 +186,6 @@ internal class AuraDrawable(
         const val FRAME_MS = 16L
         const val APPEAR_MS = 350L
         const val DISSIPATE_MS = 450L
-        const val POOF_MS = 750L
+        const val POOF_MS = 900L
     }
 }

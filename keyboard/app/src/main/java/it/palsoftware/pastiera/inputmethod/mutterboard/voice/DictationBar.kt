@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.util.TypedValue
+import android.util.Log
 import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.LinearLayout
@@ -46,7 +47,20 @@ class DictationBar(
     }
     private var holding = false
 
+    private fun trace(what: String) {
+        val bar = layout()
+        Log.d(TAG, "$what bar=${bar?.height} attached=${bar?.isAttachedToWindow} bg=${bar?.background?.javaClass?.simpleName} strip=${strip?.visibility} sugg=${suggestions()?.visibility}")
+    }
+
+    init {
+        // Debug aid while the dictating look is being tuned: every height change.
+        layout()?.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (bottom - top != oldBottom - oldTop) trace("height ${oldBottom - oldTop}->${bottom - top}")
+        }
+    }
+
     fun begin(onCancel: () -> Unit) {
+        trace("begin")
         val bar = layout() ?: return
         val strip = strip ?: DictationStripView(context, dp(36f)).also {
             strip = it
@@ -82,6 +96,7 @@ class DictationBar(
     }
 
     fun setPhase(phase: ExternalDictation.Phase, caption: String?) {
+        trace("phase $phase")
         val strip = strip ?: return
         when (phase) {
             ExternalDictation.Phase.RECORDING -> {
@@ -110,6 +125,7 @@ class DictationBar(
      * so the suggestions come back into a bar that is already still.
      */
     fun end(committed: Boolean) {
+        trace("end committed=$committed aura=${aura != null}")
         val strip = strip ?: return
         strip.onCancel = null
         strip.setCaption(null)
@@ -132,6 +148,7 @@ class DictationBar(
             return
         }
         val gone = {
+            trace("mist gone, current=${aura === fading}")
             if (aura === fading) {
                 fading.stop()
                 layout()?.background = backgroundBefore
@@ -141,6 +158,10 @@ class DictationBar(
             }
         }
         if (committed) fading.poof(gone) else fading.dissipate(gone)
+    }
+
+    private companion object {
+        const val TAG = "MutterboardDictation"
     }
 
     private fun dp(v: Float) =

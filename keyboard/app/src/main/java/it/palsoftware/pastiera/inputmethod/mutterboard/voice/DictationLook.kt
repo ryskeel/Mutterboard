@@ -6,8 +6,10 @@ import android.os.Build
 
 /**
  * The colours the overlay's mist is painted in, for a keyboard that has no
- * Material theme to read them from. The overlay takes them from Material You's
- * dark scheme; these are the same system palette slots, so the two match.
+ * Material theme to read them from. Same Material You families as the overlay,
+ * but two tones lighter: the overlay's mist sits on a grey surface, this one on
+ * a black bar, where the overlay's tones read as faint grey smudges (seen in a
+ * screen recording - the poof was running and nobody could see it).
  */
 internal object DictationLook {
     class Palette(
@@ -23,12 +25,12 @@ internal object DictationLook {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             fun c(id: Int) = context.getColor(id)
             return Palette(
-                primaryContainer = c(android.R.color.system_accent1_700),
-                secondaryContainer = c(android.R.color.system_accent2_700),
-                tertiaryContainer = c(android.R.color.system_accent3_700),
-                primary = c(android.R.color.system_accent1_200),
-                secondary = c(android.R.color.system_accent2_200),
-                tertiary = c(android.R.color.system_accent3_200),
+                primaryContainer = c(android.R.color.system_accent1_500),
+                secondaryContainer = c(android.R.color.system_accent2_500),
+                tertiaryContainer = c(android.R.color.system_accent3_500),
+                primary = c(android.R.color.system_accent1_300),
+                secondary = c(android.R.color.system_accent2_300),
+                tertiary = c(android.R.color.system_accent3_300),
             )
         }
         // Mutterboard's own coral family, for phones without dynamic colour.
