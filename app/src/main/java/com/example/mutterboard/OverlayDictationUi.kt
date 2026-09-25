@@ -63,6 +63,7 @@ fun OverlayDictationBand(
     snapshot: DictationSession.Snapshot,
     amplitude: () -> Float,
     minimized: Boolean,
+    poofing: Boolean,
     bottomInset: Dp,
     pasteWarning: Boolean,
     onAction: () -> Unit,
@@ -83,11 +84,45 @@ fun OverlayDictationBand(
         )
         return
     }
+    // After the warning, before everything else: the dictation is over and the
+    // controls are about to go, so there is nothing left for them to say. The
+    // burst takes the space they were in rather than playing on top of them,
+    // which is what makes it read as the UI dispersing rather than as an effect
+    // fired over a band that is still sitting there.
+    if (poofing) {
+        if (minimized) {
+            // Room to disperse into, on all four sides of where the puck was.
+            // The window wraps this box, so it grows by the margin - and
+            // OverlayDictationService steps its position back by the same margin,
+            // which leaves the mist spreading from exactly where the puck stood.
+            val margin = OverlayDictationService.POOF_MARGIN_DP.dp
+            Box(
+                modifier = Modifier.size(
+                    width = PUCK_WIDTH + margin * 2,
+                    height = PUCK_HEIGHT + margin * 2,
+                ),
+            ) {
+                PoofBurst(modifier = Modifier.matchParentSize())
+            }
+        } else {
+            // The band's own height, so the window does not visibly resize on the
+            // frame the controls are replaced by the mist.
+            val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+            PoofBurst(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(
+                        (screenHeight * BAND_SCREEN_FRACTION).coerceAtMost(BAND_MAX_HEIGHT),
+                    ),
+            )
+        }
+        return
+    }
     if (minimized) {
         MinimizedPuck(
             posture = snapshot.state.posture(),
             amplitude = amplitude,
-            onExpand = { onMinimizedChanged(false) },
+            onFinish = onAction,
         )
         return
     }
@@ -343,6 +378,10 @@ private fun PillButton(
 }
 
 /** How much of the screen the band covers when its content does not need more. */
+/** The puck's size. OverlayDictationService measures its snap columns off it. */
+private val PUCK_WIDTH = 78.dp
+private val PUCK_HEIGHT = 46.dp
+
 private const val BAND_SCREEN_FRACTION = 0.34f
 
 /** Above this the fraction stops being a band and starts being a wall. */
@@ -356,19 +395,24 @@ private val BAND_MAX_HEIGHT = 340.dp
  * *start* something. The point of the collapsed state is the opposite — the
  * dictation is already running, you just moved it out of the way — and the wave
  * is the one thing in this app that already says "still listening".
+ *
+ * Tapping it finishes the dictation. Real presses never arrive here — the puck's
+ * drag, tap and hold are all read as raw touches by PuckDragLayout, which takes
+ * the stream before Compose sees it — but the semantics are what a screen reader
+ * is offered, so the action it names has to be the action a tap performs.
  */
 @Composable
 private fun MinimizedPuck(
     posture: WavePosture,
     amplitude: () -> Float,
-    onExpand: () -> Unit,
+    onFinish: () -> Unit,
 ) {
     Box(
         modifier = Modifier
-            .size(width = 78.dp, height = 46.dp)
+            .size(width = PUCK_WIDTH, height = PUCK_HEIGHT)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.primary)
-            .clickable(onClickLabel = "Expand Mutterboard", onClick = onExpand),
+            .clickable(onClickLabel = "Finish dictation", onClick = onFinish),
         contentAlignment = Alignment.Center,
     ) {
         DictationWave(

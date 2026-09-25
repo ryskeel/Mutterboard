@@ -105,6 +105,46 @@ Compose (`OverlayDictationUi.kt`), because it must not. Both read the same
   reaches the app underneath. The translucency is the same argument made
   visually - the band admits it is sitting on top of something.
 
+- **The puck's tap finishes the dictation; the hold brings the band back.** The
+  puck is the whole interface for someone working that way, so the common need
+  (the text) gets the cheap gesture and the rare one (the band) gets the
+  deliberate one. Drag and hold share the press without competing: the hold is a
+  timer armed on touch-down and cancelled the instant the finger crosses the slop
+  the drag already measures, so a press that moves can never also be a hold. The
+  haptic tick at the timeout is load-bearing, not polish - it is the only way to
+  feel a hesitant press crossing from tap to hold.
+
+- **Puck or band is remembered, and only a deliberate choice writes it.**
+  Collapsing or expanding by hand sets the shape the next dictation opens in
+  (`overlay_puck_mode`). The automatic expand that surfaces an error passes
+  `remember = false`, because a missing mic permission must not quietly end puck
+  mode on the user's behalf. The auto-expand also skips IDLE: that is the state a
+  dictation that worked passes through, and expanding on it popped the band open
+  at the end of every recording.
+
+- **The puck snaps to three columns, and the columns are measured off a
+  constant.** Left, centre and right with 16dp of edge padding, chosen live as the
+  finger crosses each halfway mark; vertical stays free, because height is where
+  the thing you are covering actually varies. The column is what gets saved, not a
+  coordinate. `PUCK_WIDTH_DP` in the service has to match `PUCK_WIDTH` in the UI:
+  the window's first position is decided before the view has ever been laid out,
+  so a centre computed from the measured width is half a puck off.
+
+- **Thinking is a shape change, not a quieter wave.** The squiggle rolls up into a
+  spinning ring, one interpolated path rather than two drawings swapped over.
+  Inside the puck a tap ends the dictation, and the seconds of transcribing that
+  follow used to look exactly like the seconds before the tap, so the tap read as a
+  press that missed.
+
+- **The overlay outlives its own session by one animation.** `dismiss()` starts
+  the mist burst and posts the teardown behind it, because the window vanishing on
+  the frame it committed gave the one event worth confirming - your words landing
+  in the field - no acknowledgement at all. `POOF_MS` is both the animation's
+  length and the teardown delay: shorter cuts the mist off mid-air, longer leaves
+  an invisible window over the app the user has already gone back to. The puck's
+  touch handling switches off for the duration, or a press would land on a
+  dictation that is over.
+
 - **The accessibility service is optional and must stay optional.** Without it
   the overlay still works, it just stops pasting for you. That is what keeps the
   "Allow restricted settings" unlock off the critical path for a new user.
@@ -284,6 +324,13 @@ prompt.** They are the design document.
   ANSWERING a dictated question instead of editing it — which reached a real
   message once. Any prompt change that makes output diverge further from the
   input must be checked against it.
+
+- **The Groq model id expires, and the app hides it.** Both refiners fall back
+  to the raw transcript on any failure, so a decommissioned model id reads as
+  "the cleanup stopped happening" with nothing on screen and no crash. It has
+  happened twice now (llama-3.3-70b in August 2026, qwen3.6-27b in September).
+  When refined output looks like bare Whisper, read the debug HTTP log before
+  touching the prompt, and keep the id in both refiners in step.
 
 - **Whisper's output is already punctuated and capitalized.** It usually returns
   document-style prose; on fast speech it returns bare unpunctuated text. Any
