@@ -262,8 +262,19 @@ on-screen keyboard entirely, and on any other phone it is still just
 dictation. The stock Kika keyboard is bad, Gboard misbehaves on hardware
 keyboards (phantom Alt shortcuts, double-space-period then backspace wiping all
 the text), and Pastiera nightly has quirks like staying up over Niagara after
-going home. The goal is Pastiera stable's behaviour, Gboard's look, and the
-nightly features Ry picks one at a time.
+going home. The goal is a keyboard Ry owns: nightly's features, simplified
+down, with Gboard's look and the quirks fixed.
+
+**The base is nightly, not stable, since 2026-09-25.** It started on stable
+v0.85 with nightly features to be ported one at a time; the first real port
+(themes) showed every later nightly feature sits on nightly's on-screen
+keyboard rework, so porting meant dragging that in piecemeal. Our changes were
+~840 lines, nearly all in our own files, so moving the base was cheaper.
+Nightly is pinned at `474fa10` (2026-09-08), its last commit, which announces
+**Plektra** (`pkb-rocks/plektra`) as Pastiera's successor; that repo was empty
+at the time. Upstream is effectively frozen, so simplifying means hiding
+settings rows first and deleting code only once Ry decides we stop tracking
+upstream.
 
 "Gboard's look" means the look of Gboard's *bar* on a hardware keyboard: a slim
 white rounded pill, with the menu on the left, suggestions in the middle and
@@ -277,10 +288,16 @@ session read it that way and wrote it into the backlog.
   re-porting every nightly feature's UI. `PastieraTheme` paints `background`
   and `surface` in Mutterboard's peach/charcoal (the values are copied, since
   the library cannot see the app module) and leaves everything else alone.
+- **Nightly's `PastieraApplication` does not run.** An app has one
+  Application, so `MutterboardApplication` repeats its startup calls; check it
+  after moving the pin. Its software-keyboard-mode launcher shortcut is left
+  out, and the Clicks launcher accessibility service is removed in the app
+  manifest - a second Mutterboard accessibility service beside the paste one
+  would leave people guessing which to enable.
 - **Mutterboard is the host, Pastiera is the guest.** Its source sits under
   `keyboard/` (the name is ours to pick; GPL only asks that the copyright
-  notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag (the last stable; the 0.86
-  Ry ran was a nightly) with full history. Remotes: `pastiera` is Ry's fork,
+  notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag and then from nightly `474fa10`,
+  with full history. Remotes: `pastiera` is Ry's fork,
   `pastiera-upstream` is palsoftware. Nightly is not a separate repo, it is
   upstream `main`. Pick a nightly change across with
   `git cherry-pick -Xsubtree=keyboard <sha>`.
