@@ -11,9 +11,7 @@ import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.os.SystemClock
 import android.view.animation.DecelerateInterpolator
-import kotlin.math.PI
 import kotlin.math.cos
-import kotlin.math.pow
 import kotlin.math.exp
 import kotlin.math.sin
 
@@ -24,9 +22,7 @@ import kotlin.math.sin
  *
  * Same blooms, same drift, same swell with the voice. Two differences: the
  * radius comes off the bar's height as well as its width, because a bar is far
- * flatter than the overlay's band and width alone washes it out to one colour;
- * and it ends, either with a [poof] when the text lands or by [dissipate] when
- * the dictation was thrown away.
+ * flatter than the overlay's band and width alone washes it out to one colour.
  */
 internal class AuraDrawable(
     palette: DictationLook.Palette,
@@ -52,7 +48,7 @@ internal class AuraDrawable(
     private var lastFrame = startedAt
     private var running = false
 
-    /** 0..1, how much mist there is. Fades in on start and out on [dissipate]. */
+    /** 0..1, how much mist there is. Fades in on start. */
     private var presence = 0f
     private var presenceAnim: ValueAnimator? = null
 
@@ -63,36 +59,7 @@ internal class AuraDrawable(
         targetLevel = value.coerceIn(0f, 1f)
     }
 
-    /** 0..1 through a poof: the blooms swell outward as they thin. */
-    private var burst = 0f
-
-    fun appear() {
-        burst = 0f
-        animatePresence(1f, APPEAR_MS, null)
-    }
-
-    /**
-     * The text landed: the mist gives one last swell outward and brightens
-     * slightly as it thins, so it reads as released rather than switched off.
-     */
-    fun poof(onGone: () -> Unit) {
-        presenceAnim?.cancel()
-        presenceAnim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = POOF_MS
-            interpolator = DecelerateInterpolator(1.4f)
-            addUpdateListener {
-                burst = it.animatedValue as Float
-                // A flash of brightness at the start, then gone: the "poof".
-                presence = (1f - burst).pow(1.3f) * (1f + 0.9f * sin(PI.toFloat() * burst))
-                invalidateSelf()
-            }
-            addListener(endListener(onGone))
-            start()
-        }
-    }
-
-    /** Thins the mist to nothing, then calls [onGone]. */
-    fun dissipate(onGone: () -> Unit) = animatePresence(0f, DISSIPATE_MS, onGone)
+    fun appear() = animatePresence(1f, APPEAR_MS, null)
 
     private fun animatePresence(to: Float, ms: Long, onEnd: (() -> Unit)?) {
         presenceAnim?.cancel()
@@ -153,7 +120,7 @@ internal class AuraDrawable(
         val t = (now - startedAt) / 1000f
         val scale = (w * 0.42f).coerceAtMost(h * 2.4f)
         for (cloud in clouds) {
-            val swell = (1f + level * 0.42f) * (1f + burst * 1.4f)
+            val swell = 1f + level * 0.42f
             val wander = cloud.orbit * w * (1f + level * 0.30f)
             val x = b.left + cloud.baseX * w + cos(t * cloud.speed + cloud.phase) * wander
             val y = b.top + cloud.baseY * h + sin(t * cloud.speed * 0.78f + cloud.phase * 1.37f) * wander * 0.25f
@@ -185,7 +152,5 @@ internal class AuraDrawable(
     private companion object {
         const val FRAME_MS = 16L
         const val APPEAR_MS = 350L
-        const val DISSIPATE_MS = 450L
-        const val POOF_MS = 900L
     }
 }

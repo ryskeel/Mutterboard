@@ -120,44 +120,27 @@ class DictationBar(
     }
 
     /**
-     * The dictation is over. With text [committed], the mist poofs; thrown
-     * away, it just thins. Either way the strip stays until the mist has gone,
-     * so the suggestions come back into a bar that is already still.
+     * The dictation is over: the bar goes straight back to how it was. There
+     * was a poof here (the mist swelling away as the text landed), and Ry asked
+     * for it gone - with Messages resizing its box as the text arrived, the two
+     * together read as the keyboard jumping.
      */
-    fun end(committed: Boolean) {
-        trace("end committed=$committed aura=${aura != null}")
+    fun end() {
         val strip = strip ?: return
         strip.onCancel = null
-        strip.setCaption(null)
-        strip.setPosture(DictationStripView.Posture.DONE)
-        strip.setLevel(0f)
-        val restore = restore@{
-            // Only if no new dictation has started in the meantime.
-            if (strip.onCancel != null) return@restore
-            strip.visibility = View.GONE
-            if (holding) {
-                layout()?.viewTreeObserver?.removeOnPreDrawListener(holdSuggestionsDown)
-                holding = false
-            }
-            suggestionsVisibilityBefore?.let { suggestions()?.visibility = it }
-            suggestionsVisibilityBefore = null
+        strip.visibility = View.GONE
+        aura?.let {
+            it.stop()
+            layout()?.background = backgroundBefore
         }
-        val fading = aura
-        if (fading == null) {
-            restore()
-            return
+        aura = null
+        backgroundBefore = null
+        if (holding) {
+            layout()?.viewTreeObserver?.removeOnPreDrawListener(holdSuggestionsDown)
+            holding = false
         }
-        val gone = {
-            trace("mist gone, current=${aura === fading}")
-            if (aura === fading) {
-                fading.stop()
-                layout()?.background = backgroundBefore
-                aura = null
-                backgroundBefore = null
-                restore()
-            }
-        }
-        if (committed) fading.poof(gone) else fading.dissipate(gone)
+        suggestionsVisibilityBefore?.let { suggestions()?.visibility = it }
+        suggestionsVisibilityBefore = null
     }
 
     private companion object {

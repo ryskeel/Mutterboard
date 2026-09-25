@@ -252,8 +252,8 @@ nightly features Ry picks one at a time.
   `keyboard/.../inputmethod/voice/` (Mutterboard's own package inside the
   library) and `KeyboardDictation`, installed by `MutterboardApplication`. While
   dictating, the suggestion row becomes the overlay's squiggle plus cancel, the
-  mic button becomes stop, and the whole bar sits in the overlay's mist, which
-  dissipates when it ends (`DictationBar`). Wave and mist are View ports of the
+  mic button becomes stop, and the whole bar sits in the overlay's mist.
+  It ends instantly - a poof was tried and Ry had it removed (`DictationBar`). Wave and mist are View ports of the
   app's Compose `DictationWave`/`DictationAura`; keep the two in step.
 - **Its strings are rebranded from the app**, generated per locale by
   `scripts/rebrand-keyboard-strings.py`; rerun it after picking nightly changes.
