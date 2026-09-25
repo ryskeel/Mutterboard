@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Permesso per le notifiche (richiesto da Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- Permesso per la vibrazione (richiesto per haptic feedback) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    
+    <!-- Permesso per il riconoscimento vocale -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    
+    <!-- Permesso per l'accesso a Internet (richiesto per il controllo aggiornamenti) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Permesso per mostrare finestre overlay (per debug trackpad) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Query per vedere tutte le app installate che possono essere avviate -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        
+        <!-- Query per vedere i launcher -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="${appLabel}"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Pastiera">
+        <activity
+            android:name=".TutorialActivity"
+            android:exported="false"
+            android:label="${appLabel}"
+            android:theme="@style/Theme.Pastiera" />
+        
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="${appLabel}"
+            android:theme="@style/Theme.Pastiera">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        
+        <!-- Activity per la personalizzazione SYM -->
+        <activity
+            android:name=".SymCustomizationActivity"
+            android:exported="false"
+            android:label="@string/sym_customize_title"
+            android:theme="@style/Theme.Pastiera" />
+        
+        <!-- Activity per le impostazioni -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true"
+            android:label="@string/settings_title"
+            android:theme="@style/Theme.Pastiera" />
+        
+        <!-- Activity per gestire le lingue degli input method subtypes -->
+        <activity
+            android:name=".LanguagesActivity"
+            android:exported="false"
+            android:label="@string/languages_title"
+            android:theme="@style/Theme.Pastiera" />
+        
+        <activity
+            android:name=".dictionaries.InstalledDictionariesActivity"
+            android:exported="false"
+            android:label="@string/installed_dictionaries_title"
+            android:theme="@style/Theme.Pastiera.InstalledDictionariesAnimation" />
+
+        <activity
+            android:name=".layout.OnlineLayoutsActivity"
+            android:exported="false"
+            android:label="@string/online_layouts_title"
+            android:theme="@style/Theme.Pastiera" />
+
+        <!-- Activity for trackpad debug -->
+        <activity
+            android:name=".TrackpadDebugActivity"
+            android:exported="false"
+            android:label="Trackpad Debug"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance" />
+
+        <!-- Servizio di immissione per tastiera fisica -->
+        <service
+            android:name=".inputmethod.PhysicalKeyboardInputMethodService"
+            android:label="${imeLabel}"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+
+        <!-- Attività helper per il riconoscimento vocale -->
+        <activity
+            android:name=".inputmethod.SpeechRecognitionActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.google.android.inputmethod.latin" />
+        
+        <!-- Attività helper per richiedere il permesso del microfono -->
+        <activity
+            android:name=".inputmethod.PermissionRequestActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="" />
+        
+        <!-- Attività per assegnare scorciatoie del launcher -->
+        <activity
+            android:name=".inputmethod.LauncherShortcutAssignmentActivity"
+            android:theme="@style/Theme.Pastiera.OverlayDialog"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:noHistory="true"
+            android:finishOnTaskLaunch="true" />
+
+        <activity
+            android:name=".inputmethod.QuickLauncherActivity"
+            android:theme="@style/Theme.Pastiera.QuickLauncherOverlay"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:noHistory="true"
+            android:finishOnTaskLaunch="true" />
+
+        <!-- Shizuku provider -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+    </application>
+
+</manifest>
