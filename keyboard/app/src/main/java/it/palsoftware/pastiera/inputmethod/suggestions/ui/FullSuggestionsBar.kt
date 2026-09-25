@@ -1,5 +1,6 @@
 package it.palsoftware.pastiera.inputmethod.suggestions.ui
 
+import it.palsoftware.pastiera.inputmethod.mutterboard.PillBar
 import android.content.Context
 import android.content.Intent
 import android.content.res.AssetManager
@@ -111,7 +112,8 @@ class FullSuggestionsBar(
     }
 
     private val targetHeightPx: Int
-        get() = dpToPx(BASE_HEIGHT_DP * (themeOverride?.suggestionsHeightScale ?: 1f).coerceIn(0.65f, 1.6f))
+        get() = if (PillBar.isEnabled(context)) dpToPx(PillBar.ROW_HEIGHT_DP)
+            else dpToPx(BASE_HEIGHT_DP * (themeOverride?.suggestionsHeightScale ?: 1f).coerceIn(0.65f, 1.6f))
 
     /**
      * Sets the assets and IME service class needed for subtype cycling.
@@ -960,6 +962,17 @@ class FullSuggestionsBar(
     }
 
     private fun buildSuggestionBackground(): StateListDrawable {
+        // Mutterboard: in the pill, words sit on the bar like Gboard's, with no
+        // box of their own; a press shows as a round highlight.
+        if (PillBar.isEnabled(context)) {
+            return StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_pressed), GradientDrawable().apply {
+                    setColor(themeOverride?.accent ?: PRESSED_BLUE)
+                    cornerRadius = targetHeightPx / 2f
+                })
+                addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            }
+        }
         val radiusRatio = themeOverride?.chromeCornerRadiusRatio ?: 0f
         val radius = (targetHeightPx * radiusRatio).coerceAtLeast(0f)
         val normalDrawable = GradientDrawable().apply {

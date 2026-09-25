@@ -26,6 +26,7 @@ class MutterboardApplication : Application() {
         SettingsManager.initializeAltShiftLayoutSwitchDefault(this)
         SettingsManager.enforceTitan2EliteRoundedCornersOnce(this)
         PillBar.applyOneRowLayoutOnce(this)
+        PillBar.applyIndicatorDefaultOnce(this)
         AppPackageChangeMonitor.register(this)
         ClicksPowerKeyboardController.initialize(this)
         Handler(Looper.getMainLooper()).post {

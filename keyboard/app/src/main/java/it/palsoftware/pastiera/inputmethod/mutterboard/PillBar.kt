@@ -20,7 +20,7 @@ import it.palsoftware.pastiera.SettingsManager
  */
 object PillBar {
     /** Gap between the pill and the left and right edges of the display. */
-    const val SIDE_GAP_DP = 8f
+    const val SIDE_GAP_DP = 16f
 
     /**
      * Gap under the pill. The navigation/gesture inset wins when it is taller,
@@ -28,10 +28,20 @@ object PillBar {
      */
     const val BOTTOM_GAP_DP = 8f
 
+    /**
+     * The row inside the pill. Pastiera's 36dp was sized for a strip under a
+     * second row; alone, it left the buttons cramped against the rim.
+     */
+    const val ROW_HEIGHT_DP = 44f
+
+    /** Space between the row and the pill's rim, top and bottom. */
+    const val INNER_PAD_DP = 4f
+
     private const val PREFS = "mutterboard_keyboard"
     private const val KEY_ENABLED = "pill_bar_enabled"
 
     private const val KEY_LAYOUT_APPLIED = "one_row_layout_applied_v1"
+    private const val KEY_INDICATORS_APPLIED = "one_row_indicators_applied_v1"
 
     /**
      * The pill is one row, like Gboard's: menu on the left, suggestions in the
@@ -46,6 +56,18 @@ object PillBar {
         SettingsManager.setPastierinaStatusBarSlotsLeft(context, listOf(SettingsManager.STATUS_BAR_BUTTON_HAMBURGER))
         SettingsManager.setPastierinaStatusBarSlotsRight(context, listOf(SettingsManager.STATUS_BAR_BUTTON_MICROPHONE))
         prefs.edit().putBoolean(KEY_LAYOUT_APPLIED, true).apply()
+    }
+
+    /**
+     * Shift/Alt/Ctrl show inside the row instead of on Pastiera's LED strip
+     * along the bottom edge: the strip is a full-width line, and the pill's
+     * rounded ends cut it into stubs.
+     */
+    fun applyIndicatorDefaultOnce(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_INDICATORS_APPLIED, false)) return
+        SettingsManager.setModifierIndicators(context, setOf(SettingsManager.MODIFIER_INDICATOR_STATUS_BAR))
+        prefs.edit().putBoolean(KEY_INDICATORS_APPLIED, true).apply()
     }
 
     fun isEnabled(context: Context): Boolean =

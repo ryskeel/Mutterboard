@@ -1,5 +1,6 @@
 package it.palsoftware.pastiera.inputmethod.statusbar
 
+import it.palsoftware.pastiera.inputmethod.mutterboard.PillBar
 import android.content.Context
 import android.widget.ImageView
 import android.widget.TextView
@@ -257,7 +258,8 @@ class StatusBarButtonHost(
                 heightPx = height,
                 normalColor = normalColor,
                 pressedColor = theme.pressedColor,
-                cornerRadiusRatio = theme.cornerRadiusRatio,
+                // Mutterboard: round buttons inside the round pill.
+                cornerRadiusRatio = if (PillBar.isEnabled(context)) 0.5f else theme.cornerRadiusRatio,
                 borderColor = theme.borderColor,
                 borderWidthPx = theme.borderWidthPx
             )

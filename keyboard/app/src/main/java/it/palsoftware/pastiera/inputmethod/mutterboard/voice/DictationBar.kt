@@ -228,20 +228,24 @@ class DictationBar(
     }
 
     // The words' container is padded clear of the row's side buttons; the
-    // strip takes the same margins so it sits exactly where the words were.
+    // strip takes the same margins so it sits where the words were. On the
+    // right it stops short: its cancel button would otherwise sit against the
+    // stop button, and a miss there throws the dictation away.
     private fun fitStripToWords() {
         val strip = strip ?: return
         val words = words() ?: return
         val params = strip.layoutParams as? FrameLayout.LayoutParams ?: return
-        if (params.leftMargin != words.paddingLeft || params.rightMargin != words.paddingRight) {
+        val right = words.paddingRight + dp(CANCEL_GAP_DP)
+        if (params.leftMargin != words.paddingLeft || params.rightMargin != right) {
             params.leftMargin = words.paddingLeft
-            params.rightMargin = words.paddingRight
+            params.rightMargin = right
             strip.layoutParams = params
         }
     }
 
     private companion object {
         const val TAG = "MutterboardDictation"
+        const val CANCEL_GAP_DP = 28f
     }
 
     private fun dp(v: Float) =
