@@ -274,7 +274,7 @@ class SuggestionControllerReplacementReadinessTest {
     }
 
     @Test
-    fun undoingACorrectionTeachesTheWord() {
+    fun undoingACorrectionOffersTheWordWithoutLearningIt() {
         val repository = FakeDictionaryRepository().apply { isReady = true }
         val controller = newController(
             repository,
@@ -285,18 +285,12 @@ class SuggestionControllerReplacementReadinessTest {
         val input = FakeInputConnection(context, "im")
 
         assertTrue(controller.onBoundaryKey(KeyEvent.KEYCODE_SPACE, null, input).replaced)
-        assertEquals("I'm ", input.text)
         assertTrue(controller.handleBackspaceUndo(KeyEvent.KEYCODE_DEL, input))
         assertEquals("im", input.text)
 
-        // Typing on is what used to wipe Pastiera's in-memory "rejected" list.
-        input.appendFromEditor(" ")
-        "im".forEach { ch ->
-            input.appendFromEditor(ch.toString())
-            controller.onCharacterCommitted(ch.toString(), input)
-        }
-        assertFalse(controller.onBoundaryKey(KeyEvent.KEYCODE_SPACE, null, input).replaced)
-        assertEquals("im im ", input.text)
+        // A stray backspace must not teach the keyboard a typo.
+        assertEquals("im", controller.pendingAddWord())
+        assertFalse(repository.isKnownWord("im"))
     }
 
     private fun newController(

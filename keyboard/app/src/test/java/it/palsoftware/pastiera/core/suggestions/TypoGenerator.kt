@@ -37,6 +37,7 @@ object TypoGenerator {
     fun droppedFirstLetter(word: String, random: Random): String? = word.substring(1)
 
     fun swappedPair(word: String, random: Random): String? {
+        if (word.length < 3) return null
         val i = 1 + random.nextInt(word.length - 2)
         if (word[i] == word[i + 1]) return null
         return word.substring(0, i) + word[i + 1] + word[i] + word.substring(i + 2)

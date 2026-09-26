@@ -347,10 +347,11 @@ session read it that way and wrote it into the backlog.
   `scripts/rebrand-keyboard-strings.py`; rerun it after picking nightly changes.
   The About line keeps the Pastiera credit on purpose.
 
-## Autocorrect (started 2026-09-25)
+## Autocorrect (2026-09-25 to 2026-09-26, done)
 
-On `feature/autocorrect`: make the physical keyboard's autocorrect and
-prediction as good as Gboard's.
+Made the physical keyboard's autocorrect and prediction as good as Gboard's.
+Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
+2026-09-26. What follows is why it works the way it does.
 
 - **Measure it, don't eyeball it.** `AutocorrectScorecardTest` loads the real
   English `.dict` the phone loads, misspells 400 common words the way a thumb
@@ -377,10 +378,11 @@ prediction as good as Gboard's.
   build drops capitalised words other than "I" from predictions.
 - **The bar's next-word order:** pairs you typed, then the bundled table, then
   Pastiera's most-common-words filler. English only.
-- **Undoing a correction teaches the word, on the first undo**, as in Gboard.
-  Pastiera offered an add-word button that vanished once the cursor moved and
-  otherwise forgot the undo at the next letter. A learned word also beats the
-  fixed contraction rules (`isUserWord`), or "id" would go on becoming "I'd".
+- **Undoing a correction offers the word; it does not learn it.** v1.24.0
+  learned on every undo, Gboard-style; one stray backspace put "impor" in Ry's
+  dictionary, where it outranked "import". Pastiera's add-word offer is the
+  behaviour Ry wants. A word he does add still beats the fixed contraction rules
+  (`isUserWord`).
 - **Apostrophe words are decided by context, not dropped.** "ill", "its",
   "lets", "cant", "wed", "shed", "shell", "id" are words and contractions both.
   Removing their rules (2026-09-25) made things worse: on held-out text the
@@ -391,8 +393,22 @@ prediction as good as Gboard's.
   bar). Ry types "ight", "imes", "cn"; neither kind was ever fixed before. Both
   are too ambiguous to fix well without the previous word, so judge them on the
   context scorecard, not the plain one.
-- Next: real-word typos ("an there" for "and there") need the word after, so
-  a correction would have to land retroactively.
+- **The bar while typing is `WordBarRanker`** (English): completions ranked by
+  the previous word, with the space bar's correction in the first (centre)
+  slot so the bar shows what space will do. Pastiera's list only fills gaps.
+  Held-out: the word is in the bar after one letter 52% of the time (Pastiera
+  16%). The typo fixer also blends in the table's everyday word counts
+  (`everydayWeight`), because the prose dictionary thinks "wired" beats "weird".
+- **Next-word prediction backs off from two words to one** ("I want" -> to):
+  33% in the top three on held-out text, from 26%. The table holds up to
+  40,000 two-word contexts; it is 4 MB.
+- **Real-word slips are fixed one word late** (`RealWordFixer`: "we where
+  going" -> were), in place, and an immediate backspace puts the word back.
+  The bar is set by clean text, not by catches: 0.6 correct words changed per
+  thousand for 42% of slips. Loosening it catches more and changes up to
+  fifteen per thousand; do not.
+- **All of these numbers are measured on Tatoeba**, the same kind of text the
+  table is built from, so Ry's own typing will score lower.
 
 ## The refiners are the heart of this app
 

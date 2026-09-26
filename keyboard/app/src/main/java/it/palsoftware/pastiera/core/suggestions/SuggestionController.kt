@@ -114,7 +114,17 @@ class SuggestionController(
             } else {
                 null
             },
-            bigrams = { if (currentLocale.language == "en") BigramModel.shared(appContext.assets) else null }
+            bigrams = { if (currentLocale.language == "en") BigramModel.shared(appContext.assets) else null },
+            realWordFixer = if (currentLocale.language == "en") {
+                RealWordFixer(
+                    dictionaryRepository,
+                    currentLocale,
+                    { BigramModel.shared(appContext.assets) },
+                    TypoModel(dictionaryRepository, currentLocale) { BigramModel.shared(appContext.assets) }
+                )
+            } else {
+                null
+            }
         )
     }
     
@@ -183,6 +193,9 @@ class SuggestionController(
     private val cursorDebounceMs = 120L
     private var pendingAddUserWord: String? = null
     private var previousCompletedWord: String? = null
+    // Mutterboard: the word before that, for two-word prediction; null when
+    // previousCompletedWord opened the sentence.
+    private var wordBeforePrevious: String? = null
     private var pendingInitialContextConnection: InputConnection? = null
     @Volatile private var pendingPrimaryRefreshAfterLoad: Boolean = false
     @Volatile private var pendingExtraRefreshAfterLoad: Boolean = false
@@ -213,6 +226,7 @@ class SuggestionController(
         suggestionJob?.cancel()
 
         val wordSnapshot = word
+        val previousSnapshot = previousCompletedWord
         val localeSnapshot = currentLocale
         val layoutSnapshot = keyboardLayoutProvider()
         val primaryRepository = dictionaryRepository
@@ -226,7 +240,7 @@ class SuggestionController(
         }
 
         suggestionJob = suggestionScope.launch {
-            val primary = if (primaryRepository.isReady) {
+            val pastiera = if (primaryRepository.isReady) {
                 SuggestionEngine(primaryRepository, locale = localeSnapshot, debugLogging = debugLogging).apply {
                     setKeyboardLayout(layoutSnapshot)
                 }.suggest(
@@ -238,6 +252,24 @@ class SuggestionController(
                 )
             } else {
                 emptyList()
+            }
+            // Mutterboard: English ranks by the previous word and leads with
+            // the space bar's correction (WordBarRanker); Pastiera's list only
+            // fills any slots it leaves.
+            val primary = if (primaryRepository.isReady && localeSnapshot.language == "en") {
+                val ranked = WordBarRanker(
+                    primaryRepository,
+                    localeSnapshot,
+                    { BigramModel.shared(appContext.assets) },
+                    TypoModel(primaryRepository, localeSnapshot) { BigramModel.shared(appContext.assets) }
+                ).suggest(wordSnapshot, previousSnapshot, settings.maxSuggestions)
+                val seen = ranked.mapTo(HashSet()) { it.candidate.lowercase(localeSnapshot) }
+                // Scores below the ranker's, so the merge's sort keeps the order.
+                val fill = pastiera.filter { seen.add(it.candidate.lowercase(localeSnapshot)) }
+                    .mapIndexed { i, result -> result.copy(score = -1.0 - i) }
+                (ranked + fill).take(settings.maxSuggestions)
+            } else {
+                pastiera
             }
 
             val extraSuggestions = extraRepositories.flatMap { (locale, repository) ->
@@ -542,13 +574,10 @@ class SuggestionController(
         if (!isEnabled()) return false
         val undone = autoReplaceController.handleBackspaceUndo(keyCode, inputConnection)
         if (undone) {
-            // Mutterboard: undoing a correction teaches the word, as in Gboard.
-            // Pastiera offered an add-word button that vanished once the cursor
-            // left the word, and otherwise forgot the undo at the next letter,
-            // so a name was "fixed" again one sentence later.
-            val original = autoReplaceController.consumeLastUndoOriginalWord()
-            if (original != null && original.any { it.isLetter() }) addUserWord(original)
-            pendingAddUserWord = null
+            // An undo offers the word; it does not learn it. Learning on every
+            // undo (v1.24.0) put a stray backspace's "impor" into the user
+            // dictionary, where it then outranked "import" in the bar.
+            pendingAddUserWord = autoReplaceController.consumeLastUndoOriginalWord()
         }
         return undone
     }
@@ -595,6 +624,7 @@ class SuggestionController(
 
         when {
             cleanWord != null && isSoftPredictionBoundary(boundaryChar) -> {
+                wordBeforePrevious = if (sentenceStartPending) null else previousCompletedWord
                 previousCompletedWord = cleanWord
                 sentenceStartPending = false
                 publishNextWordPredictions(cleanWord)
@@ -652,7 +682,8 @@ class SuggestionController(
         if (currentLocale.language != "en") return predictions
         val bigrams = BigramModel.shared(appContext.assets) ?: return predictions
         val seen = predictions.mapTo(HashSet()) { it.candidate.lowercase(currentLocale) }
-        val bundled = bigrams.continuations(previousWord, settings.maxSuggestions * 2)
+        val twoBack = if (previousWord != null && previousWord == previousCompletedWord) wordBeforePrevious else null
+        val bundled = bigrams.continuations(twoBack, previousWord, settings.maxSuggestions * 2)
             .filter { (word, _) -> seen.add(word.lowercase(currentLocale)) }
             .map { (word, count) ->
                 SuggestionResult(

@@ -22,6 +22,91 @@ import kotlin.random.Random
 class ContextScorecardTest {
 
     /**
+     * Slips that land on another real word ("an there"), judged once the next
+     * word is typed. The number that matters is the last one: correct words
+     * changed per thousand, in clean text.
+     */
+    private fun realWords(repository: DictionaryRepository, bigrams: BigramModel): String {
+        val typo = TypoModel(repository, Locale.ENGLISH) { bigrams }
+        val random = Random(20260926)
+        val sentences = EnglishFixture.heldOutSentences().take(4000)
+        data class Slip(val before: String?, val typed: String, val after: String, val intended: String)
+        val slips = sentences.mapNotNull { sentence ->
+            val tokens = EnglishFixture.tokens(sentence)
+            if (tokens.size < 3) return@mapNotNull null
+            val i = 1 + random.nextInt(tokens.size - 2)
+            val word = tokens[i]
+            if (word.length < 2 || !word.all { it in 'a'..'z' }) return@mapNotNull null
+            repeat(12) {
+                val (t, _) = TypoGenerator.any(word, random) ?: return@repeat
+                if (t != word && repository.isKnownWord(t)) return@mapNotNull Slip(tokens[i - 1], t, tokens[i + 1], word)
+            }
+            null
+        }
+        val clean = sentences.drop(2000).flatMap { sentence ->
+            val tokens = EnglishFixture.tokens(sentence)
+            (1 until tokens.size - 1).map { i -> Triple(tokens[i - 1], tokens[i], tokens[i + 1]) }
+        }
+        val out = StringBuilder("real-word slips (${slips.size}), fixed/wrong, and correct words changed per 1000 (${clean.size} words):\n")
+        val grid = if (System.getenv("SCORECARD_SWEEP") == "1") {
+            listOf(1.0, 1.5, 2.0).flatMap { w -> listOf(3.0, 4.0, 5.0, 6.0, 8.0).map { w to it } }
+        } else listOf(2.0 to 8.0)
+        for ((weight, margin) in grid) {
+            val fixer = RealWordFixer(repository, Locale.ENGLISH, { bigrams }, typo, weight, margin)
+            var fixed = 0; var wrong = 0
+            for (s in slips) {
+                val out2 = fixer.fix(s.before, s.typed, s.after)
+                if (out2?.equals(s.intended, ignoreCase = true) == true) fixed++ else if (out2 != null) wrong++
+            }
+            val changed = clean.filter { (b, w, a) -> fixer.fix(b, w, a) != null }
+            out.append("  slip weight %.1f margin %.0f: fixed %d%% wrong %d%%, clean words changed %.1f/1000  e.g. %s\n".format(
+                weight, margin, fixed * 100 / slips.size, wrong * 100 / slips.size, changed.size * 1000.0 / clean.size,
+                changed.take(4).joinToString(" ") { (b, w, a) -> "[$b $w $a]" }))
+        }
+        return out.toString()
+    }
+
+    /**
+     * The bar while a word is being typed: after how many letters does the
+     * word the writer used show among its three suggestions? "Saved" is the
+     * share of letters a tap on it would have spared.
+     */
+    private fun completions(repository: DictionaryRepository, bigrams: BigramModel): String {
+        val pastiera = SuggestionEngine(repository, Locale.ENGLISH)
+        val ranker = WordBarRanker(repository, Locale.ENGLISH, { bigrams }, TypoModel(repository, Locale.ENGLISH) { bigrams })
+        val engines = linkedMapOf<String, (String, String?) -> List<String>>(
+            "Pastiera" to { prefix, _ -> pastiera.suggest(prefix, 3, true, false, false).map { it.candidate } },
+            "Mutterboard" to { prefix, previous -> ranker.suggest(prefix, previous, 3).map { it.candidate } },
+        )
+        val out = StringBuilder("while typing (top 3 in the bar):\n")
+        val sentences = EnglishFixture.heldOutSentences().take(1500)
+        for ((name, suggest) in engines) {
+            var words = 0; var letters = 0; var saved = 0
+            val foundBy = IntArray(4)
+            for (sentence in sentences) {
+                val tokens = EnglishFixture.tokens(sentence)
+                for (i in tokens.indices) {
+                    val word = tokens[i]
+                    if (word.length < 3) continue
+                    val previous = if (i == 0) null else tokens[i - 1]
+                    words++; letters += word.length
+                    for (k in 1 until word.length) {
+                        val offered = suggest(word.substring(0, k), previous).map { it.lowercase(Locale.ROOT) }
+                        if (word.lowercase(Locale.ROOT) in offered) {
+                            saved += word.length - k
+                            if (k <= 3) for (j in k..3) foundBy[j]++
+                            break
+                        }
+                    }
+                }
+            }
+            out.append("  %-11s by 1 letter %2d%%, by 2 %2d%%, by 3 %2d%%; letters saved %2d%% (%d words)\n".format(
+                name, foundBy[1] * 100 / words, foundBy[2] * 100 / words, foundBy[3] * 100 / words, saved * 100 / letters, words))
+        }
+        return out.toString()
+    }
+
+    /**
      * Words that are also apostrophe-less contractions. Every use of either
      * form in the held-out text is typed without its apostrophe, and the
      * keyboard has to put back exactly the ones the writer meant.
@@ -78,9 +163,7 @@ class ContextScorecardTest {
         val report = StringBuilder("\n=== Context scorecard (${cases.size} typos in held-out sentences) ===\n")
         val shipped = TypoModel.Tuning()
         val tunings = if (System.getenv("SCORECARD_SWEEP") == "1") {
-            listOf(0.0, 0.5, 1.0, 2.0).flatMap { dropped ->
-                listOf(3.0, 4.0, 5.0, 99.0).map { two -> shipped.copy(firstLetterDropped = dropped, twoLetterThreshold = two) }
-            }
+            listOf(0.0, 0.25, 0.5, 0.75, 0.9).map { shipped.copy(everydayWeight = it) }
         } else {
             listOf(shipped.copy(contextWeight = 0.0), shipped)
         }
@@ -97,8 +180,8 @@ class ContextScorecardTest {
                 }
                 return "%d%%/%d%%".format(f * 100 / subset.size.coerceAtLeast(1), w * 100 / subset.size.coerceAtLeast(1))
             }
-            report.append("dropped-first %.1f, two-letter %.0f: first-letter drops %s (%d), two-letter %s (%d)\n".format(
-                tuning.firstLetterDropped, tuning.twoLetterThreshold, rate(firstDropped), firstDropped.size, rate(twoLetter), twoLetter.size))
+            report.append("everyday weight %.2f: all %s, first-letter drops %s, two-letter %s\n".format(
+                tuning.everydayWeight, rate(cases), rate(firstDropped), rate(twoLetter)))
             var fixed = 0; var wrong = 0
             val wrongExamples = mutableListOf<String>()
             for (c in cases) {
@@ -119,22 +202,28 @@ class ContextScorecardTest {
 
         // Next-word prediction: is the word the writer actually used among the
         // three the bar would offer, given only the word before it?
-        var positions = 0; var top1 = 0; var top3 = 0
-        for (sentence in sentences) {
-            val tokens = EnglishFixture.tokens(sentence)
-            for (i in tokens.indices) {
-                val previous = if (i == 0) null else tokens[i - 1]
-                val offered = bigrams.continuations(previous).take(3).map { it.first.lowercase(Locale.ROOT) }
-                val actual = tokens[i].lowercase(Locale.ROOT)
-                positions++
-                if (offered.firstOrNull() == actual) top1++
-                if (actual in offered) top3++
+        for (twoWords in listOf(false, true)) {
+            var positions = 0; var top1 = 0; var top3 = 0
+            for (sentence in sentences) {
+                val tokens = EnglishFixture.tokens(sentence)
+                for (i in tokens.indices) {
+                    val previous = if (i == 0) null else tokens[i - 1]
+                    val twoBack = if (i < 2) null else tokens[i - 2]
+                    val offered = (if (twoWords) bigrams.continuations(twoBack, previous, 3) else bigrams.continuations(previous, 3))
+                        .map { it.first.lowercase(Locale.ROOT) }
+                    val actual = tokens[i].lowercase(Locale.ROOT)
+                    positions++
+                    if (offered.firstOrNull() == actual) top1++
+                    if (actual in offered) top3++
+                }
             }
+            report.append("next word from %s: in the bar's first slot %d%%, anywhere in its three %d%% (%d positions)\n".format(
+                if (twoWords) "two words" else "one word", top1 * 100 / positions, top3 * 100 / positions, positions))
         }
-        report.append("next word: in the bar's first slot %d%%, anywhere in its three %d%% (%d positions)\n".format(
-            top1 * 100 / positions, top3 * 100 / positions, positions))
 
         report.append(contractions(bigrams))
+        report.append(completions(repository, bigrams))
+        report.append(realWords(repository, bigrams))
         println(report)
         File("build/context-scorecard.txt").writeText(report.toString())
     }
