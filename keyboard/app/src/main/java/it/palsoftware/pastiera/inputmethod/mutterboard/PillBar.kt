@@ -37,11 +37,24 @@ object PillBar {
     /** Space between the row and the pill's rim, top and bottom. */
     const val INNER_PAD_DP = 4f
 
+    /**
+     * Corner radius once the bar grows past one row (symbols, emoji,
+     * clipboard). Half the height made those pages an oval that cut off their
+     * corner keys; they get a card's corners instead.
+     */
+    const val TALL_RADIUS_DP = 16f
+
+    /** Radius for an outline of this height: a pill for one row, a card for more. */
+    fun radiusFor(context: Context, heightPx: Int): Float {
+        val oneRow = dp(context, ROW_HEIGHT_DP + INNER_PAD_DP * 2)
+        return if (heightPx <= oneRow * 1.25f) heightPx / 2f else dp(context, TALL_RADIUS_DP).toFloat()
+    }
+
     private const val PREFS = "mutterboard_keyboard"
     private const val KEY_ENABLED = "pill_bar_enabled"
 
     private const val KEY_LAYOUT_APPLIED = "one_row_layout_applied_v1"
-    private const val KEY_INDICATORS_APPLIED = "one_row_indicators_applied_v1"
+    private const val KEY_INDICATORS_APPLIED = "one_row_indicators_applied_v2"
 
     /**
      * The pill is one row, like Gboard's: menu on the left, suggestions in the
@@ -59,14 +72,15 @@ object PillBar {
     }
 
     /**
-     * Shift/Alt/Ctrl show inside the row instead of on Pastiera's LED strip
-     * along the bottom edge: the strip is a full-width line, and the pill's
-     * rounded ends cut it into stubs.
+     * Shift/Alt/Ctrl show in the menu row, not on the bar. Pastiera's LED strip
+     * along the bottom edge is a full-width line the pill's ends cut into
+     * stubs, and the in-row indicator (v1) put a Shift badge beside the menu
+     * button at the start of every sentence, where auto-capitalisation arms it.
      */
     fun applyIndicatorDefaultOnce(context: Context) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_INDICATORS_APPLIED, false)) return
-        SettingsManager.setModifierIndicators(context, setOf(SettingsManager.MODIFIER_INDICATOR_STATUS_BAR))
+        SettingsManager.setModifierIndicators(context, setOf(SettingsManager.MODIFIER_INDICATOR_MENU_BAR))
         prefs.edit().putBoolean(KEY_INDICATORS_APPLIED, true).apply()
     }
 

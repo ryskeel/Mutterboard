@@ -243,9 +243,16 @@ class HamburgerMenuView(
             val child = rowView.getChildAt(index)
             val params = (child.layoutParams as? LinearLayout.LayoutParams)
                 ?: LinearLayout.LayoutParams(buttonWidth, buttonHeight)
+            val marginEnd = if (index == totalButtons - 1) 0 else spacing
+            // Mutterboard: this runs from a layout listener, and reassigning
+            // unchanged params requests another layout - an endless loop that
+            // logged ~5,600 relayouts in two seconds with the menu open.
+            if (params.width == buttonWidth && params.height == buttonHeight &&
+                params.marginEnd == marginEnd && child.layoutParams === params
+            ) continue
             params.width = buttonWidth
             params.height = buttonHeight
-            params.marginEnd = if (index == totalButtons - 1) 0 else spacing
+            params.marginEnd = marginEnd
             child.layoutParams = params
         }
         currentButtons.forEach { hosted ->

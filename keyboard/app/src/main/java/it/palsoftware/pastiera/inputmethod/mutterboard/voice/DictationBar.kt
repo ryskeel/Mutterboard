@@ -149,6 +149,7 @@ class DictationBar(
         row.addView(strip, 1, strip.layoutParams)
         fitStripToWords()
         strip.onCancel = onCancel
+        strip.setInk(inkFor((bar.background as? ColorDrawable)?.color ?: backgroundBefore.let { (it as? ColorDrawable)?.color } ?: Color.BLACK))
         strip.setCaption(null)
         strip.setLevel(0f)
         strip.setPosture(DictationStripView.Posture.LISTENING)
@@ -227,6 +228,13 @@ class DictationBar(
         suggestionsVisibilityBefore = null
     }
 
+    // Dark ink on a light theme's bar, white on a dark one; the wave was
+    // white on every theme and all but vanished on the light ones.
+    private fun inkFor(background: Int): Int {
+        val luminance = (0.299 * Color.red(background) + 0.587 * Color.green(background) + 0.114 * Color.blue(background)) / 255
+        return if (luminance > 0.55) Color.rgb(0x1F, 0x1F, 0x1F) else Color.WHITE
+    }
+
     // The words' container is padded clear of the row's side buttons; the
     // strip takes the same margins so it sits where the words were. On the
     // right it stops short: its cancel button would otherwise sit against the
@@ -235,9 +243,12 @@ class DictationBar(
         val strip = strip ?: return
         val words = words() ?: return
         val params = strip.layoutParams as? FrameLayout.LayoutParams ?: return
-        val right = words.paddingRight + dp(CANCEL_GAP_DP)
-        if (params.leftMargin != words.paddingLeft || params.rightMargin != right) {
-            params.leftMargin = words.paddingLeft
+        // Pastiera insets the words with margins, not padding.
+        val inset = words.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+        val left = inset.leftMargin + words.paddingLeft
+        val right = inset.rightMargin + words.paddingRight + dp(CANCEL_GAP_DP)
+        if (params.leftMargin != left || params.rightMargin != right) {
+            params.leftMargin = left
             params.rightMargin = right
             strip.layoutParams = params
         }

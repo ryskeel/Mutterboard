@@ -1,5 +1,6 @@
 package it.palsoftware.pastiera.inputmethod.statusbar
 
+import android.graphics.Color
 import it.palsoftware.pastiera.inputmethod.mutterboard.PillBar
 import android.content.Context
 import android.widget.ImageView
@@ -114,6 +115,8 @@ class StatusBarButtonHost(
         if (hosted.container is FrameLayout) {
             val params = (hosted.button.layoutParams as? FrameLayout.LayoutParams)
                 ?: FrameLayout.LayoutParams(width, height)
+            // Mutterboard: see HamburgerMenuView.updateButtonSizes.
+            if (params.width == width && params.height == height && hosted.button.layoutParams === params) return
             params.width = width
             params.height = height
             hosted.button.layoutParams = params
@@ -253,7 +256,11 @@ class StatusBarButtonHost(
             ?: fallbackHeight?.takeIf { it > 0 }
         if (height != null) {
             val active = state is ButtonState.MinimalUiState && state.isActive
-            val normalColor = recordingColors[view] ?: if (active) theme.pressedColor else theme.normalColor
+            // Mutterboard: in the pill a button is its icon, like Gboard's; the
+            // round fill only shows while pressed, active or recording.
+            val bare = PillBar.isEnabled(context)
+            val normalColor = recordingColors[view] ?: if (active) theme.pressedColor
+                else if (bare) Color.TRANSPARENT else theme.normalColor
             val background = StatusBarButtonStyles.createButtonDrawable(
                 heightPx = height,
                 normalColor = normalColor,
@@ -261,7 +268,7 @@ class StatusBarButtonHost(
                 // Mutterboard: round buttons inside the round pill.
                 cornerRadiusRatio = if (PillBar.isEnabled(context)) 0.5f else theme.cornerRadiusRatio,
                 borderColor = theme.borderColor,
-                borderWidthPx = theme.borderWidthPx
+                borderWidthPx = if (bare) 0 else theme.borderWidthPx
             )
             view.background = if (
                 outerEdges[view] != null &&

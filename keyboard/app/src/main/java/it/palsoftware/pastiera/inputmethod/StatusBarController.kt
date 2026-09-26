@@ -3920,7 +3920,7 @@ class StatusBarController(
                 override fun getOutline(view: View, outline: Outline) {
                     val right = view.width - insets.right
                     val bottom = view.height - insets.bottom
-                    val radius = (bottom - insets.top) / 2f
+                    val radius = it.palsoftware.pastiera.inputmethod.mutterboard.PillBar.radiusFor(context, bottom - insets.top)
                     outline.setRoundRect(insets.left, insets.top, right, bottom, radius)
                 }
             }

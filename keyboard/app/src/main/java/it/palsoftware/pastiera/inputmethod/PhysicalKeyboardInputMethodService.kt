@@ -94,8 +94,8 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
         private const val MODIFIER_ICON_ACTIVE = 1
         private const val MODIFIER_ICON_LOCKED = 2
         private const val DISCORD_PACKAGE_NAME = "com.discord"
-        private val MESSENGER_ENTER_BEHAVIOR_PACKAGES = setOf(
         private const val FACEBOOK_MESSENGER_PACKAGE_NAME = "com.facebook.orca"
+        private val MESSENGER_ENTER_BEHAVIOR_PACKAGES = setOf(
             "com.whatsapp",
             CompatibilityWorkarounds.TELEGRAM_PACKAGE_NAME,
             "org.thoughtcrime.securesms",
