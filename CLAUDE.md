@@ -303,7 +303,8 @@ session read it that way and wrote it into the backlog.
 - **The bar is a one-row pill (`mutterboard/PillBar`).** Menu left,
   suggestions middle, mic right: nightly's Pastierina presentation with its
   buttons chosen, written once on first run so a later choice in settings
-  sticks. The pill is an outline clip inset from the sides and bottom, and it
+  sticks. The pill is inset from the sides, top and bottom and sits on a full-width strip
+  in the theme's key grey (see-through gaps showed Messages' window colour), and it
   switches nightly's Titan 2 Elite traced corners off entirely - they never
   sat flush, and the app showed through slivers at the edges. Dictation covers
   only the words, never the row: the mic in that row is the stop button.

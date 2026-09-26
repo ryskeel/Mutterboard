@@ -15,8 +15,10 @@ import it.palsoftware.pastiera.SettingsManager
  * is on the Titan corner code is switched off entirely
  * (SettingsManager.getTitan2EliteRoundedCornerInsetsEnabled).
  *
- * The chrome clips to the outline and pads its content by the same insets, so
- * everything outside the pill is transparent and nothing inside is cut off.
+ * The chrome clips its content to the pill and pads it by the same insets, so
+ * nothing inside is cut off. Outside the pill it paints a strip in the theme's
+ * key grey: left see-through, the gaps showed whatever the app had behind the
+ * keyboard, which in Messages is a grey slab of its own window.
  */
 object PillBar {
     /** Gap between the pill and the left and right edges of the display. */
@@ -33,6 +35,9 @@ object PillBar {
      * second row; alone, it left the buttons cramped against the rim.
      */
     const val ROW_HEIGHT_DP = 44f
+
+    /** Gap above the pill, so it sits on the backdrop strip rather than at its edge. */
+    const val TOP_GAP_DP = 6f
 
     /** Space between the row and the pill's rim, top and bottom. */
     const val INNER_PAD_DP = 4f
