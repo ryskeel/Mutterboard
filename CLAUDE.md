@@ -290,9 +290,10 @@ session read it that way and wrote it into the backlog.
   the library cannot see the app module) and leaves everything else alone.
 - **Nightly's last visibility rewrite (`d0ea564`) is reverted.** It replaced
   the show/hide logic and the insets apps use to make room for the bar, the
-  day before upstream froze. With it, Messages and Gmail stopped lifting their
-  text field above the bar, and typing on Niagara's home screen sometimes
-  stopped after one letter. If either comes back, this is not the cause.
+  day before upstream froze, and is the suspect (not yet confirmed) for two
+  regressions: Messages and Gmail not lifting their text field above the bar,
+  and typing on Niagara's home screen sometimes stopping after one letter. If
+  either survives the revert, look elsewhere.
 - **Nightly's `PastieraApplication` does not run.** An app has one
   Application, so `MutterboardApplication` repeats its startup calls; check it
   after moving the pin. Its software-keyboard-mode launcher shortcut is left
