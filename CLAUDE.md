@@ -307,6 +307,9 @@ session read it that way and wrote it into the backlog.
   switches nightly's Titan 2 Elite traced corners off entirely - they never
   sat flush, and the app showed through slivers at the edges. Dictation covers
   only the words, never the row: the mic in that row is the stop button.
+  Shift/Alt/Ctrl/Sym light the LED strip along the pill's bottom edge, inset
+  (`LED_SIDE_INSET_DP`) so the round ends do not clip it. Moving them into the
+  menu row instead left Ry unable to see what was armed.
 - **Mutterboard is the host, Pastiera is the guest.** Its source sits under
   `keyboard/` (the name is ours to pick; GPL only asks that the copyright
   notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag and then from nightly `474fa10`,

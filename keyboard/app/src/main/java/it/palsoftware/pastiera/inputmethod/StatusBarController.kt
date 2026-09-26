@@ -675,6 +675,8 @@ class StatusBarController(
                         val bottom = max(pill.dp(context, pill.BOTTOM_GAP_DP), bottomInset)
                         val inner = pill.dp(context, pill.INNER_PAD_DP)
                         (view as? ImeChromeLayout)?.pillInsetsPx = android.graphics.Rect(side, 0, side, bottom)
+                        val ledInset = pill.dp(context, pill.LED_SIDE_INSET_DP)
+                        ledStatusView.getView()?.let { it.setPadding(ledInset, it.paddingTop, ledInset, it.paddingBottom) }
                         view.updatePadding(
                             left = baseLeftPadding + side + inner,
                             top = inner,
@@ -683,6 +685,7 @@ class StatusBarController(
                         )
                     } else {
                         (view as? ImeChromeLayout)?.pillInsetsPx = null
+                        ledStatusView.getView()?.let { it.setPadding(0, it.paddingTop, 0, it.paddingBottom) }
                         view.updatePadding(
                             left = baseLeftPadding,
                             right = baseRightPadding,
