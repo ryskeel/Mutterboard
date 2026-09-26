@@ -41,23 +41,7 @@ class AutocorrectScorecardTest {
         val total get() = fixed + wrong + missed
     }
 
-    private fun englishRepository(context: Context): AndroidDictionaryRepository {
-        val repository = AndroidDictionaryRepository(
-            context = context,
-            assets = context.assets,
-            userDictionaryStore = UserDictionaryStore(),
-            baseLocale = Locale.ENGLISH
-        )
-        // The compiled .dict is what the phone loads; the JSON beside it is only
-        // read here for the list of common words to misspell.
-        kotlinx.coroutines.runBlocking { repository.loadSerializedFromFile(assetFile("dictionaries_serialized/en_base.dict")) }
-        val extras = repository.loadLocaleExtras()
-        check(extras.isNotEmpty()) { "en_extra.json did not load" }
-        repository.index(extras, keepExisting = true)
-        repository.addToSymSpell(extras)
-        repository.isReady = true
-        return repository
-    }
+    private fun englishRepository(context: Context) = EnglishFixture.repository(context)
 
     /** Grid over the tuning knobs; prints one line per combination. Opt-in: SCORECARD_SWEEP=1 */
     @Test
@@ -180,10 +164,7 @@ class AutocorrectScorecardTest {
         }
     }
 
-    private fun assetFile(path: String): File = listOf(
-        File("src/main/assets/common/$path"),
-        File("keyboard/app/src/main/assets/common/$path")
-    ).first { it.exists() }
+    private fun assetFile(path: String) = EnglishFixture.assetFile(path)
 
     private fun generateTypos(entries: List<DictionaryEntry>, repository: DictionaryRepository): List<Case> {
         val random = Random(20260925)
@@ -197,58 +178,15 @@ class AutocorrectScorecardTest {
         val out = mutableListOf<Case>()
         for (word in words) {
             val candidates = listOfNotNull(
-                neighbourSwap(word, random)?.let { Case(it, word, "neighbour key") },
-                extraNeighbour(word, random)?.let { Case(it, word, "extra key") },
-                droppedLetter(word, random)?.let { Case(it, word, "dropped letter") },
-                swappedPair(word, random)?.let { Case(it, word, "swapped pair") },
-                doubleLetter(word, random)?.let { Case(it, word, "double letter") },
+                TypoGenerator.neighbourSwap(word, random)?.let { Case(it, word, "neighbour key") },
+                TypoGenerator.extraNeighbour(word, random)?.let { Case(it, word, "extra key") },
+                TypoGenerator.droppedLetter(word, random)?.let { Case(it, word, "dropped letter") },
+                TypoGenerator.swappedPair(word, random)?.let { Case(it, word, "swapped pair") },
+                TypoGenerator.doubleLetter(word, random)?.let { Case(it, word, "double letter") },
             )
             out += candidates.filter { !repository.isKnownWord(it.typed) }
         }
         return out
-    }
-
-    // Standard QWERTY grid, staggered like the Titan's hardware keys.
-    private val rows = listOf("qwertyuiop", "asdfghjkl", "zxcvbnm")
-    private val neighbours: Map<Char, List<Char>> by lazy {
-        val pos = mutableMapOf<Char, Pair<Double, Double>>()
-        rows.forEachIndexed { r, row -> row.forEachIndexed { c, ch -> pos[ch] = r.toDouble() to c + r * 0.5 } }
-        pos.mapValues { (ch, p) ->
-            pos.filter { (other, q) ->
-                other != ch && kotlin.math.abs(p.first - q.first) <= 1.0 && kotlin.math.abs(p.second - q.second) <= 1.0
-            }.keys.toList()
-        }
-    }
-
-    private fun neighbourSwap(word: String, random: Random): String? {
-        val i = 1 + random.nextInt(word.length - 1)
-        val n = neighbours[word[i]] ?: return null
-        return word.substring(0, i) + n.random(random) + word.substring(i + 1)
-    }
-
-    private fun extraNeighbour(word: String, random: Random): String? {
-        val i = random.nextInt(word.length)
-        val n = neighbours[word[i]] ?: return null
-        val at = i + 1
-        return word.substring(0, at) + n.random(random) + word.substring(at)
-    }
-
-    private fun droppedLetter(word: String, random: Random): String? {
-        val i = 1 + random.nextInt(word.length - 1)
-        return word.removeRange(i, i + 1)
-    }
-
-    private fun swappedPair(word: String, random: Random): String? {
-        val i = 1 + random.nextInt(word.length - 2)
-        if (word[i] == word[i + 1]) return null
-        return word.substring(0, i) + word[i + 1] + word[i] + word.substring(i + 2)
-    }
-
-    private fun doubleLetter(word: String, random: Random): String? {
-        val doubled = (0 until word.length - 1).firstOrNull { word[it] == word[it + 1] }
-        if (doubled != null) return word.removeRange(doubled, doubled + 1)
-        val i = 1 + random.nextInt(word.length - 1)
-        return word.substring(0, i + 1) + word[i] + word.substring(i + 1)
     }
 
     private val handWritten = listOf(

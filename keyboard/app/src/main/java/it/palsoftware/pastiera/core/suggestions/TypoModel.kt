@@ -22,7 +22,9 @@ import kotlin.math.abs
 class TypoModel(
     private val repository: DictionaryRepository,
     private val locale: Locale,
-    internal val tuning: Tuning = Tuning()
+    internal val tuning: Tuning = Tuning(),
+    // Null while the bundled table loads, and for languages without one.
+    private val bigrams: () -> BigramModel? = { null }
 ) {
 
     data class Tuning(
@@ -43,15 +45,29 @@ class TypoModel(
         // dictionary does not know is almost always a typo ("typong").
         val perLetterRelief: Double = 0.5,
         val minThreshold: Double = 1.0,
+        // Weight on how well a candidate follows the previous word. Settles the
+        // close calls frequency cannot: "the tem" is team, "for tem" is them.
+        val contextWeight: Double = 0.5,
     )
 
     data class Correction(val word: String, val score: Double, val runnerUpScore: Double?)
 
-    fun correct(typed: String): Correction? {
+    // The previous word picks between candidates, and a good fit can make a
+    // correction confident enough; a poor fit never vetoes one. Letting it veto
+    // cost a fifth of all fixes on the context scorecard, because a pair the
+    // table has not seen reads as a poor fit.
+    private class Scored(val word: String, val rank: Double, val confidence: Double)
+
+    /**
+     * [previousWord] is the word before this one, or null at the start of a
+     * sentence; see [BigramModel.SENTENCE_START].
+     */
+    fun correct(typed: String, previousWord: String? = null): Correction? {
         if (!repository.isReady) return null
         val input = WordNormalization.normalizeForSuggestion(typed, locale)
         if (input.length < MIN_LENGTH || input.any { !it.isLetter() && it != '\'' }) return null
 
+        val context = if (tuning.contextWeight > 0.0) bigrams() else null
         val scored = repository.symSpellLookup(input, maxSuggestions = 64)
             .asSequence()
             .filter { it.distance > 0 }
@@ -64,15 +80,16 @@ class TypoModel(
                 val cost = channelCost(input, item.term)
                 if (cost >= tuning.maxCost) return@mapNotNull null
                 var score = logPrior(entry) - cost
+                val fit = if (context != null) tuning.contextWeight * context.contextScore(previousWord, entry.word) else 0.0
                 // A lowercase word turning into a capitalised one is usually a
                 // name the user was not typing.
                 if (typed.firstOrNull()?.isLowerCase() == true && entry.word.firstOrNull()?.isUpperCase() == true) {
                     score -= tuning.properNounPenalty
                 }
-                entry.word to score
+                Scored(entry.word, rank = score + fit, confidence = score + maxOf(0.0, fit))
             }
-            .sortedByDescending { it.second }
-            .distinctBy { it.first.lowercase(locale) }
+            .sortedByDescending { it.rank }
+            .distinctBy { it.word.lowercase(locale) }
             .take(2)
             .toList()
 
@@ -82,8 +99,8 @@ class TypoModel(
         } else {
             (tuning.threshold - tuning.perLetterRelief * (input.length - 4)).coerceAtLeast(tuning.minThreshold)
         }
-        if (best.second < threshold) return null
-        return Correction(best.first, best.second, scored.getOrNull(1)?.second)
+        if (best.confidence < threshold) return null
+        return Correction(best.word, best.rank, scored.getOrNull(1)?.rank)
     }
 
     // The bundled dictionaries store frequency on a log scale: across English,

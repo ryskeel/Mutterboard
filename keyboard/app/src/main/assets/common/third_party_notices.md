@@ -92,3 +92,14 @@ documentation trail, so their exact upstream corpus IDs are not fully reconstruc
 The downloadable Greek base dictionary distributed through the companion `pastiera-dict`
 repository is derived from the top frequency-ranked, letter-only entries in the eellak
 Greek spelling dictionary with Pastiera-specific filtering, truncation, and normalization.
+
+## Tatoeba
+
+- Project: Tatoeba, a collection of sentences and translations
+- Source: https://tatoeba.org (English sentence export, downloaded 2026-09-25)
+- License: CC BY 2.0 FR (https://creativecommons.org/licenses/by/2.0/fr/)
+
+`assets/common/dictionaries/en_bigrams.tsv`, Mutterboard's English word-pair
+table for next-word prediction and autocorrect, is counted from Tatoeba's
+English sentences by `scripts/build-english-bigrams.py`, with names removed
+from the predictions and rare pairs pruned.

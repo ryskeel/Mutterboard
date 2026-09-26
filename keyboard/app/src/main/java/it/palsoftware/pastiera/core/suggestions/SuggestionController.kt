@@ -108,7 +108,12 @@ class SuggestionController(
             },
             // Tuned and measured on English (AutocorrectScorecardTest). Other
             // languages keep Pastiera's corrector until they are measured too.
-            typoModel = if (currentLocale.language == "en") TypoModel(dictionaryRepository, currentLocale) else null
+            typoModel = if (currentLocale.language == "en") {
+                BigramModel.shared(appContext.assets) // start the load now, not on the first space
+                TypoModel(dictionaryRepository, currentLocale) { BigramModel.shared(appContext.assets) }
+            } else {
+                null
+            }
         )
     }
     
@@ -616,13 +621,42 @@ class SuggestionController(
             nextWordPredictor.predict(locale, previousWord, settings.maxSuggestions)
         }
         val predictions = mergeSuggestionResults(primary, extras, settings.maxSuggestions)
-        val suggestions = fillWithStarterSuggestions(predictions, settings)
+        val suggestions = fillWithStarterSuggestions(fillWithBundledPredictions(predictions, previousWord, settings), settings)
         if (suggestions.isNotEmpty()) {
             latestSuggestions.set(suggestions)
             suggestionsListener?.invoke(suggestions)
         } else {
             publishStarterSuggestions()
         }
+    }
+
+    /**
+     * Mutterboard: after the pairs the user has typed come the ones everyone
+     * types (BigramModel), before the generic most-common-words filler. Without
+     * them a fresh install offered "the, to, of" after every word. A null
+     * [previousWord] means the start of a sentence.
+     */
+    private fun fillWithBundledPredictions(
+        predictions: List<SuggestionResult>,
+        previousWord: String?,
+        settings: SuggestionSettings
+    ): List<SuggestionResult> {
+        if (predictions.size >= settings.maxSuggestions) return predictions
+        if (currentLocale.language != "en") return predictions
+        val bigrams = BigramModel.shared(appContext.assets) ?: return predictions
+        val seen = predictions.mapTo(HashSet()) { it.candidate.lowercase(currentLocale) }
+        val bundled = bigrams.continuations(previousWord, settings.maxSuggestions * 2)
+            .filter { (word, _) -> seen.add(word.lowercase(currentLocale)) }
+            .map { (word, count) ->
+                SuggestionResult(
+                    candidate = word,
+                    distance = 0,
+                    score = count.toDouble(),
+                    source = SuggestionSource.MAIN,
+                    kind = SuggestionKind.NEXT_WORD
+                )
+            }
+        return (predictions + bundled).take(settings.maxSuggestions)
     }
 
     private fun publishSentenceStartPredictionsOrStarter() {
@@ -632,7 +666,7 @@ class SuggestionController(
             nextWordPredictor.predictSentenceStart(locale, settings.maxSuggestions)
         }
         val predictions = mergeSuggestionResults(primary, extras, settings.maxSuggestions)
-        val suggestions = fillWithStarterSuggestions(predictions, settings)
+        val suggestions = fillWithStarterSuggestions(fillWithBundledPredictions(predictions, null, settings), settings)
         if (suggestions.isNotEmpty()) {
             latestSuggestions.set(suggestions)
             suggestionsListener?.invoke(suggestions)

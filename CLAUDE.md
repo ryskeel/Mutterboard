@@ -359,10 +359,20 @@ prediction as good as Gboard's.
 - **The English dictionary is written prose, not texting.** It has no "lol",
   "app", "oops" or "huh", so the corrector "fixed" them. `en_extra.json` patches
   the worst of it; a conversational frequency list is the real fix.
-- **Wrong-word fixes left are context problems** ("tem": team or them?), which
-  Gboard settles with the previous word. That, a built-in next-word model (today
-  prediction only knows bigrams you have typed), and learning a word after you
-  undo its correction are what is next.
+- **The previous word settles close calls.** `BigramModel` is a word-pair
+  table counted from Tatoeba's everyday sentences
+  (`scripts/build-english-bigrams.py`, which also writes the held-out test
+  sentences). `ContextScorecardTest` measures on sentences the table never saw.
+  Context may reorder candidates and add confidence but never vetoes a fix: a
+  pair the table pruned reads as a poor fit, and letting that veto cost a fifth
+  of all fixes. Pruning to 16 continuations per word had the same effect
+  ("didn't let" read as rare); it keeps 256, stored as int arrays for memory.
+- **Tatoeba overuses a few names** ("Tom" is in a large share of it). The
+  build drops capitalised words other than "I" from predictions.
+- **The bar's next-word order:** pairs you typed, then the bundled table, then
+  Pastiera's most-common-words filler. English only.
+- Next: remember a word after you undo its correction, and a trigram or
+  conversational unigram prior if the scorecards say it is worth it.
 
 ## The refiners are the heart of this app
 

@@ -43,6 +43,8 @@ class AutoReplaceController(
     )
 
     companion object {
+        private val PREVIOUS_WORD = Regex("[\\p{L}]+(?:['’][\\p{L}]+)*$")
+
         internal data class ApostropheSplit(val prefix: String, val root: String)
 
         internal fun normalizeApostrophes(input: String): String {
@@ -406,7 +408,7 @@ class AutoReplaceController(
         if (typoModel != null) {
             val isKnown = knownWordProvider?.invoke(lookupWord) ?: repository.isKnownWord(lookupWord)
             val correction = if (!isKnown && !rejectedWords.contains(wordLower) && apostropheSplit == null) {
-                typoModel.correct(word)
+                typoModel.correct(word, previousWord(inputConnection, word))
             } else {
                 null
             }
@@ -650,6 +652,17 @@ class AutoReplaceController(
     
     fun clearRejectedWords() {
         rejectedWords.clear()
+    }
+
+    /**
+     * The word before [word] in the field, or null at the start of a sentence
+     * or the field, which is what [BigramModel] reads as a sentence start.
+     */
+    private fun previousWord(inputConnection: InputConnection, word: String): String? {
+        val before = inputConnection.getTextBeforeCursor(64 + word.length, 0)?.toString().orEmpty()
+        val rest = before.removeSuffix(word).trimEnd()
+        if (rest.isEmpty() || rest.last() in ".!?\n") return null
+        return PREVIOUS_WORD.find(rest)?.value
     }
 
     private fun primaryDictionaryCaseVariant(lookupWord: String, originalWord: String): String? {
