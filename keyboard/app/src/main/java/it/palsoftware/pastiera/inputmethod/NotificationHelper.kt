@@ -17,12 +17,15 @@ import android.os.DeadSystemException
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.view.HapticFeedbackConstants
+import android.view.View
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.IconCompat
 import it.palsoftware.pastiera.R
-import it.palsoftware.pastiera.update.GITHUB_RELEASES_PAGE
+import it.palsoftware.pastiera.SettingsManager
+import it.palsoftware.pastiera.update.successorReleasesPage
 
 /**
  * Helper for managing app notifications.
@@ -52,16 +55,33 @@ object NotificationHelper {
     }
     
     /**
-     * Triggers a haptic feedback vibration.
+     * Triggers a haptic feedback vibration using the configured tap duration.
      * @param context The context to get the vibrator service
-     * @param durationMs Duration of the vibration in milliseconds (default: 70ms)
      */
-    fun triggerHapticFeedback(context: Context, durationMs: Long = 25) {
+    fun triggerHapticFeedback(context: Context) {
+        triggerFixedDurationHapticFeedback(
+            context,
+            SettingsManager.getTapHapticDurationMs(context)
+        )
+    }
+
+    /** Triggers a semantic haptic with an explicit duration for special-purpose feedback. */
+    fun triggerHapticFeedback(context: Context, durationMs: Long) {
         try {
             if (durationMs > 30 && tryModernHapticFeedback(context)) {
                 return
             }
 
+            triggerFixedDurationHapticFeedback(context, durationMs)
+        } catch (e: DeadSystemException) {
+            android.util.Log.w("NotificationHelper", "Haptic skipped: system is dead", e)
+        } catch (e: Exception) {
+            android.util.Log.w("NotificationHelper", "Unable to trigger haptic feedback", e)
+        }
+    }
+
+    fun triggerFixedDurationHapticFeedback(context: Context, durationMs: Long) {
+        try {
             val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
                 vm?.defaultVibrator
@@ -85,6 +105,15 @@ object NotificationHelper {
             android.util.Log.w("NotificationHelper", "Haptic skipped: system is dead", e)
         } catch (e: Exception) {
             android.util.Log.w("NotificationHelper", "Unable to trigger haptic feedback", e)
+        }
+    }
+
+    fun triggerTapHapticFeedback(view: View) {
+        val context = view.context.applicationContext
+        if (SettingsManager.getTapHapticUseSystem(context)) {
+            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        } else {
+            triggerFixedDurationHapticFeedback(context, SettingsManager.getTapHapticDurationMs(context))
         }
     }
 
@@ -231,9 +260,9 @@ object NotificationHelper {
      */
     fun showUpdateAvailableNotification(
         context: Context,
-        latestVersion: String,
-        downloadUrl: String?,
-        releasePageUrl: String?
+        displayName: String,
+        releasePageUrl: String?,
+        isNightlyUpdate: Boolean = false
     ) {
         if (!hasNotificationPermission(context)) {
             android.util.Log.w("NotificationHelper", "Notification permission not granted")
@@ -246,8 +275,7 @@ object NotificationHelper {
             createUpdateNotificationChannel(context)
         }
         
-        // Open the direct APK download if available, otherwise the GitHub releases page.
-        val targetUrl = downloadUrl ?: releasePageUrl ?: GITHUB_RELEASES_PAGE
+        val targetUrl = releasePageUrl ?: if (isNightlyUpdate) "https://github.com/palsoftware/pastiera/releases" else successorReleasesPage()
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
@@ -266,11 +294,11 @@ object NotificationHelper {
         )
         
         val notificationBuilder = NotificationCompat.Builder(context, UPDATE_CHANNEL_ID)
-            .setContentTitle(context.getString(R.string.notification_update_available_title))
+            .setContentTitle(context.getString(if (isNightlyUpdate) R.string.nightly_update_title else R.string.notification_successor_release_title))
             .setContentText(
                 context.getString(
-                    R.string.notification_update_available_text,
-                    latestVersion
+                    if (isNightlyUpdate) R.string.nightly_update_message else R.string.notification_successor_release_text,
+                    displayName
                 )
             )
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -286,7 +314,7 @@ object NotificationHelper {
         }
         
         val notification = notificationBuilder.build()
-        notificationManager.notify(UPDATE_NOTIFICATION_ID, notification)
+        notificationManager.notify(if (isNightlyUpdate) UPDATE_NOTIFICATION_ID + 1 else UPDATE_NOTIFICATION_ID, notification)
     }
     
     /**

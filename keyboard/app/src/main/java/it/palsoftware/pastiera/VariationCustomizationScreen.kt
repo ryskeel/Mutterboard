@@ -37,6 +37,7 @@ import it.palsoftware.pastiera.R
 import it.palsoftware.pastiera.data.layout.LayoutMappingRepository
 import it.palsoftware.pastiera.data.variation.VariationRepository
 import it.palsoftware.pastiera.inputmethod.subtype.AdditionalSubtypeUtils
+import it.palsoftware.pastiera.inputmethod.subtype.AdditionalSubtypeUtils.localeString
 import android.view.inputmethod.InputMethodManager
 import org.json.JSONObject
 
@@ -186,7 +187,7 @@ fun VariationCustomizationScreen(
                             text = stringResource(R.string.variation_customize_title),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(start = 8.dp)
+                            modifier = Modifier.padding(start = 8.dp).settingRow("customization.variations")
                         )
                     }
                     
@@ -216,7 +217,7 @@ fun VariationCustomizationScreen(
             // Static Variation Bar preset selector
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxWidth().settingRow("variations.preset")
             ) {
                 Row(
                     modifier = Modifier
@@ -261,7 +262,7 @@ fun VariationCustomizationScreen(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor()
+                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                             )
                             ExposedDropdownMenu(
                                 expanded = staticVariationPresetExpanded,
@@ -315,7 +316,7 @@ fun VariationCustomizationScreen(
             // Sticky layer toggle
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxWidth().settingRow("variations.sticky_layer")
                     .height(64.dp)
             ) {
                 Row(
@@ -356,7 +357,7 @@ fun VariationCustomizationScreen(
             }
             
             Surface(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().settingRow("variations.layout_override")
             ) {
                 Column(
                     modifier = Modifier
@@ -393,7 +394,7 @@ fun VariationCustomizationScreen(
                             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                         )
                         ExposedDropdownMenu(
                             expanded = showGlobalOverrideMenu,
@@ -442,6 +443,12 @@ fun VariationCustomizationScreen(
                 }
             }
 
+            // Static and per-letter mappings share one addressable editor heading.
+            Text(
+                text = stringResource(R.string.setting_link_variation_mappings),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.fillMaxWidth().settingRow("variations.mappings").padding(16.dp)
+            )
             // Static variations row
             VariationRow(
                 letter = "S",
@@ -1132,7 +1139,7 @@ private fun resolveActiveLayoutForVariationScreen(context: Context): String {
             return fromSubtype
         }
 
-        val locale = subtype?.locale
+        val locale = subtype?.localeString()
         if (!locale.isNullOrBlank()) {
             return AdditionalSubtypeUtils.getLayoutForLocale(context.assets, locale, context)
         }

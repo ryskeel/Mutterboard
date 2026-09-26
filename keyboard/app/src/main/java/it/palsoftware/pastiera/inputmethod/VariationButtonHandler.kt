@@ -4,8 +4,9 @@ import android.content.Context
 import android.util.Log
 import android.view.View
 import android.view.inputmethod.InputConnection
+import it.palsoftware.pastiera.SettingsManager
 import it.palsoftware.pastiera.core.AutoSpaceTracker
-import it.palsoftware.pastiera.core.Punctuation
+import it.palsoftware.pastiera.core.DeferredPunctuationSpaceTracker
 
 /**
  * Handles clicks on variation buttons.
@@ -22,6 +23,24 @@ object VariationButtonHandler {
          * @param variation The selected variation character
          */
         fun onVariationSelected(variation: String)
+
+        fun onBoundaryTextRequested(
+            variation: String,
+            inputConnection: InputConnection
+        ): Boolean = false
+    }
+
+    private fun handleBoundaryBeforeCommit(
+        variation: String,
+        inputConnection: InputConnection,
+        listener: OnVariationSelectedListener?
+    ): Boolean {
+        if (variation.length != 1) return false
+        val boundary = it.palsoftware.pastiera.core.Punctuation.normalizeApostrophe(variation[0])
+        if (boundary == '\'' || boundary !in it.palsoftware.pastiera.core.Punctuation.BOUNDARY) {
+            return false
+        }
+        return listener?.onBoundaryTextRequested(boundary.toString(), inputConnection) == true
     }
     
     /**
@@ -41,8 +60,13 @@ object VariationButtonHandler {
                 Log.w(TAG, "No inputConnection available to insert variation")
                 return@OnClickListener
             }
+            if (handleBoundaryBeforeCommit(variation, inputConnection, listener)) {
+                listener?.onVariationSelected(variation)
+                return@OnClickListener
+            }
+            DeferredPunctuationSpaceTracker.prepareForTextCommit(context, inputConnection, variation)
 
-            val punctuationSet = Punctuation.AUTO_SPACE
+            val punctuationSet = SettingsManager.getAutoSpacePunctuation(context)
             val bracketSet = "()[]{}"
             if (variation.isNotEmpty() && variation[0] in punctuationSet) {
                 val applied = AutoSpaceTracker.replaceAutoSpaceWithPunctuation(inputConnection, variation)
@@ -54,9 +78,6 @@ object VariationButtonHandler {
                 // For punctuation variations, skip deleting the previous character; just commit punctuation as-is.
                 val committed = inputConnection.commitText(variation, 1)
                 Log.d(TAG, "Variation '$variation' inserted (committed=$committed)")
-                if (committed) {
-                    NotificationHelper.triggerHapticFeedback(context)
-                }
                 listener?.onVariationSelected(variation)
                 return@OnClickListener
             } else if (variation.isNotEmpty() && variation[0] in bracketSet) {
@@ -64,9 +85,6 @@ object VariationButtonHandler {
                 AutoSpaceTracker.clear()
                 val committed = inputConnection.commitText(variation, 1)
                 Log.d(TAG, "Variation bracket '$variation' inserted (committed=$committed)")
-                if (committed) {
-                    NotificationHelper.triggerHapticFeedback(context)
-                }
                 listener?.onVariationSelected(variation)
                 return@OnClickListener
             }
@@ -80,9 +98,6 @@ object VariationButtonHandler {
 
             val committed = inputConnection.commitText(variation, 1)
             Log.d(TAG, "Variation '$variation' inserted (committed=$committed)")
-            if (committed) {
-                NotificationHelper.triggerHapticFeedback(context)
-            }
             
             // Notify listener if present
             listener?.onVariationSelected(variation)
@@ -106,8 +121,13 @@ object VariationButtonHandler {
                 Log.w(TAG, "No inputConnection available to insert static variation")
                 return@OnClickListener
             }
+            if (handleBoundaryBeforeCommit(variation, inputConnection, listener)) {
+                listener?.onVariationSelected(variation)
+                return@OnClickListener
+            }
+            DeferredPunctuationSpaceTracker.prepareForTextCommit(context, inputConnection, variation)
 
-            val punctuationSet = Punctuation.AUTO_SPACE
+            val punctuationSet = SettingsManager.getAutoSpacePunctuation(context)
             val bracketSet = "()[]{}"
             if (variation.isNotEmpty() && variation[0] in punctuationSet) {
                 val applied = AutoSpaceTracker.replaceAutoSpaceWithPunctuation(inputConnection, variation)
@@ -121,9 +141,6 @@ object VariationButtonHandler {
                 AutoSpaceTracker.clear()
                 val committed = inputConnection.commitText(variation, 1)
                 Log.d(TAG, "Static variation bracket '$variation' inserted (committed=$committed)")
-                if (committed) {
-                    NotificationHelper.triggerHapticFeedback(context)
-                }
                 listener?.onVariationSelected(variation)
                 return@OnClickListener
             }
@@ -131,9 +148,6 @@ object VariationButtonHandler {
             // Insert variation without deleting previous character
             val committed = inputConnection.commitText(variation, 1)
             Log.d(TAG, "Static variation '$variation' inserted (committed=$committed)")
-            if (committed) {
-                NotificationHelper.triggerHapticFeedback(context)
-            }
 
             // Notify listener if present
             listener?.onVariationSelected(variation)

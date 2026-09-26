@@ -9,18 +9,25 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.size
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
+import androidx.compose.material.icons.automirrored.filled.ManageSearch
 import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.SmartButton
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Info
@@ -29,7 +36,6 @@ import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Spellcheck
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Engineering
-import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
@@ -37,6 +43,8 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import it.palsoftware.pastiera.R
@@ -46,21 +54,44 @@ import it.palsoftware.pastiera.inputmethod.DeviceSpecific
 import it.palsoftware.pastiera.update.checkForUpdate
 import it.palsoftware.pastiera.update.showUpdateDialog
 import it.palsoftware.pastiera.update.shouldUseGithubUpdateChecks
+import kotlinx.coroutines.delay
 
 /**
  * Sealed class per rappresentare lo stato della navigazione nelle settings.
  */
-sealed class SettingsDestination {
-    object Main : SettingsDestination()
-    object KeyboardTiming : SettingsDestination()
-    object TextInput : SettingsDestination()
-    object Accessibility : SettingsDestination()
-    object AutoCorrection : SettingsDestination()
-    object Customization : SettingsDestination()
-    object Advanced : SettingsDestination()
-    object About : SettingsDestination()
-    object CustomInputStyles : SettingsDestination()
+enum class SettingsDestination {
+    Main,
+    KeyboardsDevices,
+    TextInput,
+    Accessibility,
+    AutoCorrection,
+    Customization,
+    NavMode,
+    Advanced,
+    About,
+    CustomInputStyles,
+    AppLanguage,
+    DeviceSymLayerEditor,
+    Modifiers
 }
+
+/** The destination payload of one SettingsActivity, also used by deep links. */
+internal data class SettingsPage(
+    val destination: SettingsDestination,
+    val customizationDestination: String? = null,
+    val keyboardThemeTarget: String? = null,
+    val keyboardThemeTab: String? = null,
+    val navModeKeyCode: Int? = null,
+    val keyboardsDevicesDestination: KeyboardsDevicesDestination = KeyboardsDevicesDestination.Main
+)
+
+internal fun SettingRoute.toSettingsPage() = SettingsPage(
+    destination = destination,
+    customizationDestination = customizationDestination,
+    keyboardThemeTarget = keyboardThemeTarget?.name,
+    keyboardThemeTab = keyboardThemeTab?.name,
+    keyboardsDevicesDestination = keyboardsDevicesDestination
+)
 
 /**
  * App settings screen.
@@ -69,164 +100,246 @@ sealed class SettingsDestination {
 fun SettingsScreen(
     modifier: Modifier = Modifier,
     initialDestination: String? = null,
-    initialCustomizationDestination: String? = null
+    initialCustomizationDestination: String? = null,
+    initialKeyboardThemeTarget: String? = null,
+    settingLinkRequest: SettingLinkRequest? = null
 ) {
     val context = LocalContext.current
     val activity = context as? ComponentActivity
-    
+
     var checkingForUpdates by remember { mutableStateOf(false) }
-    var navigationDirection by remember { mutableStateOf(NavigationDirection.Push) }
-    val navigationStack = remember {
-        mutableStateListOf<SettingsDestination>().apply {
-            if (initialDestination == SettingsActivity.DESTINATION_CUSTOMIZATION) {
-                if (initialCustomizationDestination == null) {
-                    add(SettingsDestination.Main)
-                }
-                add(SettingsDestination.Customization)
-            } else {
-                add(SettingsDestination.Main)
-            }
-        }
-    }
-    val currentDestination by remember {
-        derivedStateOf { navigationStack.last() }
-    }
-    
+    val currentEntry = remember { context.settingsActivity().intent.settingsPage() }
+    val currentDestination = currentEntry.destination
+    var highlightSettingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var linkSheetEntry by remember { mutableStateOf<SettingEntry?>(null) }
+
     fun navigateTo(destination: SettingsDestination) {
-        if (currentDestination == destination) return
-        navigationDirection = NavigationDirection.Push
-        navigationStack.add(destination)
+        openSettingsPage(context, SettingsPage(destination))
     }
-    
-    fun navigateBack() {
-        if (navigationStack.size > 1) {
-            navigationDirection = NavigationDirection.Pop
-            navigationStack.removeAt(navigationStack.lastIndex)
+    fun navigateBack() { context.settingsActivity().finish() }
+    fun openCustomization(destination: String?, keyboardThemeTarget: String? = null, keyboardThemeTab: String? = null) {
+        openSettingsPage(context, SettingsPage(SettingsDestination.Customization,
+            destination, keyboardThemeTarget, keyboardThemeTab))
+    }
+    fun navigateToNavMode(keyCode: Int?) {
+        openSettingsPage(context, SettingsPage(SettingsDestination.NavMode, navModeKeyCode = keyCode))
+    }
+
+    /**
+     * Navigates to a settings entry (e.g. from search or a deep link) and asks
+     * its row to flash and scroll into view. Never changes any value.
+     */
+    fun openSettingEntry(entry: SettingEntry) {
+        linkSheetEntry = null
+        val visibleEntry = SettingLinkRegistry.visibleTarget(context, entry)
+        val route = visibleEntry.route
+        if (route.symCustomization) {
+            context.startActivity(Intent(context, SymCustomizationActivity::class.java).apply {
+                putExtra(SymCustomizationActivity.EXTRA_SETTING_ID, visibleEntry.id)
+            })
+            return
+        }
+        val target = route.toSettingsPage()
+        if (currentEntry != target) {
+            context.startActivity(Intent(context, SettingsActivity::class.java).apply {
+                data = android.net.Uri.parse("pastiera://setting/${visibleEntry.id}")
+            })
+            return
+        }
+        highlightSettingId = visibleEntry.id
+    }
+
+    // Deep link (pastiera://setting/<id>) arriving via intent or onNewIntent
+    LaunchedEffect(settingLinkRequest?.serial) {
+        val request = settingLinkRequest ?: return@LaunchedEffect
+        val entry = SettingLinkRegistry.byId(request.id)
+        if (entry == null) {
+            Toast.makeText(context, R.string.settings_link_unavailable_toast, Toast.LENGTH_SHORT)
+                .show()
         } else {
-            activity?.finish()
+            openSettingEntry(entry)
         }
     }
-    
+    LaunchedEffect(highlightSettingId) {
+        if (highlightSettingId != null) {
+            // Must outlast the blink sequence in settingRow (~1.65 s) so the
+            // outline fades out gently after the last blink.
+            delay(1800)
+            highlightSettingId = null
+        }
+    }
+
     // Automatic update check on screen open (only once, respecting dismissed releases)
-    if (shouldUseGithubUpdateChecks(context)) {
+    if (currentDestination == SettingsDestination.Main && shouldUseGithubUpdateChecks(context)) {
         LaunchedEffect(Unit) {
-            checkForUpdate(
+            it.palsoftware.pastiera.update.checkForUpdateNotices(
                 context = context,
-                currentVersion = BuildConfig.VERSION_NAME,
                 releaseChannel = BuildConfig.RELEASE_CHANNEL,
                 ignoreDismissedReleases = true
-            ) { hasUpdate, latestVersion, downloadUrl, releasePageUrl ->
-                if (hasUpdate && latestVersion != null) {
-                    showUpdateDialog(context, latestVersion, downloadUrl, releasePageUrl)
+            ) { result ->
+                if (result.hasAnnouncement && result.releaseTag != null && result.displayName != null) {
+                    it.palsoftware.pastiera.update.showReleaseNotice(context, result)
                 }
             }
         }
     }
-    
-    // Handle system back button
-    BackHandler { navigateBack() }
-    
-    AnimatedContent(
-        targetState = currentDestination,
-        transitionSpec = {
-            if (navigationDirection == NavigationDirection.Push) {
-                // Forward navigation: new screen enters from right, old screen exits to left
-                slideInHorizontally(
-                    initialOffsetX = { fullWidth -> fullWidth },
-                    animationSpec = tween(250)
-                ) togetherWith slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> -fullWidth },
-                    animationSpec = tween(250)
-                )
-            } else {
-                // Back navigation: current screen exits to right, previous screen enters from left
-                slideInHorizontally(
-                    initialOffsetX = { fullWidth -> -fullWidth },
-                    animationSpec = tween(250)
-                ) togetherWith slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> fullWidth },
-                    animationSpec = tween(250)
-                )
-            }
-        },
-        label = "settings_navigation",
-        contentKey = { it::class }
-    ) { destination ->
-        when (destination) {
-            is SettingsDestination.Main -> {
+
+
+    CompositionLocalProvider(
+        LocalSettingHighlightId provides highlightSettingId,
+        LocalSettingLinkLongPress provides ({ id -> linkSheetEntry = SettingLinkRegistry.byId(id) })
+    ) {
+    val entry = currentEntry
+        when (entry.destination) {
+            SettingsDestination.Main -> {
                 SettingsMainScreen(
                     modifier = modifier,
                     context = context,
                     checkingForUpdates = checkingForUpdates,
                     onCheckingForUpdatesChange = { checkingForUpdates = it },
-                    onKeyboardTimingClick = { navigateTo(SettingsDestination.KeyboardTiming) },
+                    onOpenSettingEntry = { target ->
+                        context.startActivity(Intent(context, SettingsActivity::class.java).apply {
+                            data = android.net.Uri.parse("pastiera://setting/${target.id}")
+                        })
+                    },
+                    onModifiersClick = { navigateTo(SettingsDestination.Modifiers) },
+                    onKeyboardsDevicesClick = { navigateTo(SettingsDestination.KeyboardsDevices) },
                     onTextInputClick = { navigateTo(SettingsDestination.TextInput) },
                     onAccessibilityClick = { navigateTo(SettingsDestination.Accessibility) },
                     onAutoCorrectionClick = { navigateTo(SettingsDestination.AutoCorrection) },
-                    onCustomizationClick = { navigateTo(SettingsDestination.Customization) },
+                    onCustomizationClick = { openCustomization(null) },
+                    onStatusBarButtonsClick = {
+                        openCustomization(SettingsActivity.CUSTOMIZATION_DESTINATION_STATUS_BAR_BUTTONS)
+                    },
+                    onKeyboardThemeClick = {
+                        openCustomization(
+                            SettingsActivity.CUSTOMIZATION_DESTINATION_KEYBOARD_THEME,
+                            initialKeyboardThemeTarget
+                        )
+                    },
+                    onQuickLauncherClick = {
+                        openCustomization(SettingsActivity.CUSTOMIZATION_DESTINATION_LAUNCHER_SHORTCUTS)
+                    },
+                    onNavModeClick = {
+                        navigateToNavMode(null)
+                    },
+                    onEnterBehaviorClick = {
+                        openCustomization(SettingsActivity.CUSTOMIZATION_DESTINATION_APP_ENTER_BEHAVIOR)
+                    },
                     onAdvancedClick = { navigateTo(SettingsDestination.Advanced) },
                     onAboutClick = { navigateTo(SettingsDestination.About) },
                     onBackClick = { navigateBack() },
-                    onCustomInputStylesClick = { navigateTo(SettingsDestination.CustomInputStyles) }
+                    onCustomInputStylesClick = { navigateTo(SettingsDestination.CustomInputStyles) },
+                    onAppLanguageClick = { navigateTo(SettingsDestination.AppLanguage) }
                 )
             }
-            is SettingsDestination.KeyboardTiming -> {
-                KeyboardTimingSettingsScreen(
+            SettingsDestination.KeyboardsDevices -> {
+                KeyboardsDevicesSettingsScreen(
                     modifier = modifier,
-                    onBack = { navigateBack() }
+                    onBack = { navigateBack() },
+                    onNavModeSettingsClick = { keyCode ->
+                        navigateToNavMode(keyCode)
+                    },
+                    onOpenKeyboardTheme = {
+                        openCustomization(
+                            SettingsActivity.CUSTOMIZATION_DESTINATION_KEYBOARD_THEME,
+                            SettingsActivity.KEYBOARD_THEME_TARGET_SOFTWARE
+                        )
+                    },
+                    destination = entry.keyboardsDevicesDestination,
+                    onDestinationChange = { destination ->
+                        if (destination == KeyboardsDevicesDestination.Main) navigateBack()
+                        else openSettingsPage(context, entry.copy(keyboardsDevicesDestination = destination))
+                    }
                 )
             }
-            is SettingsDestination.TextInput -> {
+            SettingsDestination.TextInput -> {
                 TextInputSettingsScreen(
                     modifier = modifier,
-                    onBack = { navigateBack() }
+                    onBack = { navigateBack() },
+                    onNavModeSettingsClick = { navigateToNavMode(null) }
                 )
             }
-            is SettingsDestination.Accessibility -> {
+            SettingsDestination.Accessibility -> {
                 AccessibilitySettingsScreen(
                     modifier = modifier,
                     onBack = { navigateBack() }
                 )
             }
-            is SettingsDestination.AutoCorrection -> {
+            SettingsDestination.AutoCorrection -> {
                 AutoCorrectionCategoryScreen(
                     modifier = modifier,
                     onBack = { navigateBack() }
                 )
             }
-            is SettingsDestination.Customization -> {
+            SettingsDestination.Customization -> {
                 CustomizationSettingsScreen(
                     modifier = modifier,
                     onBack = { navigateBack() },
-                    initialDestination = initialCustomizationDestination
+                    initialDestination = entry.customizationDestination,
+                    initialKeyboardThemeTarget = entry.keyboardThemeTarget,
+                    initialKeyboardThemeTab = entry.keyboardThemeTab,
+                    onOpenModifiers = { navigateTo(SettingsDestination.Modifiers) }
                 )
             }
-            is SettingsDestination.Advanced -> {
+            SettingsDestination.NavMode -> {
+                NavModeSettingsScreen(
+                    modifier = modifier,
+                    onBack = { navigateBack() },
+                    initialKeyCode = entry.navModeKeyCode
+                )
+            }
+            SettingsDestination.Advanced -> {
                 AdvancedSettingsScreen(
                     modifier = modifier,
                     onBack = { navigateBack() }
                 )
             }
-            is SettingsDestination.About -> {
+            SettingsDestination.About -> {
                 AboutScreen(
                     modifier = modifier,
                     onBack = { navigateBack() }
                 )
             }
-            is SettingsDestination.CustomInputStyles -> {
+            SettingsDestination.CustomInputStyles -> {
                 CustomInputStylesScreen(
                     modifier = modifier,
                     onBack = { navigateBack() }
                 )
             }
+            SettingsDestination.AppLanguage -> {
+                AppLanguageSettingsScreen(modifier = modifier, onBack = { navigateBack() })
+            }
+            SettingsDestination.DeviceSymLayerEditor -> {
+                DeviceSymLayerEditorStubScreen(modifier = modifier, onBack = { navigateBack() })
+            }
+            SettingsDestination.Modifiers -> {
+                ModifierSettingsScreen(
+                    modifier = modifier,
+                    onBack = { navigateBack() },
+                    onOpenSymLayers = {
+                        context.startActivity(
+Intent(context, SymCustomizationActivity::class.java)
+                        )
+                    },
+                    onOpenSymShortcuts = {
+                        openCustomization(SettingsActivity.CUSTOMIZATION_DESTINATION_LAUNCHER_SHORTCUTS)
+                    },
+                    onOpenNavMode = {
+                        navigateToNavMode(null)
+                    }
+                )
+            }
         }
+    }
+
+    // Share/copy sheet for the settings entry currently being long-pressed
+    linkSheetEntry?.let { entry ->
+        SettingLinkSheet(entry = entry, onDismiss = { linkSheetEntry = null })
     }
 }
 
-private enum class NavigationDirection {
-    Push,
-    Pop
-}
+
 
 @Composable
 private fun SettingsMainScreen(
@@ -234,16 +347,31 @@ private fun SettingsMainScreen(
     context: Context,
     checkingForUpdates: Boolean,
     onCheckingForUpdatesChange: (Boolean) -> Unit,
-    onKeyboardTimingClick: () -> Unit,
+    onModifiersClick: () -> Unit,
+    onKeyboardsDevicesClick: () -> Unit,
     onTextInputClick: () -> Unit,
     onAccessibilityClick: () -> Unit,
     onAutoCorrectionClick: () -> Unit,
     onCustomizationClick: () -> Unit,
+    onStatusBarButtonsClick: () -> Unit,
+    onKeyboardThemeClick: () -> Unit,
+    onQuickLauncherClick: () -> Unit,
+    onNavModeClick: () -> Unit,
+    onEnterBehaviorClick: () -> Unit,
     onAdvancedClick: () -> Unit,
     onAboutClick: () -> Unit,
     onBackClick: () -> Unit,
-    onCustomInputStylesClick: () -> Unit
+    onCustomInputStylesClick: () -> Unit,
+    onAppLanguageClick: () -> Unit,
+    onOpenSettingEntry: (SettingEntry) -> Unit
 ) {
+    var checkingNightly by remember { mutableStateOf(false) }
+
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val searchResults = remember(searchQuery, context) {
+        SettingLinkRegistry.search(context, searchQuery)
+    }
     Scaffold(
         topBar = {
             Surface(
@@ -278,444 +406,326 @@ private fun SettingsMainScreen(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
+                .consumeWindowInsets(paddingValues)
+                .imePadding()
         ) {
-            // Keyboard & Timing
-            Surface(
+            SettingsSearchField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
-                    .clickable(onClick = onKeyboardTimingClick)
-            ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Keyboard,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.settings_category_keyboard_timing),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            
-                // Text Input
-                Surface(
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            if (searchQuery.isNotBlank()) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp)
-                        .clickable(onClick = onTextInputClick)
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.TextFields,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.settings_category_text_input),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // Accessibility
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .clickable(onClick = onAccessibilityClick)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.TouchApp,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.settings_category_accessibility),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // Languages and Maps (Custom Input Styles)
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .clickable(onClick = onCustomInputStylesClick)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Language,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.custom_input_styles_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            
-                // Auto-correction
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .clickable(onClick = onAutoCorrectionClick)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Spellcheck,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.settings_category_auto_correction),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            
-                // Customization
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .clickable(onClick = onCustomizationClick)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Tune,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.settings_category_customization),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            
-                // Advanced
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .clickable(onClick = onAdvancedClick)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Engineering,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.settings_category_advanced),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            
-                // About section
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .clickable(onClick = onAboutClick)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.about_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (shouldUseGithubUpdateChecks(context)) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        shape = MaterialTheme.shapes.extraSmall,
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Column(
+                    if (searchResults.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.settings_search_no_results),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 16.dp, horizontal = 12.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.settings_update_section_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = stringResource(R.string.settings_update_section_description),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Button(
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        )
+                    } else {
+                        searchResults.forEach { entry ->
+                            SettingSearchResultRow(
+                                entry = entry,
                                 onClick = {
-                                    onCheckingForUpdatesChange(true)
-                                    checkForUpdate(
-                                        context = context,
-                                        currentVersion = BuildConfig.VERSION_NAME,
-                                        releaseChannel = BuildConfig.RELEASE_CHANNEL,
-                                        ignoreDismissedReleases = false
-                                    ) { hasUpdate, latestVersion, downloadUrl, releasePageUrl ->
-                                        onCheckingForUpdatesChange(false)
-                                        when {
-                                            latestVersion == null -> {
-                                                Toast.makeText(
-                                                    context,
-                                                    context.getString(R.string.settings_update_check_failed),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                            hasUpdate -> showUpdateDialog(context, latestVersion, downloadUrl, releasePageUrl)
-                                            else -> {
-                                                Toast.makeText(
-                                                    context,
-                                                    context.getString(R.string.settings_update_up_to_date),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        }
-                                    }
-                                },
-                                enabled = !checkingForUpdates,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                if (checkingForUpdates) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        CircularProgressIndicator(
-                                            strokeWidth = 2.dp,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(stringResource(R.string.settings_update_checking))
-                                    }
-                                } else {
-                                    Text(stringResource(R.string.settings_update_button))
+                                    keyboardController?.hide()
+                                    searchQuery = ""
+                                    onOpenSettingEntry(entry)
                                 }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            } else {
+                Column(
+                    modifier = modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+            SettingsGroupDivider(stringResource(R.string.settings_group_typing))
+
+            SettingsCategoryRow(
+                icon = Icons.Filled.Keyboard,
+                title = stringResource(R.string.keyboards_devices_title),
+                linkId = SettingLinkIds.MAIN_KEYBOARDS_DEVICES,
+                onClick = onKeyboardsDevicesClick
+            )
+            SettingsCategoryRow(
+                iconRes = R.drawable.modifier_keys_24,
+                title = stringResource(R.string.modifiers_title),
+                description = stringResource(R.string.modifiers_description),
+                linkId = SettingLinkIds.MAIN_MODIFIERS,
+                onClick = onModifiersClick
+            )
+            SettingsCategoryRow(
+                icon = Icons.Filled.Language,
+                title = stringResource(R.string.custom_input_styles_title),
+                linkId = SettingLinkIds.MAIN_CUSTOM_INPUT_STYLES,
+                onClick = onCustomInputStylesClick
+            )
+
+            SettingsGroupDivider(stringResource(R.string.settings_group_smart_features))
+
+            SettingsCategoryRow(
+                icon = Icons.Filled.TextFields,
+                title = stringResource(R.string.settings_category_text_input),
+                linkId = SettingLinkIds.MAIN_TEXT_INPUT,
+                onClick = onTextInputClick
+            )
+            SettingsCategoryRow(
+                icon = Icons.Filled.Spellcheck,
+                title = stringResource(R.string.settings_category_auto_correction),
+                linkId = SettingLinkIds.MAIN_AUTO_CORRECTION,
+                onClick = onAutoCorrectionClick
+            )
+
+            SettingsGroupDivider(stringResource(R.string.settings_group_customization))
+
+            SettingsCategoryRow(
+                icon = Icons.Filled.Palette,
+                title = stringResource(R.string.keyboard_theme_title),
+                linkId = SettingLinkIds.MAIN_KEYBOARD_THEME,
+                onClick = onKeyboardThemeClick
+            )
+            SettingsCategoryRow(
+                icon = ImageVector.vectorResource(R.drawable.translate_24),
+                title = stringResource(R.string.app_language_title),
+                description = currentAppLanguageLabel(context),
+                linkId = SettingLinkIds.MAIN_APP_LANGUAGE,
+                onClick = onAppLanguageClick
+            )
+            SettingsCategoryRow(
+                icon = Icons.Filled.SmartButton,
+                title = stringResource(R.string.status_bar_buttons_title),
+                description = stringResource(R.string.status_bar_buttons_description),
+                linkId = SettingLinkIds.MAIN_STATUS_BAR_BUTTONS,
+                onClick = onStatusBarButtonsClick
+            )
+            SettingsCategoryRow(
+                icon = Icons.Filled.Tune,
+                title = stringResource(R.string.settings_category_customization),
+                linkId = SettingLinkIds.MAIN_CUSTOMIZATION,
+                onClick = onCustomizationClick
+            )
+
+            SettingsGroupDivider(stringResource(R.string.settings_group_utility))
+
+            SettingsCategoryRow(
+                icon = Icons.AutoMirrored.Filled.ManageSearch,
+                title = stringResource(R.string.starter_launcher_shortcuts_title),
+                description = stringResource(R.string.starter_launcher_shortcuts_description),
+                linkId = SettingLinkIds.MAIN_LAUNCHER_SHORTCUTS,
+                onClick = onQuickLauncherClick
+            )
+            SettingsCategoryRow(
+                icon = ImageVector.vectorResource(R.drawable.navigation_24),
+                title = stringResource(R.string.nav_mode_title),
+                description = stringResource(R.string.settings_nav_mode_configure),
+                linkId = SettingLinkIds.MAIN_NAV_MODE,
+                onClick = onNavModeClick
+            )
+            SettingsCategoryRow(
+                icon = Icons.AutoMirrored.Filled.KeyboardReturn,
+                title = stringResource(R.string.app_enter_behaviour_title),
+                description = stringResource(R.string.app_enter_behaviour_description),
+                linkId = SettingLinkIds.MAIN_APP_ENTER_BEHAVIOR,
+                onClick = onEnterBehaviorClick
+            )
+
+            SettingsGroupDivider(stringResource(R.string.settings_group_system))
+
+            SettingsCategoryRow(
+                icon = Icons.Filled.Engineering,
+                title = stringResource(R.string.settings_category_advanced),
+                linkId = SettingLinkIds.MAIN_ADVANCED,
+                onClick = onAdvancedClick
+            )
+            SettingsCategoryRow(
+                icon = Icons.Filled.TouchApp,
+                title = stringResource(R.string.settings_category_accessibility),
+                linkId = SettingLinkIds.MAIN_ACCESSIBILITY,
+                onClick = onAccessibilityClick
+            )
+
+            SettingsGroupDivider(stringResource(R.string.settings_group_pastiera))
+
+            SettingsCategoryRow(
+                icon = Icons.Filled.Info,
+                title = stringResource(R.string.about_title),
+                description = stringResource(
+                    R.string.settings_about_version_summary,
+                    BuildConfig.VERSION_NAME
+                ),
+                linkId = SettingLinkIds.MAIN_ABOUT,
+                onClick = onAboutClick
+            )
+
+            if (BuildConfig.RELEASE_CHANNEL == "nightly" && shouldUseGithubUpdateChecks(context)) {
+                SettingsCategoryRow(
+                    icon = Icons.Filled.Code,
+                    title = stringResource(if (checkingNightly) R.string.nightly_update_checking else R.string.nightly_update_settings_title),
+                    description = stringResource(R.string.nightly_update_settings_description),
+                    enabled = !checkingNightly,
+                    onClick = {
+                        checkingNightly = true
+                        it.palsoftware.pastiera.update.checkForNightlyUpdate(context, ignoreDismissedReleases = false) { result ->
+                            checkingNightly = false
+                            if (result.hasAnnouncement) it.palsoftware.pastiera.update.showReleaseNotice(context, result)
+                            else Toast.makeText(context, if (result.successful) R.string.nightly_update_current else R.string.settings_update_check_failed, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
+            }
+
+            if (shouldUseGithubUpdateChecks(context)) {
+                SettingsCategoryRow(
+                    icon = ImageVector.vectorResource(R.drawable.plektra_open_monochrome_24),
+                    title = if (checkingForUpdates) {
+                        stringResource(R.string.settings_update_checking)
+                    } else {
+                        stringResource(R.string.settings_update_section_title)
+                    },
+                    description = stringResource(R.string.settings_update_section_description),
+                    enabled = !checkingForUpdates,
+                    onClick = {
+                        onCheckingForUpdatesChange(true)
+                        checkForUpdate(
+                            context = context,
+                            releaseChannel = BuildConfig.RELEASE_CHANNEL,
+                            ignoreDismissedReleases = false
+                        ) { result ->
+                            onCheckingForUpdatesChange(false)
+                            when {
+                                !result.successful -> Toast.makeText(
+                                    context,
+                                    context.getString(R.string.settings_update_check_failed),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                result.hasAnnouncement && result.releaseTag != null && result.displayName != null -> showUpdateDialog(
+                                    context,
+                                    result.releaseTag,
+                                    result.displayName,
+                                    result.releasePageUrl
+                                )
+                                else -> Toast.makeText(
+                                    context,
+                                    context.getString(R.string.settings_update_up_to_date),
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         }
                     }
-                }
+                )
+            }
 
-                // Build Info
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(70.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.about_build_info),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
-                            Text(
-                                text = BuildInfo.getBuildInfoString(),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
-                            )
-                            Text(
-                                text = stringResource(
-                                    R.string.settings_device_keyboard_info,
-                                    DeviceSpecific.deviceName(),
-                                    DeviceSpecific.keyboardName()
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2
-                            )
-                        }
-                    }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
-
-                // Ko-fi Support Link
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .clickable {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ko-fi.com/palsoftware"))
-                            context.startActivity(intent)
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.kofi5),
-                        contentDescription = stringResource(R.string.settings_support_ko_fi),
-                        modifier = Modifier
-                            .fillMaxWidth(0.35f)
-                            .aspectRatio(1f)
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
+}
+
+@Composable
+private fun SettingsCategoryRow(
+    icon: ImageVector? = null,
+    iconRes: Int? = null,
+    title: String,
+    description: String? = null,
+    enabled: Boolean = true,
+    linkId: String? = null,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (description == null) 56.dp else 64.dp)
+            .settingRow(linkId?.takeIf { enabled }, onClick.takeIf { enabled })
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            val iconTint = if (enabled) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant
+            if (iconRes != null) {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(24.dp)
+                )
+            } else if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (enabled) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1
+                )
+                if (description != null) {
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsGroupDivider(label: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+    }
+}

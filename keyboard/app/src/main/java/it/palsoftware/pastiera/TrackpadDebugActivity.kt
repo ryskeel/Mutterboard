@@ -3,12 +3,10 @@ package it.palsoftware.pastiera
 import android.os.Bundle
 import android.view.InputDevice
 import android.view.MotionEvent
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,18 +17,24 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import it.palsoftware.pastiera.inputmethod.trackpad.TrackpadAxisRange
+import it.palsoftware.pastiera.inputmethod.trackpad.TrackpadCoordinateMapper
 import it.palsoftware.pastiera.ui.theme.PastieraTheme
-import kotlinx.coroutines.launch
 
 class TrackpadDebugActivity : LocalizedComponentActivity() {
     private val events = mutableStateListOf<String>()
+    private var axisState by mutableStateOf(TrackpadDebugAxisState())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,22 +43,70 @@ class TrackpadDebugActivity : LocalizedComponentActivity() {
             PastieraTheme {
                 TrackpadDebugScreen(
                     events = events,
+                    axisState = axisState,
                     onBackPressed = { finish() }
                 )
             }
         }
     }
 
-    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        android.util.Log.d("TrackpadDebug", "onGenericMotionEvent: action=${event.actionMasked} source=${event.source}")
-        logMotionEvent("onGenericMotionEvent", event)
-        return super.onGenericMotionEvent(event)
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        android.util.Log.d("TrackpadDebug", "dispatchGenericMotionEvent: action=${event.actionMasked} source=${event.source}")
+        updateAxisState(event)
+        logMotionEvent("dispatchGenericMotionEvent", event)
+        return super.dispatchGenericMotionEvent(event)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         android.util.Log.d("TrackpadDebug", "onTouchEvent: action=${event.actionMasked}")
         logMotionEvent("onTouchEvent", event)
         return super.onTouchEvent(event)
+    }
+
+    private fun updateAxisState(event: MotionEvent) {
+        if (event.pointerCount == 0) return
+        val device = InputDevice.getDevice(event.deviceId)
+        val detectedXRange = motionRange(device, event, MotionEvent.AXIS_X)
+        val detectedYRange = motionRange(device, event, MotionEvent.AXIS_Y)
+        val xRange = detectedXRange
+            ?: TrackpadAxisRange(0f, resources.displayMetrics.widthPixels.toFloat())
+        val yRange = detectedYRange
+            ?: TrackpadAxisRange(0f, resources.displayMetrics.heightPixels.toFloat())
+        val action = event.actionMasked
+        axisState = TrackpadDebugAxisState(
+            x = event.x,
+            y = event.y,
+            xRange = xRange,
+            yRange = yRange,
+            active = action != MotionEvent.ACTION_UP && action != MotionEvent.ACTION_CANCEL,
+            source = device?.name.orEmpty().ifBlank { sourceName(event) },
+            rangeSource = if (
+                detectedXRange != null && detectedYRange != null
+            ) {
+                getString(R.string.trackpad_debug_range_motion)
+            } else {
+                getString(R.string.trackpad_debug_range_display)
+            }
+        )
+    }
+
+    private fun motionRange(
+        device: InputDevice?,
+        event: MotionEvent,
+        axis: Int
+    ): TrackpadAxisRange? {
+        val motionRange = device?.getMotionRange(axis, event.source)
+            ?: device?.getMotionRange(axis)
+        return motionRange
+            ?.let { TrackpadAxisRange(it.min, it.max) }
+            ?.takeIf { it.isValid }
+    }
+
+    private fun sourceName(event: MotionEvent): String = when {
+        event.isFromSource(InputDevice.SOURCE_TOUCHPAD) -> "TOUCHPAD"
+        event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN) -> "TOUCHSCREEN"
+        event.isFromSource(InputDevice.SOURCE_MOUSE) -> "MOUSE"
+        else -> "SOURCE_${event.source}"
     }
 
     private fun logMotionEvent(source: String, event: MotionEvent) {
@@ -134,10 +186,11 @@ class TrackpadDebugActivity : LocalizedComponentActivity() {
 @Composable
 fun TrackpadDebugScreen(
     events: SnapshotStateList<String>,
+    axisState: TrackpadDebugAxisState,
     onBackPressed: () -> Unit
 ) {
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
+    var showYAxis by rememberSaveable { mutableStateOf(false) }
 
     // Auto-scroll to bottom when new events are added
     LaunchedEffect(events.size) {
@@ -192,6 +245,13 @@ fun TrackpadDebugScreen(
                 modifier = Modifier.padding(bottom = 8.dp),
                 style = MaterialTheme.typography.bodyMedium,
                 color = androidx.compose.ui.graphics.Color.Green
+            )
+
+            TrackpadCoordinatePanel(
+                state = axisState,
+                showYAxis = showYAxis,
+                onShowYAxisChanged = { showYAxis = it },
+                modifier = Modifier.padding(bottom = 12.dp)
             )
 
             // Events list
@@ -254,7 +314,6 @@ fun TrackpadDebugScreen(
                                 logLines.add("") // Empty line
 
                                 events.addAll(logLines)
-
                                 // Keep only last 500 lines
                                 while (events.size > 500) {
                                     events.removeAt(0)
@@ -264,5 +323,159 @@ fun TrackpadDebugScreen(
                     }
                 }
         )
+    }
+}
+
+data class TrackpadDebugAxisState(
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val xRange: TrackpadAxisRange = TrackpadAxisRange(0f, 1f),
+    val yRange: TrackpadAxisRange = TrackpadAxisRange(0f, 1f),
+    val active: Boolean = false,
+    val source: String = "—",
+    val rangeSource: String = "—"
+)
+
+@Composable
+private fun TrackpadCoordinatePanel(
+    state: TrackpadDebugAxisState,
+    showYAxis: Boolean,
+    onShowYAxisChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.35f),
+        shape = MaterialTheme.shapes.medium,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            androidx.compose.ui.graphics.Color.Green.copy(alpha = 0.45f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.trackpad_debug_coordinates_title),
+                        color = androidx.compose.ui.graphics.Color.Green,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "${state.source} · ${state.rangeSource}",
+                        color = androidx.compose.ui.graphics.Color.Green.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.trackpad_debug_show_y_axis),
+                        color = androidx.compose.ui.graphics.Color.Green,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Switch(
+                        checked = showYAxis,
+                        onCheckedChange = onShowYAxisChanged,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = androidx.compose.ui.graphics.Color.Black,
+                            checkedTrackColor = androidx.compose.ui.graphics.Color.Green
+                        )
+                    )
+                }
+            }
+
+            TrackpadAxisBar(
+                label = "X",
+                value = state.x,
+                range = state.xRange,
+                active = state.active,
+                showThirds = true
+            )
+            if (showYAxis) {
+                TrackpadAxisBar(
+                    label = "Y",
+                    value = state.y,
+                    range = state.yRange,
+                    active = state.active,
+                    showThirds = false
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackpadAxisBar(
+    label: String,
+    value: Float,
+    range: TrackpadAxisRange,
+    active: Boolean,
+    showThirds: Boolean
+) {
+    val green = androidx.compose.ui.graphics.Color.Green
+    val normalized = TrackpadCoordinateMapper.normalized(value, range)
+    val third = TrackpadCoordinateMapper.third(value, range)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = if (showThirds) {
+                    stringResource(R.string.trackpad_debug_axis_value_third, label, value, third + 1)
+                } else {
+                    stringResource(R.string.trackpad_debug_axis_value, label, value)
+                },
+                color = green,
+                style = MaterialTheme.typography.labelMedium,
+                fontFamily = FontFamily.Monospace
+            )
+            Text(
+                text = "${"%.2f".format(range.min)} … ${"%.2f".format(range.max)}",
+                color = green.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(30.dp)
+        ) {
+            val startX = 8.dp.toPx()
+            val endX = size.width - 8.dp.toPx()
+            val centerY = size.height / 2f
+            drawLine(
+                color = green.copy(alpha = 0.35f),
+                start = Offset(startX, centerY),
+                end = Offset(endX, centerY),
+                strokeWidth = 4.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+            if (showThirds) {
+                listOf(1f / 3f, 2f / 3f).forEach { fraction ->
+                    val x = startX + (endX - startX) * fraction
+                    drawLine(
+                        color = green.copy(alpha = 0.65f),
+                        start = Offset(x, 3.dp.toPx()),
+                        end = Offset(x, size.height - 3.dp.toPx()),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+            }
+            val markerX = startX + (endX - startX) * normalized
+            drawCircle(
+                color = green.copy(alpha = if (active) 1f else 0.55f),
+                radius = if (active) 7.dp.toPx() else 5.dp.toPx(),
+                center = Offset(markerX, centerY)
+            )
+        }
     }
 }

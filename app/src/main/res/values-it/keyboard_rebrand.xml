@@ -8,6 +8,7 @@
     <string name="enable_pastiera">Abilita Mutterboard</string>
     <string name="pastiera_not_enabled">Mutterboard non è abilitata</string>
     <string name="pastiera_not_selected">Mutterboard non è selezionata</string>
+    <string name="auto_correct_manage_user_dict_description">Parole che Mutterboard deve conoscere e suggerire, senza creare regole di sostituzione.</string>
     <string name="about_build_info">Physical keyboard based on Pastiera by Palsoftware (GPL-3.0)</string>
     <string name="starter_launcher_shortcuts_title">Mutterboard-QuickLauncher</string>
     <string name="starter_launcher_shortcuts_intro">Queste impostazioni condividono un unico elenco di assegnazioni app-tasto. Scegli dove Mutterboard deve ascoltare i tasti assegnati.</string>
@@ -18,8 +19,7 @@
     <string name="notification_nav_mode_channel_description">Notifiche per il nav mode di Mutterboard</string>
     <string name="notification_update_channel_name">Aggiornamenti Mutterboard</string>
     <string name="notification_update_channel_description">Notifiche sui nuovi aggiornamenti di Mutterboard</string>
-    <string name="notification_update_available_title">Mutterboard - nuovo aggiornamento disponibile</string>
-    <string name="notification_update_available_text">Una nuova versione di Mutterboard è disponibile (%1$s)</string>
+    <string name="notification_successor_release_text">%1$s è disponibile come successore di Mutterboard.</string>
     <string name="nav_mode_guide_text">Nav Mode trasforma i tasti lettera in tasti di navigazione e scorciatoie. Il risultato può variare in base all\'app, perché alcune app capiscono le azioni editor di Android, mentre altre reagiscono solo a vere scorciatoie Ctrl.
 
 Navigazione con Ctrl tenuto premuto
@@ -45,14 +45,14 @@ Override
 Ogni tasto può essere configurato come Keycode, Azione, Native Ctrl o Nessuno. Usa gli override per risolvere conflitti specifici di un\'app senza cambiare l\'intera modalità.</string>
     <string name="layout_aware_ctrl_shortcuts_description">Quando Ctrl tenuto premuto viene passato alle app, traduci prima Ctrl+lettera tramite il layout Mutterboard attivo.</string>
     <string name="layout_aware_ctrl_shortcuts_info_text">Ci sono due percorsi per Ctrl tenuto premuto. Se la navigazione con Ctrl tenuto premuto è attiva, Mutterboard gestisce Ctrl+tasto con le mappature Nav Mode mostrate sotto. Se è disattivata, Mutterboard passa Ctrl+tasto all\'app. Questa opzione influisce solo su quel percorso app: se attiva, Ctrl+lettera viene prima tradotto tramite il layout Mutterboard attivo, così le scorciatoie possono seguire le lettere che digiti. Se disattivata, le app ricevono le posizioni fisiche originali dei tasti.</string>
-    <string name="app_enter_behavior_enable_description">Usa gli override di Mutterboard per le app di messaggistica selezionate. Le app testate mostrano la strategia realmente usata da Mutterboard.</string>
-    <string name="app_enter_behavior_status_app_default">Mutterboard non interviene.</string>
-    <string name="app_enter_behavior_status_native_result">Predefinito app: Mutterboard non interviene.</string>
-    <string name="app_enter_behavior_strategy_whatsapp_newline_ctrl_send">Mutterboard inserisce direttamente le nuove righe e invia tramite l\'azione di invio dell\'app.</string>
-    <string name="app_enter_behavior_strategy_whatsapp_send_shift_newline">Mutterboard invia tramite l\'azione di invio dell\'app. Shift+Invio viene inserito direttamente come nuova riga.</string>
-    <string name="app_enter_behavior_strategy_whatsapp_newline_only">Testato: Mutterboard inserisce Invio direttamente come nuova riga e non attiva l\'invio.</string>
-    <string name="app_enter_behavior_strategy_discord_app_default_detail">Testato: Discord gestisce già correttamente Invio per inviare e Shift+Invio per nuova riga. Mutterboard non interviene qui.</string>
-    <string name="app_enter_behavior_strategy_experimental_detail">Non confermato: Mutterboard sta provando l\'azione di invio dell\'app e l\'inserimento diretto di nuove righe.</string>
+    <string name="app_enter_behaviour_enable_description">Usa gli override di Mutterboard per le app di messaggistica selezionate. Le app testate mostrano la strategia realmente usata da Mutterboard.</string>
+    <string name="app_enter_behaviour_status_app_default">Mutterboard non interviene.</string>
+    <string name="app_enter_behaviour_status_native_result">Predefinito app: Mutterboard non interviene.</string>
+    <string name="app_enter_behaviour_strategy_whatsapp_newline_ctrl_send">Mutterboard inserisce direttamente le nuove righe e invia tramite l\'azione di invio dell\'app.</string>
+    <string name="app_enter_behaviour_strategy_whatsapp_send_shift_newline">Mutterboard invia tramite l\'azione di invio dell\'app. Shift+Invio viene inserito direttamente come nuova riga.</string>
+    <string name="app_enter_behaviour_strategy_whatsapp_newline_only">Testato: Mutterboard inserisce Invio direttamente come nuova riga e non attiva l\'invio.</string>
+    <string name="app_enter_behaviour_strategy_discord_app_default_detail">Testato: Discord gestisce già correttamente Invio per inviare e Shift+Invio per nuova riga. Mutterboard non interviene qui.</string>
+    <string name="app_enter_behaviour_strategy_experimental_detail">Non confermato: Mutterboard sta provando l\'azione di invio dell\'app e l\'inserimento diretto di nuove righe.</string>
     <string name="auto_correct_ricette_pastiera_name">Ricette Mutterboard</string>
     <string name="tutorial_page_welcome_title">Benvenuto in Mutterboard</string>
     <string name="tutorial_page_welcome_description">Mutterboard è un metodo di input avanzato per dispositivi Android con tastiera fisica, con supporto per Nav Mode, scorciatoie, mappature personalizzate e altro ancora.</string>
@@ -73,6 +73,10 @@ Ogni tasto può essere configurato come Keycode, Azione, Native Ctrl o Nessuno. 
     <string name="tutorial_enable_first_message">Abilita prima Mutterboard nella pagina precedente</string>
     <string name="tutorial_selected_message">Mutterboard è selezionata!</string>
     <string name="restore_from_file_description">Importa un backup ZIP di Mutterboard</string>
+    <string name="successor_dialog_title">Mutterboard ha un successore</string>
+    <string name="successor_dialog_message">Plektra succede a Mutterboard. %1$s è disponibile su GitHub.</string>
     <string name="trackpad_tutorial_shizuku_required_description">Questa funzionalità richiede Shizuku per accedere agli eventi del trackpad.\n\n1. Installa Shizuku dalle release di GitHub\n2. Abilita le opzioni sviluppatore nelle impostazioni Android\n3. Collega il dispositivo a un PC con ADB installato\n4. Esegui il comando che Shizuku mostra nella sua app\n5. Concedi il permesso a Mutterboard in Shizuku\n\nLa funzionalità funzionerà automaticamente una volta che Shizuku è in esecuzione.</string>
     <string name="tutorial_page_software_keyboard_description">Scegli quale superficie tastiera deve usare Mutterboard qui.</string>
+    <string name="kw_main_keyboard_theme">tema, temi, colori, scuro, chiaro, preset, tastiera fisica, tastiera a schermo, Mutterboard Dark, Mutterboard Light, Cloud Tap, Moon Tap, Classic Cloud, Classic Midnight</string>
+    <string name="kw_indicator_status_bar">LED, luci, simboli, indicatori, Mutterboard</string>
 </resources>

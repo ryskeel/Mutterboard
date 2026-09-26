@@ -3,8 +3,9 @@ package it.palsoftware.pastiera
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -14,14 +15,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -31,6 +34,7 @@ import java.io.IOException
 import android.content.Intent
 import android.net.Uri
 import android.graphics.BitmapFactory
+import it.palsoftware.pastiera.inputmethod.DeviceSpecific
 
 /**
  * About screen displaying credits and acknowledgments from Markdown file.
@@ -51,7 +55,6 @@ fun AboutScreen(
         isLoading = false
     }
 
-    BackHandler { onBack() }
 
     Scaffold(
         topBar = {
@@ -90,6 +93,49 @@ fun AboutScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = stringResource(R.string.about_build_info),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = BuildInfo.getBuildInfoString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.settings_device_keyboard_info,
+                            DeviceSpecific.deviceName(),
+                            DeviceSpecific.keyboardName()
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Image(
+                painter = painterResource(id = R.drawable.kofi5),
+                contentDescription = stringResource(R.string.settings_support_ko_fi),
+                modifier = Modifier
+                    .fillMaxWidth(0.35f)
+                    .align(Alignment.CenterHorizontally)
+                    .settingRow(SettingLinkIds.ABOUT_SUPPORT_KO_FI) {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("https://ko-fi.com/palsoftware"))
+                        )
+                    }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             if (isLoading) {
                 CircularProgressIndicator(
                     modifier = Modifier
@@ -111,6 +157,28 @@ fun AboutScreen(
             }
         }
     }
+}
+
+@Composable
+private fun MarkdownClickableText(
+    text: AnnotatedString,
+    style: TextStyle,
+    urlMap: Map<Int, String>,
+    context: android.content.Context,
+    modifier: Modifier = Modifier
+) {
+    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    BasicText(
+        text = text,
+        style = style,
+        modifier = modifier.pointerInput(urlMap) {
+            detectTapGestures { position ->
+                val offset = layoutResult?.getOffsetForPosition(position) ?: return@detectTapGestures
+                urlMap[offset]?.let { url -> openUrl(context, url) }
+            }
+        },
+        onTextLayout = { layoutResult = it }
+    )
 }
 
 /**
@@ -145,11 +213,11 @@ private suspend fun loadCreditsFromAssets(context: android.content.Context): Str
 private fun parseMarkdown(markdown: String): List<MarkdownElement> {
     val elements = mutableListOf<MarkdownElement>()
     val lines = markdown.lines()
-    
+
     var i = 0
     while (i < lines.size) {
         val line = lines[i].trim()
-        
+
         when {
             line.isEmpty() -> {
                 // Skip empty lines or treat as paragraph separator
@@ -197,11 +265,11 @@ private fun parseMarkdown(markdown: String): List<MarkdownElement> {
                 val paragraphLines = mutableListOf<String>()
                 while (i < lines.size) {
                     val currentLine = lines[i].trim()
-                    if (currentLine.isEmpty() || 
-                        (currentLine.startsWith("#") && (currentLine.startsWith("# ") || 
-                         currentLine.startsWith("## ") || currentLine.startsWith("### ") || 
+                    if (currentLine.isEmpty() ||
+                        (currentLine.startsWith("#") && (currentLine.startsWith("# ") ||
+                         currentLine.startsWith("## ") || currentLine.startsWith("### ") ||
                          currentLine.startsWith("#### "))) ||
-                        currentLine.startsWith("- ") || 
+                        currentLine.startsWith("- ") ||
                         currentLine.startsWith("* ") ||
                         currentLine.startsWith("---") ||
                         currentLine.startsWith("![") ||
@@ -218,7 +286,7 @@ private fun parseMarkdown(markdown: String): List<MarkdownElement> {
             }
         }
     }
-    
+
     return elements
 }
 
@@ -232,7 +300,7 @@ private fun MarkdownContent(
     modifier: Modifier = Modifier
 ) {
     val elements = remember(markdown) { parseMarkdown(markdown) }
-    
+
     Column(modifier = modifier) {
         elements.forEachIndexed { index, element ->
             when (element) {
@@ -319,18 +387,15 @@ private fun MarkdownHeading1(
     context: android.content.Context
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    ClickableText(
+    MarkdownClickableText(
         text = text,
         style = MaterialTheme.typography.headlineMedium.copy(
             fontWeight = FontWeight.Bold,
             fontSize = 24.sp,
             color = colorScheme.onSurface
         ),
-        onClick = { offset ->
-            urlMap[offset]?.let { url ->
-                openUrl(context, url)
-            }
-        }
+        urlMap = urlMap,
+        context = context
     )
 }
 
@@ -341,18 +406,15 @@ private fun MarkdownHeading2(
     context: android.content.Context
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    ClickableText(
+    MarkdownClickableText(
         text = text,
         style = MaterialTheme.typography.titleLarge.copy(
             fontWeight = FontWeight.Bold,
             fontSize = 20.sp,
             color = colorScheme.onSurface
         ),
-        onClick = { offset ->
-            urlMap[offset]?.let { url ->
-                openUrl(context, url)
-            }
-        }
+        urlMap = urlMap,
+        context = context
     )
 }
 
@@ -363,18 +425,15 @@ private fun MarkdownHeading3(
     context: android.content.Context
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    ClickableText(
+    MarkdownClickableText(
         text = text,
         style = MaterialTheme.typography.titleMedium.copy(
             fontWeight = FontWeight.Bold,
             fontSize = 18.sp,
             color = colorScheme.onSurface
         ),
-        onClick = { offset ->
-            urlMap[offset]?.let { url ->
-                openUrl(context, url)
-            }
-        }
+        urlMap = urlMap,
+        context = context
     )
 }
 
@@ -385,18 +444,15 @@ private fun MarkdownHeading4(
     context: android.content.Context
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    ClickableText(
+    MarkdownClickableText(
         text = text,
         style = MaterialTheme.typography.titleSmall.copy(
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp,
             color = colorScheme.onSurface
         ),
-        onClick = { offset ->
-            urlMap[offset]?.let { url ->
-                openUrl(context, url)
-            }
-        }
+        urlMap = urlMap,
+        context = context
     )
 }
 
@@ -407,16 +463,13 @@ private fun MarkdownParagraph(
     context: android.content.Context
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    ClickableText(
+    MarkdownClickableText(
         text = text,
         style = MaterialTheme.typography.bodyMedium.copy(
             color = colorScheme.onSurface
         ),
-        onClick = { offset ->
-            urlMap[offset]?.let { url ->
-                openUrl(context, url)
-            }
-        }
+        urlMap = urlMap,
+        context = context
     )
 }
 
@@ -438,17 +491,14 @@ private fun MarkdownListItem(
             ),
             modifier = Modifier.padding(top = 2.dp)
         )
-        ClickableText(
+        MarkdownClickableText(
             text = text,
             style = MaterialTheme.typography.bodyMedium.copy(
                 color = colorScheme.onSurface
             ),
             modifier = Modifier.weight(1f),
-            onClick = { offset ->
-                urlMap[offset]?.let { url ->
-                    openUrl(context, url)
-                }
-            }
+            urlMap = urlMap,
+            context = context
         )
     }
     Spacer(modifier = Modifier.height(4.dp))
@@ -464,7 +514,7 @@ private fun MarkdownImage(
     val bitmap = remember(url) {
         loadImageFromAssets(context, url)
     }
-    
+
     if (bitmap != null) {
         Image(
             bitmap = bitmap.asImageBitmap(),
@@ -515,29 +565,29 @@ private fun parseInlineFormatting(
     val builder = AnnotatedString.Builder()
     val urlMap = mutableMapOf<Int, String>()
     var i = 0
-    
+
     while (i < text.length) {
         when {
             // Link: [text](url)
-            text.startsWith("[", i) && "]" in text.substring(i + 1) && 
+            text.startsWith("[", i) && "]" in text.substring(i + 1) &&
             "(" in text.substring(i) -> {
                 val linkEnd = text.indexOf("]", i)
                 val urlStart = text.indexOf("(", linkEnd)
                 val urlEnd = text.indexOf(")", urlStart)
-                
+
                 if (linkEnd > i && urlStart > linkEnd && urlEnd > urlStart) {
                     val linkText = text.substring(i + 1, linkEnd)
                     val url = text.substring(urlStart + 1, urlEnd)
-                    
+
                     val linkStartPos = builder.length
                     builder.append(linkText)
                     val linkEndPos = builder.length
-                    
+
                     // Store URL for all positions in the link
                     for (pos in linkStartPos until linkEndPos) {
                         urlMap[pos] = url
                     }
-                    
+
                     builder.addStyle(
                         style = SpanStyle(
                             color = MaterialTheme.colorScheme.primary,
@@ -546,7 +596,7 @@ private fun parseInlineFormatting(
                         start = linkStartPos,
                         end = linkEndPos
                     )
-                    
+
                     i = urlEnd + 1
                     continue
                 }
@@ -588,7 +638,7 @@ private fun parseInlineFormatting(
                 continue
             }
             // Italic: *text* (but not if it's part of **)
-            text.startsWith("*", i) && !text.startsWith("**", i) && 
+            text.startsWith("*", i) && !text.startsWith("**", i) &&
             text.indexOf("*", i + 1) > i && (i + 1 >= text.length || text[i + 1] != '*') -> {
                 val italicEnd = text.indexOf("*", i + 1)
                 val italicText = text.substring(i + 1, italicEnd)
@@ -607,7 +657,7 @@ private fun parseInlineFormatting(
                 continue
             }
             // Italic: _text_ (but not if it's part of __)
-            text.startsWith("_", i) && !text.startsWith("__", i) && 
+            text.startsWith("_", i) && !text.startsWith("__", i) &&
             text.indexOf("_", i + 1) > i && (i + 1 >= text.length || text[i + 1] != '_') -> {
                 val italicEnd = text.indexOf("_", i + 1)
                 val italicText = text.substring(i + 1, italicEnd)
@@ -650,7 +700,7 @@ private fun parseInlineFormatting(
             }
         }
     }
-    
+
     // The TextStyle in the composables already has the correct color (colorScheme.onSurface),
     // and inline styles (bold, italic, links, code) explicitly set their colors.
     // Text without inline formatting will inherit the color from the TextStyle in the composable.
@@ -668,4 +718,3 @@ private fun openUrl(context: android.content.Context, url: String) {
         android.util.Log.e("AboutScreen", "Error opening URL: $url", e)
     }
 }
-

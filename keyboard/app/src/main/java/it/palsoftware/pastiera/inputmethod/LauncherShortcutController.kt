@@ -7,6 +7,12 @@ import android.content.pm.ResolveInfo
 import android.util.Log
 import it.palsoftware.pastiera.R
 import it.palsoftware.pastiera.SettingsManager
+import it.palsoftware.pastiera.commands.CommandExecutor
+import it.palsoftware.pastiera.commands.CommandKind
+import it.palsoftware.pastiera.commands.CommandRegistry
+import it.palsoftware.pastiera.commands.CommandSourceId
+import it.palsoftware.pastiera.commands.CommandTarget
+import it.palsoftware.pastiera.commands.PastieraCommandSource
 
 /**
  * Controller for handling launcher shortcuts functionality.
@@ -83,6 +89,32 @@ class LauncherShortcutController(
             return false
         }
     }
+
+    private fun executeShortcutCommand(shortcut: SettingsManager.LauncherShortcut): Boolean {
+        if (shortcut.commandId == PastieraCommandSource.COMMAND_QUICK_LAUNCHER) {
+            return QuickLauncherOpener.open(context)
+        }
+        val command = shortcut.commandId?.let { CommandRegistry(context).resolve(it) }
+            ?: shortcutToCommand(shortcut)
+            ?: return false
+        return CommandExecutor(context).execute(command).isSuccess
+    }
+
+    private fun shortcutToCommand(shortcut: SettingsManager.LauncherShortcut): CommandTarget? {
+        val launch = shortcut.commandLaunch ?: return null
+        return CommandTarget(
+            id = shortcut.commandId ?: "legacy:${shortcut.type}:${shortcut.packageName ?: shortcut.action.orEmpty()}",
+            source = shortcut.commandSource
+                ?.let { CommandSourceId.fromStorageValue(it) }
+                ?: CommandSourceId.Pastiera,
+            kind = runCatching {
+                CommandKind.valueOf(shortcut.commandKind ?: "")
+            }.getOrDefault(CommandKind.PastieraAction),
+            label = shortcut.commandTitle ?: shortcut.appName ?: shortcut.packageName ?: "Shortcut",
+            subtitle = shortcut.commandSubtitle,
+            launch = launch
+        )
+    }
     
     /**
      * Handles launcher shortcuts when not in a text field.
@@ -94,7 +126,7 @@ class LauncherShortcutController(
             when (shortcut.type) {
                 SettingsManager.LauncherShortcut.TYPE_APP -> {
                     if (shortcut.packageName != null) {
-                        val success = launchApp(shortcut.packageName)
+                        val success = executeShortcutCommand(shortcut) || launchApp(shortcut.packageName)
                         if (success) {
                             Log.d(TAG, "Scorciatoia launcher eseguita: tasto $keyCode -> ${shortcut.packageName}")
                             return true // Consumiamo l'evento
@@ -106,8 +138,14 @@ class LauncherShortcutController(
                     Log.d(TAG, "Tipo scorciatoia non ancora implementato: ${shortcut.type}")
                 }
                 SettingsManager.LauncherShortcut.TYPE_QUICK_LAUNCHER -> {
-                    if (openQuickLauncher()) {
+                    if (QuickLauncherOpener.open(context)) {
                         Log.d(TAG, "Quick launcher shortcut executed: key $keyCode")
+                        return true
+                    }
+                }
+                SettingsManager.LauncherShortcut.TYPE_COMMAND -> {
+                    if (executeShortcutCommand(shortcut)) {
+                        Log.d(TAG, "Command shortcut executed: key $keyCode -> ${shortcut.commandId}")
                         return true
                     }
                 }
@@ -123,22 +161,6 @@ class LauncherShortcutController(
         return false // Non consumiamo l'evento
     }
 
-    private fun openQuickLauncher(): Boolean {
-        return try {
-            val intent = Intent(context, QuickLauncherActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
-                addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY)
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            }
-            context.startActivity(intent)
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Errore nell'apertura del quick launcher", e)
-            false
-        }
-    }
-    
     /**
      * Mostra il dialog per assegnare un'app a un tasto.
      */

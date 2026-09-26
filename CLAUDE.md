@@ -262,15 +262,55 @@ on-screen keyboard entirely, and on any other phone it is still just
 dictation. The stock Kika keyboard is bad, Gboard misbehaves on hardware
 keyboards (phantom Alt shortcuts, double-space-period then backspace wiping all
 the text), and Pastiera nightly has quirks like staying up over Niagara after
-going home. The goal is Pastiera stable's behaviour, Gboard's look, and the
-nightly features Ry picks one at a time.
+going home. The goal is a keyboard Ry owns: nightly's features, simplified
+down, with Gboard's look and the quirks fixed.
+
+**The base is nightly, not stable, since 2026-09-25.** It started on stable
+v0.85 with nightly features to be ported one at a time; the first real port
+(themes) showed every later nightly feature sits on nightly's on-screen
+keyboard rework, so porting meant dragging that in piecemeal. Our changes were
+~840 lines, nearly all in our own files, so moving the base was cheaper.
+Nightly is pinned at `474fa10` (2026-09-08), its last commit, which announces
+**Plektra** (`pkb-rocks/plektra`) as Pastiera's successor; that repo was empty
+at the time. Upstream is effectively frozen, so simplifying means hiding
+settings rows first and deleting code only once Ry decides we stop tracking
+upstream.
+
+"Gboard's look" means the look of Gboard's *bar* on a hardware keyboard: a slim
+white rounded pill, with the menu on the left, suggestions in the middle and
+mic/emoji on the right. It never meant building an on-screen keyboard. One
+session read it that way and wrote it into the backlog.
 
 - **Pastiera is GPL-3.0, so Mutterboard is too.** Ry agreed; it is a hobby
   project and stays open source.
+- **Pastiera's settings screens stay; only their canvas is ours.** They are
+  Compose screens over one `SettingsManager`, and rebuilding them would mean
+  re-porting every nightly feature's UI. `PastieraTheme` paints `background`
+  and `surface` in Mutterboard's peach/charcoal (the values are copied, since
+  the library cannot see the app module) and leaves everything else alone.
+- **Nightly's last visibility rewrite (`d0ea564`) is reverted.** It replaced
+  the show/hide logic and the insets apps use to make room for the bar, the
+  day before upstream froze, and is the suspect (not yet confirmed) for two
+  regressions: Messages and Gmail not lifting their text field above the bar,
+  and typing on Niagara's home screen sometimes stopping after one letter. If
+  either survives the revert, look elsewhere.
+- **Nightly's `PastieraApplication` does not run.** An app has one
+  Application, so `MutterboardApplication` repeats its startup calls; check it
+  after moving the pin. Its software-keyboard-mode launcher shortcut is left
+  out, and the Clicks launcher accessibility service is removed in the app
+  manifest - a second Mutterboard accessibility service beside the paste one
+  would leave people guessing which to enable.
+- **The bar is a one-row pill (`mutterboard/PillBar`).** Menu left,
+  suggestions middle, mic right: nightly's Pastierina presentation with its
+  buttons chosen, written once on first run so a later choice in settings
+  sticks. The pill is an outline clip inset from the sides and bottom, and it
+  switches nightly's Titan 2 Elite traced corners off entirely - they never
+  sat flush, and the app showed through slivers at the edges. Dictation covers
+  only the words, never the row: the mic in that row is the stop button.
 - **Mutterboard is the host, Pastiera is the guest.** Its source sits under
   `keyboard/` (the name is ours to pick; GPL only asks that the copyright
-  notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag (the last stable; the 0.86
-  Ry ran was a nightly) with full history. Remotes: `pastiera` is Ry's fork,
+  notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag and then from nightly `474fa10`,
+  with full history. Remotes: `pastiera` is Ry's fork,
   `pastiera-upstream` is palsoftware. Nightly is not a separate repo, it is
   upstream `main`. Pick a nightly change across with
   `git cherry-pick -Xsubtree=keyboard <sha>`.
@@ -286,8 +326,7 @@ nightly features Ry picks one at a time.
   "separate sections" and "nested under Keyboard" before landing here; the only
   real either/or is which keyboard fits the phone. The radio is which of the two
   IME services is enabled; the physical one ships disabled so updates keep the
-  dictation keyboard. Touchscreen is today's dictation keyboard until a
-  Gboard-style one exists.
+  dictation keyboard. Touchscreen is the dictation keyboard.
 - **The mic button runs `DictationSession`** through
   `keyboard/.../inputmethod/voice/` (Mutterboard's own package inside the
   library) and `KeyboardDictation`, installed by `MutterboardApplication`. While

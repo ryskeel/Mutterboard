@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
@@ -72,61 +71,18 @@ fun AutoCorrectionCategoryScreen(
     var useEditTypeRanking by remember {
         mutableStateOf(SettingsManager.getUseEditTypeRanking(context))
     }
-    var navigationDirection by remember { mutableStateOf(LocalNavigationDirection.Push) }
-    val navigationStack = remember {
-        mutableStateListOf<AutoCorrectionDestination>(AutoCorrectionDestination.Main)
+    val currentDestination = when (val page = settingsChild(context, "autocorrection")) {
+        "Settings" -> AutoCorrectionDestination.Settings
+        "UserDictionary" -> AutoCorrectionDestination.UserDictionary
+        else -> if (page?.startsWith("Edit:") == true) AutoCorrectionDestination.Edit(page.removePrefix("Edit:")) else AutoCorrectionDestination.Main
     }
-    val currentDestination by remember {
-        derivedStateOf { navigationStack.last() }
-    }
-    
     fun navigateTo(destination: AutoCorrectionDestination) {
-        navigationDirection = LocalNavigationDirection.Push
-        navigationStack.add(destination)
+        openSettingsChild(context, "autocorrection", when (destination) { AutoCorrectionDestination.Main -> "Main"; AutoCorrectionDestination.Settings -> "Settings"; AutoCorrectionDestination.UserDictionary -> "UserDictionary"; is AutoCorrectionDestination.Edit -> "Edit:${destination.languageCode}" })
     }
-    
-    fun navigateBack() {
-        if (navigationStack.size > 1) {
-            navigationDirection = LocalNavigationDirection.Pop
-            navigationStack.removeAt(navigationStack.lastIndex)
-        } else {
-            onBack()
-        }
-    }
-    
-    BackHandler { navigateBack() }
-    
-    AnimatedContent(
-        targetState = currentDestination,
-        transitionSpec = {
-            if (navigationDirection == LocalNavigationDirection.Push) {
-                // Forward navigation: new screen enters from right, old screen exits to left
-                slideInHorizontally(
-                    initialOffsetX = { fullWidth -> fullWidth },
-                    animationSpec = tween(250)
-                ) togetherWith slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> -fullWidth },
-                    animationSpec = tween(250)
-                )
-            } else {
-                // Back navigation: current screen exits to right, previous screen enters from left
-                slideInHorizontally(
-                    initialOffsetX = { fullWidth -> -fullWidth },
-                    animationSpec = tween(250)
-                ) togetherWith slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> fullWidth },
-                    animationSpec = tween(250)
-                )
-            }
-        },
-        label = "auto_correction_navigation",
-        contentKey = { destination ->
-            when (destination) {
-                is AutoCorrectionDestination.Edit -> "auto_correct_edit_${destination.languageCode}"
-                else -> destination::class
-            }
-        }
-    ) { destination ->
+    fun navigateBack() { context.settingsActivity().finish() }
+
+
+    val destination = currentDestination
         when (destination) {
             AutoCorrectionDestination.Main -> {
                 Scaffold(
@@ -165,12 +121,103 @@ fun AutoCorrectionCategoryScreen(
                             .padding(paddingValues)
                             .verticalScroll(rememberScrollState())
                     ) {
-                        // Auto-Correction
+                        // Text replacements: explicit user/default rules like "ca -> ça".
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp)
+                                .height(80.dp)
+                                .settingRow(SettingLinkIds.AUTO_CORRECTION_TEXT_REPLACEMENTS)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
+                                Icon(
+                                    imageVector = Icons.Filled.TextFields,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+	                                Column(modifier = Modifier.weight(1f)) {
+	                                    Text(
+	                                        text = stringResource(R.string.auto_correct_title),
+	                                        style = MaterialTheme.typography.titleMedium,
+	                                        fontWeight = FontWeight.Medium,
+	                                        maxLines = 1
+	                                    )
+	                                    Text(
+	                                        text = stringResource(R.string.auto_correct_title_description),
+	                                        style = MaterialTheme.typography.bodySmall,
+	                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+	                                        maxLines = 2
+	                                    )
+	                                }
+                                Switch(
+                                    checked = autoCorrectEnabled,
+                                    onCheckedChange = { enabled ->
+                                        autoCorrectEnabled = enabled
+                                        SettingsManager.setAutoCorrectEnabled(context, enabled)
+                                    }
+                                )
+                            }
+                        }
+
+                        // Text replacement language/rule sets (only if text replacements are enabled)
+                        if (autoCorrectEnabled) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(80.dp)
+                                    .settingRow(SettingLinkIds.AUTO_CORRECTION_LANGUAGES) {
+                                        navigateTo(AutoCorrectionDestination.Settings)
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Language,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+	                                    Column(modifier = Modifier.weight(1f)) {
+	                                        Text(
+	                                            text = stringResource(R.string.auto_correct_languages_title),
+	                                            style = MaterialTheme.typography.titleMedium,
+	                                            fontWeight = FontWeight.Medium,
+	                                            maxLines = 1
+	                                        )
+	                                        Text(
+	                                            text = stringResource(R.string.auto_correct_languages_description),
+	                                            style = MaterialTheme.typography.bodySmall,
+	                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+	                                            maxLines = 2
+	                                        )
+	                                    }
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+	                            }
+                        }
+
+                        // Automatic correction: dictionary/suggestion based guessing on boundaries.
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(80.dp)
+                                .settingRow(SettingLinkIds.AUTO_CORRECTION_AUTO_REPLACE)
+                        ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -186,30 +233,92 @@ fun AutoCorrectionCategoryScreen(
                                 )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = stringResource(R.string.auto_correct_title),
+                                        text = stringResource(R.string.auto_correct_auto_replace_title),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Medium,
                                         maxLines = 1
                                     )
+                                    Text(
+                                        text = stringResource(R.string.auto_correct_auto_replace_description),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2
+                                    )
                                 }
                                 Switch(
-                                    checked = autoCorrectEnabled,
+                                    checked = autoReplaceOnSpaceEnter,
                                     onCheckedChange = { enabled ->
-                                        autoCorrectEnabled = enabled
-                                        SettingsManager.setAutoCorrectEnabled(context, enabled)
-                                    }
+                                        autoReplaceOnSpaceEnter = enabled
+                                        SettingsManager.setAutoReplaceOnSpaceEnter(context, enabled)
+                                    },
+                                    enabled = experimentalSuggestionsEnabled
                                 )
                             }
                         }
 
-                        // Auto-Correction Languages (only if auto-correction is enabled)
-                        if (autoCorrectEnabled) {
+                        // Max auto-replace distance slider (only shown when automatic correction is enabled)
+                        if (autoReplaceOnSpaceEnter) {
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(64.dp)
-                                    .clickable { navigateTo(AutoCorrectionDestination.Settings) }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .settingRow(SettingLinkIds.AUTO_CORRECTION_MAX_DISTANCE)
                             ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.auto_correct_max_distance_title),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = if (maxAutoReplaceDistance == 0) {
+                                                stringResource(R.string.auto_correct_max_distance_off)
+                                            } else {
+                                                maxAutoReplaceDistance.toString()
+                                            },
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Slider(
+                                        value = maxAutoReplaceDistance.toFloat(),
+                                        onValueChange = { value ->
+                                            val newValue = value.toInt().coerceIn(0, 3)
+                                            maxAutoReplaceDistance = newValue
+                                            SettingsManager.setMaxAutoReplaceDistance(context, newValue)
+                                        },
+                                        valueRange = 0f..3f,
+                                        steps = 2,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.auto_correct_max_distance_description),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(80.dp)
+                                .settingRow(SettingLinkIds.AUTO_CORRECTION_USER_DICTIONARY) {
+                                    navigateTo(AutoCorrectionDestination.UserDictionary)
+                                }
+                        ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -218,33 +327,39 @@ fun AutoCorrectionCategoryScreen(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.Language,
+                                        imageVector = Icons.Filled.Add,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = stringResource(R.string.auto_correct_languages_title),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Medium,
-                                            maxLines = 1
-                                        )
-                                    }
+	                                        text = stringResource(R.string.auto_correct_manage_user_dict_title),
+	                                        style = MaterialTheme.typography.titleMedium,
+	                                        fontWeight = FontWeight.Medium,
+	                                        maxLines = 1
+	                                    )
+	                                    Text(
+	                                        text = stringResource(R.string.auto_correct_manage_user_dict_description),
+	                                        style = MaterialTheme.typography.bodySmall,
+	                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+	                                        maxLines = 2
+	                                    )
+	                                }
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                            }
-                        }
+	                            }
 
-                        // Experimental suggestions master toggle
+                        // Advanced suggestions master toggle
                         Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(64.dp)
+                                    .height(80.dp)
+                                    .settingRow(SettingLinkIds.AUTO_CORRECTION_EXPERIMENTAL_SUGGESTIONS)
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -269,9 +384,11 @@ fun AutoCorrectionCategoryScreen(
                                         Text(
                                             text = stringResource(R.string.experimental_suggestions_subtitle),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2
                                         )
                                     }
+                                    FeatureStatusIcon(FeatureStatus.Experimental)
                                     Switch(
                                         checked = experimentalSuggestionsEnabled,
                                         onCheckedChange = { enabled ->
@@ -290,58 +407,24 @@ fun AutoCorrectionCategoryScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp)
-                                .clickable { navigateTo(AutoCorrectionDestination.UserDictionary) }
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Add,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = stringResource(R.string.auto_correct_manage_user_dict_title),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Medium,
-                                            maxLines = 1
-                                        )
-                                    }
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(64.dp)
+                                .settingRow(SettingLinkIds.AUTO_CORRECTION_SUGGESTIONS)
                         ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.TextFields,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = stringResource(R.string.auto_correct_suggestions_toggle_title),
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.TextFields,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.auto_correct_suggestions_toggle_title),
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Medium,
                                             maxLines = 1
@@ -362,6 +445,7 @@ fun AutoCorrectionCategoryScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp)
+                                .settingRow(SettingLinkIds.AUTO_CORRECTION_ACCENT_MATCHING)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -399,6 +483,7 @@ fun AutoCorrectionCategoryScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp)
+                                .settingRow(SettingLinkIds.AUTO_CORRECTION_KEYBOARD_PROXIMITY)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -442,6 +527,7 @@ fun AutoCorrectionCategoryScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp)
+                                .settingRow(SettingLinkIds.AUTO_CORRECTION_EDIT_TYPE_RANKING)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -481,99 +567,10 @@ fun AutoCorrectionCategoryScreen(
                             }
                         }
 
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(64.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.TextFields,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = stringResource(R.string.auto_correct_auto_replace_title),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1
-                                    )
-                                }
-                                Switch(
-                                    checked = autoReplaceOnSpaceEnter,
-                                    onCheckedChange = { enabled ->
-                                        autoReplaceOnSpaceEnter = enabled
-                                        SettingsManager.setAutoReplaceOnSpaceEnter(context, enabled)
-                                    }
-                                )
-                            }
-                        }
-
-                        // Max auto-replace distance slider (only shown when auto-replace is enabled)
-                        if (autoReplaceOnSpaceEnter) {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = stringResource(R.string.auto_correct_max_distance_title),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        Text(
-                                            text = if (maxAutoReplaceDistance == 0) {
-                                                stringResource(R.string.auto_correct_max_distance_off)
-                                            } else {
-                                                maxAutoReplaceDistance.toString()
-                                            },
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                    Slider(
-                                        value = maxAutoReplaceDistance.toFloat(),
-                                        onValueChange = { value ->
-                                            val newValue = value.toInt().coerceIn(0, 3)
-                                            maxAutoReplaceDistance = newValue
-                                            SettingsManager.setMaxAutoReplaceDistance(context, newValue)
-                                        },
-                                        valueRange = 0f..3f,
-                                        steps = 2, // 0, 1, 2, 3 = 3 steps
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.auto_correct_max_distance_description),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }
-            
+
             AutoCorrectionDestination.Settings -> {
                 AutoCorrectSettingsScreen(
                     modifier = modifier,
@@ -599,7 +596,7 @@ fun AutoCorrectionCategoryScreen(
                 )
             }
         }
-    }
+
 }
 
 private sealed class AutoCorrectionDestination {
@@ -826,7 +823,7 @@ private fun UserDictionaryScreen(
             }
         }
     }
-    
+
     // Add word dialog
     if (showAddDialog) {
         UserDictWordDialog(
@@ -910,10 +907,7 @@ private fun UserDictWordDialog(
     )
 }
 
-private enum class LocalNavigationDirection {
-    Push,
-    Pop
-}
+
 
 private data class DefaultUserWord(val word: String, val frequency: Int)
 

@@ -33,6 +33,7 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
     enum class Posture { LISTENING, THINKING, DONE, MISSED }
 
     var onCancel: (() -> Unit)? = null
+    private lateinit var cancel: ImageView
 
     private val wave = WaveView(context)
     private val caption = TextView(context).apply {
@@ -56,9 +57,15 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
         // Inset from the cancel button's side too, so the wave is centred on
         // the bar rather than on what is left of it.
         addView(View(context), LayoutParams(heightPx, heightPx))
-        addView(middle, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f))
+        // Kept off the buttons at either end: full width, its tips all but
+        // touched them.
+        val waveInset = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 12f, resources.displayMetrics).toInt()
+        addView(middle, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply {
+            marginStart = waveInset
+            marginEnd = waveInset
+        })
 
-        val cancel = ImageView(context).apply {
+        cancel = ImageView(context).apply {
             setImageResource(R.drawable.ic_close_24)
             setColorFilter(Color.WHITE)
             contentDescription = "Cancel dictation"
@@ -71,6 +78,12 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
             }
         }
         addView(cancel, LayoutParams(heightPx, heightPx))
+    }
+
+    fun setInk(color: Int) {
+        caption.setTextColor(color)
+        cancel.setColorFilter(color)
+        wave.ink = color
     }
 
     fun setLevel(level: Float) {
@@ -96,6 +109,8 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
     private class WaveView(context: Context) : View(context) {
         var posture = Posture.LISTENING
         var level = 0f
+        var ink = Color.WHITE
+            set(value) { field = value; paint.color = value; invalidate() }
 
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE

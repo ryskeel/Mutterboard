@@ -22,6 +22,9 @@ import it.palsoftware.pastiera.core.ModifierStateController
 import it.palsoftware.pastiera.core.AutoSpaceTracker
 import android.view.inputmethod.ExtractedText
 import android.view.inputmethod.ExtractedTextRequest
+import it.palsoftware.pastiera.commands.CommandExecutor
+import it.palsoftware.pastiera.commands.CommandRegistry
+import it.palsoftware.pastiera.commands.CommandSurface
 import it.palsoftware.pastiera.data.layout.LayoutMapping
 import it.palsoftware.pastiera.data.layout.LayoutMappingRepository
 import it.palsoftware.pastiera.data.layout.isRealMultiTap
@@ -34,9 +37,14 @@ class InputEventRouter(
     private val context: Context,
     private val navModeController: NavModeController
 ) {
+    private val swipeToDeleteKeyCodes = setOf(322, 404)
+    private val restrictedFieldBasicCtrlActions = setOf("select_all", "copy", "cut", "paste")
 
     var suggestionController: it.palsoftware.pastiera.core.suggestions.SuggestionController? = null
     var onCommitText: (() -> Unit)? = null
+
+    private fun isSuggestionDebugLoggingEnabled(): Boolean =
+        SettingsManager.isSuggestionDebugLoggingEnabled(context)
 
     /**
      * Track in-word apostrophes so suggestions don't reset (e.g., "we'" -> "we'll").
@@ -70,11 +78,15 @@ class InputEventRouter(
     }
 
     private fun commitTextWithTracking(ic: InputConnection?, text: CharSequence, trackWord: Boolean = true) {
-        Log.d("PastieraIME", "commitTextWithTracking enter: '$text', trackWord=$trackWord")
+        if (isSuggestionDebugLoggingEnabled()) {
+            Log.d("PastieraIME", "commitTextWithTracking enter: '$text', trackWord=$trackWord")
+        }
         onCommitText?.invoke()
         ic?.commitText(text, 1)
         if (trackWord) {
-            Log.d("PastieraIME", "commitTextWithTracking notify SC: '$text'")
+            if (isSuggestionDebugLoggingEnabled()) {
+                Log.d("PastieraIME", "commitTextWithTracking notify SC: '$text'")
+            }
             suggestionController?.onCharacterCommitted(text, ic)
         }
     }
@@ -132,6 +144,30 @@ class InputEventRouter(
             )
         }
 
+        if (
+            !ctrlLatchActive &&
+            event?.isSymPressed == true &&
+            SettingsManager.getQuickLauncherTextFieldShortcuts(context) &&
+            SettingsManager.isQuickLauncherShortcut(context, keyCode)
+        ) {
+            if (powerShortcutsEnabled && callbacks.handlePowerShortcut(keyCode)) {
+                return true
+            }
+            if (callbacks.handleLauncherShortcut(keyCode)) {
+                return true
+            }
+        }
+
+        if (
+            !ctrlLatchActive &&
+            event?.isAltPressed == true &&
+            SettingsManager.getQuickLauncherAltShortcutsOutsideTextFields(context) &&
+            callbacks.isShortcutKey(keyCode) &&
+            callbacks.handleLauncherShortcut(keyCode)
+        ) {
+            return true
+        }
+
         // Gestisci Power Shortcuts (SYM premuto + tasto alfabetico)
         if (!ctrlLatchActive && powerShortcutsEnabled) {
             if (callbacks.isShortcutKey(keyCode)) {
@@ -180,13 +216,13 @@ class InputEventRouter(
         val ctrlLatchFromNavMode: Boolean,
         val ctrlLatchActive: Boolean,
         val isInputViewActive: Boolean,
-        val isInputViewShown: Boolean,
+        val isImeSurfaceRequestedOrShown: Boolean,
         val hasInputConnection: Boolean
     )
 
     data class EditableFieldKeyDownCallbacks(
         val exitNavMode: () -> Unit,
-        val ensureInputViewCreated: () -> Unit,
+        val ensureImeSurfaceVisible: () -> Unit,
         val callSuper: () -> Boolean
     )
 
@@ -203,8 +239,12 @@ class InputEventRouter(
             return EditableFieldRoutingResult.CallSuper
         }
 
-        if (params.hasInputConnection && params.isInputViewActive && !params.isInputViewShown) {
-            callbacks.ensureInputViewCreated()
+        if (
+            params.hasInputConnection &&
+            params.isInputViewActive &&
+            !params.isImeSurfaceRequestedOrShown
+        ) {
+            callbacks.ensureImeSurfaceVisible()
         }
 
         return EditableFieldRoutingResult.Continue
@@ -217,6 +257,7 @@ class InputEventRouter(
         val shiftPressed: Boolean,
         val shiftLayerLatched: Boolean,
         val ctrlPressed: Boolean,
+        val ctrlPhysicallyPressed: Boolean,
         val altPressed: Boolean,
         val ctrlLatchActive: Boolean,
         val altLatchActive: Boolean,
@@ -227,14 +268,17 @@ class InputEventRouter(
         val clearAltOnSpaceEnabled: Boolean,
         val shiftOneShot: Boolean,
         val capsLockEnabled: Boolean,
-        val cursorUpdateDelayMs: Long
+        val cursorUpdateDelayMs: Long,
+        val altMappingsOverride: Map<Int, String>? = null,
+        val shouldDisableSmartFeatures: Boolean = false
     )
 
     data class EditableFieldKeyDownControllers(
         val modifierStateController: ModifierStateController,
         val symLayoutController: SymLayoutController,
-        val altSymManager: AltSymManager,
-        val variationStateController: VariationStateController
+        val alternateCharacterManager: AlternateCharacterManager,
+        val variationStateController: VariationStateController,
+        val textInputController: TextInputController
     )
 
     data class EditableFieldKeyDownHandlingCallbacks(
@@ -251,7 +295,9 @@ class InputEventRouter(
         val getMapping: (Int) -> LayoutMapping?,
         val handleMultiTapCommit: (Int, LayoutMapping, Boolean, InputConnection?, Boolean) -> Boolean,
         val isLongPressSuppressed: (Int) -> Boolean,
-        val toggleMinimalUi: () -> Unit
+        val toggleMinimalUi: () -> Unit,
+        val handleBoundaryText: (String, InputConnection?) -> Boolean = { _, _ -> false },
+        val onShiftOneShotToggledOff: () -> Unit = {}
     )
 
     fun routeEditableFieldKeyDown(
@@ -265,10 +311,20 @@ class InputEventRouter(
         var altLatchActive = params.altLatchActive
         var altOneShotActive = params.altOneShot
         val ic = params.inputConnection
+        val effectiveCtrlActive = event?.isCtrlPressed == true ||
+            params.ctrlPressed ||
+            params.ctrlPhysicallyPressed ||
+            params.ctrlLatchActive ||
+            params.ctrlOneShot ||
+            params.ctrlLatchFromNavMode
 
         if (keyCode == KeyEvent.KEYCODE_SHIFT_LEFT || keyCode == KeyEvent.KEYCODE_SHIFT_RIGHT) {
             if (!params.shiftPressed) {
+                val wasShiftOneShot = controllers.modifierStateController.shiftOneShot
                 val result = controllers.modifierStateController.handleShiftKeyDown(keyCode)
+                if (wasShiftOneShot && !controllers.modifierStateController.shiftOneShot) {
+                    callbacks.onShiftOneShotToggledOff()
+                }
                 if (result.shouldUpdateStatusBar) {
                     callbacks.updateStatusBar()
                 } else if (result.shouldRefreshStatusBar) {
@@ -346,30 +402,53 @@ class InputEventRouter(
             return EditableFieldRoutingResult.Consume
         }
 
-        if (keyCode == 322) {
+        if (keyCode in swipeToDeleteKeyCodes) {
             val swipeToDeleteEnabled = SettingsManager.getSwipeToDelete(context)
-            if (swipeToDeleteEnabled) {
+            val swipeToDeleteProvider = SettingsManager.getSwipeToDeleteProvider(context)
+            if (
+                swipeToDeleteEnabled &&
+                swipeToDeleteProvider == SettingsManager.SWIPE_TO_DELETE_PROVIDER_TITAN2_KEYCODE
+            ) {
                 if (ic != null && TextSelectionHelper.deleteLastWord(ic)) {
                     return EditableFieldRoutingResult.Consume
                 }
             } else {
+                KeyboardEventTracker.notifyKeyEvent(
+                    keyCode = keyCode,
+                    event = event,
+                    action = "KEY_DOWN",
+                    origin = "ime_service",
+                    outputKeyCode = null,
+                    outputKeyCodeName = "swipe_to_delete_ignored_${swipeToDeleteProvider}"
+                )
                 return EditableFieldRoutingResult.Consume
             }
         }
 
-        if (controllers.altSymManager.hasPendingPress(keyCode)) {
+        if (controllers.alternateCharacterManager.hasPendingPress(keyCode)) {
             return EditableFieldRoutingResult.Consume
         }
 
+        var passThroughAltBoundary = false
         if (
             params.clearAltOnSpaceEnabled &&
             (keyCode == KeyEvent.KEYCODE_SPACE || keyCode == KeyEvent.KEYCODE_ENTER) &&
             (altLatchActive || altOneShotActive)
         ) {
-            controllers.modifierStateController.clearAltState()
-            altLatchActive = false
-            altOneShotActive = false
-            callbacks.updateStatusBar()
+            val keepLatchedAlt = altLatchActive && SettingsManager.getAltLatchStaysOnSpace(context)
+            if (keepLatchedAlt) {
+                if (altOneShotActive) {
+                    controllers.modifierStateController.altOneShot = false
+                    altOneShotActive = false
+                    callbacks.updateStatusBar()
+                }
+                passThroughAltBoundary = true
+            } else {
+                controllers.modifierStateController.clearAltState()
+                altLatchActive = false
+                altOneShotActive = false
+                callbacks.updateStatusBar()
+            }
         }
 
         if (
@@ -378,21 +457,26 @@ class InputEventRouter(
                 event = event,
                 inputConnection = ic,
                 isNumericField = params.isNumericField,
-                altSymManager = controllers.altSymManager,
+                alternateCharacterManager = controllers.alternateCharacterManager,
                 symLayoutController = controllers.symLayoutController,
                 ctrlLatchActive = params.ctrlLatchActive,
+                ctrlPressed = params.ctrlPressed,
+                ctrlPhysicallyPressed = params.ctrlPhysicallyPressed,
+                ctrlLatchFromNavMode = params.ctrlLatchFromNavMode,
                 ctrlOneShot = params.ctrlOneShot,
                 altLatchActive = altLatchActive,
+                altMappingsOverride = params.altMappingsOverride,
                 cursorUpdateDelayMs = params.cursorUpdateDelayMs,
                 updateStatusBar = callbacks.updateStatusBar,
+                handleBoundaryText = callbacks.handleBoundaryText,
                 callSuper = callbacks.callSuper
             )
         ) {
             return EditableFieldRoutingResult.Consume
         }
 
-        if (event?.isAltPressed == true || altLatchActive || altOneShotActive) {
-            controllers.altSymManager.cancelPendingLongPress(keyCode)
+        if (!passThroughAltBoundary && (event?.isAltPressed == true || altLatchActive || altOneShotActive)) {
+            controllers.alternateCharacterManager.cancelPendingLongPress(keyCode)
             if (altOneShotActive) {
                 callbacks.clearAltOneShot()
                 callbacks.refreshStatusBar()
@@ -408,7 +492,8 @@ class InputEventRouter(
                     keyCode = keyCode,
                     event = event,
                     inputConnection = ic,
-                    altSymManager = controllers.altSymManager,
+                    alternateCharacterManager = controllers.alternateCharacterManager,
+                    altMappingsOverride = params.altMappingsOverride,
                     updateStatusBar = callbacks.updateStatusBar,
                     callSuperWithKey = callbacks.callSuperWithKey
                 )
@@ -417,7 +502,7 @@ class InputEventRouter(
             }
         }
 
-        if (event?.isCtrlPressed == true || params.ctrlLatchActive || params.ctrlOneShot) {
+        if (event?.isCtrlPressed == true || params.ctrlLatchActive || params.ctrlOneShot || (params.isNumericField && effectiveCtrlActive)) {
             if (
                 handleCtrlModifiedKey(
                     keyCode = keyCode,
@@ -426,7 +511,9 @@ class InputEventRouter(
                     ctrlKeyMap = params.ctrlKeyMap,
                     ctrlLatchFromNavMode = params.ctrlLatchFromNavMode,
                     ctrlOneShot = params.ctrlOneShot,
-                    ctrlPhysicallyPressed = params.ctrlPressed,
+                    ctrlPhysicallyPressed = params.ctrlPressed || params.ctrlPhysicallyPressed,
+                    selectionShiftActive = params.shiftPressed || event?.isShiftPressed == true,
+                    forceBasicContextMenuActions = params.isNumericField,
                     clearCtrlOneShot = {
                         callbacks.clearCtrlOneShot()
                     },
@@ -443,6 +530,7 @@ class InputEventRouter(
         val resolvedUppercase = mapping?.let {
             when {
                 shiftOneShotActive -> true
+                params.shiftLayerLatched -> true
                 params.capsLockEnabled && event?.isShiftPressed != true -> true
                 event?.isShiftPressed == true -> true
                 else -> false
@@ -467,21 +555,79 @@ class InputEventRouter(
         val hasLongPressSupport = when (longPressMode) {
             "shift" -> !longPressSuppressed && event != null && event.unicodeChar != 0 && event.unicodeChar.toChar().isLetter()
             "variations" -> !longPressSuppressed && charForLongPress != null && controllers.variationStateController.hasVariationsFor(charForLongPress)
-            "sym" -> !longPressSuppressed && controllers.altSymManager.hasSymLongPressMapping(
+            "sym", "sym_symbols", "sym_emoji" -> !longPressSuppressed && controllers.alternateCharacterManager.hasSymLongPressMapping(
                 keyCode = keyCode,
                 shiftPressed = effectiveShiftForLongPress
             )
-            else -> !longPressSuppressed && controllers.altSymManager.hasAltMapping(keyCode)
+            else -> !longPressSuppressed && controllers.alternateCharacterManager.hasAltMapping(keyCode)
         }
+
+        if (
+            controllers.textInputController.handleSpacedHyphenToEnDash(
+                keyCode = keyCode,
+                inputConnection = ic,
+                shouldDisableSmartPunctuation = params.shouldDisableSmartFeatures
+            )
+        ) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                callbacks.updateStatusBar()
+            }, params.cursorUpdateDelayMs)
+            return EditableFieldRoutingResult.Consume
+        }
+
+        val smartReplacementText = when {
+            keyCode == KeyEvent.KEYCODE_SPACE -> " "
+            LayoutMappingRepository.isMapped(keyCode) -> LayoutMappingRepository.getCharacterStringWithModifiers(
+                keyCode,
+                effectiveShiftForLongPress,
+                params.capsLockEnabled,
+                shiftOneShotActive
+            ).takeIf { it.length == 1 }.orEmpty()
+            event?.unicodeChar?.takeIf { it != 0 } != null -> event.unicodeChar.toChar().toString()
+            else -> ""
+        }
+        if (
+            controllers.textInputController.handlePendingMidWordQuoteToApostrophe(
+                typedText = smartReplacementText,
+                inputConnection = ic,
+                shouldDisableSmartPunctuation = params.shouldDisableSmartFeatures
+            )
+        ) {
+            suggestionController?.onCharacterCommitted("'", ic)
+            if (smartReplacementText.isNotEmpty()) {
+                suggestionController?.onCharacterCommitted(smartReplacementText, ic)
+            }
+            Handler(Looper.getMainLooper()).postDelayed({
+                callbacks.updateStatusBar()
+            }, params.cursorUpdateDelayMs)
+            return EditableFieldRoutingResult.Consume
+        }
+        if (
+            controllers.textInputController.handleSmartQuoteReplacement(
+                typedText = smartReplacementText,
+                inputConnection = ic,
+                shouldDisableSmartPunctuation = params.shouldDisableSmartFeatures
+            )
+        ) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                callbacks.updateStatusBar()
+            }, params.cursorUpdateDelayMs)
+            return EditableFieldRoutingResult.Consume
+        }
+
+        val shouldUseMultiTap = mapping?.isRealMultiTap == true &&
+            !shouldSuppressUppercaseEszettMultiTap(mapping, resolvedUppercase)
 
         // Ignore system-generated repeats on multi-tap keys so holding the key
         // won't churn through tap levels. Legacy keys keep their normal repeat.
-        if (mapping?.isRealMultiTap == true && (event?.repeatCount ?: 0) > 0) {
+        if (shouldUseMultiTap && (event?.repeatCount ?: 0) > 0) {
             return EditableFieldRoutingResult.Consume
         }
 
         // Multi-tap: commit immediately and replace within the timeout window.
-        if (mapping?.isRealMultiTap == true && ic != null) {
+        // Uppercase multi-tap is intentional for layouts that expose accented
+        // uppercase letters such as E -> È -> É.
+        if (shouldUseMultiTap && ic != null) {
             if (callbacks.handleMultiTapCommit(keyCode, mapping, resolvedUppercase, ic, hasLongPressSupport)) {
                 if (shiftOneShotActive) {
                     callbacks.disableShiftOneShot()
@@ -512,7 +658,7 @@ class InputEventRouter(
                 effectiveShiftForLongPress
             )
             if (ic != null) {
-                controllers.altSymManager.handleKeyWithAltMapping(
+                controllers.alternateCharacterManager.handleKeyWithAltMapping(
                     keyCode,
                     event,
                     params.capsLockEnabled,
@@ -573,12 +719,12 @@ class InputEventRouter(
         val charForVariations = if (LayoutMappingRepository.isMapped(keyCode)) {
             LayoutMappingRepository.getCharacterWithModifiers(
                 keyCode,
-                event?.isShiftPressed == true,
+                effectiveShiftForLongPress,
                 params.capsLockEnabled,
                 shiftOneShotActive
             )
         } else {
-            callbacks.getCharacterFromLayout(keyCode, event, event?.isShiftPressed == true)
+            callbacks.getCharacterFromLayout(keyCode, event, effectiveShiftForLongPress)
         }
         if (charForVariations != null) {
             if (controllers.variationStateController.hasVariationsFor(charForVariations)) {
@@ -594,12 +740,14 @@ class InputEventRouter(
         if (isAlphabeticKey && LayoutMappingRepository.isMapped(keyCode)) {
             val char = LayoutMappingRepository.getCharacterStringWithModifiers(
                 keyCode,
-                event?.isShiftPressed == true,
+                effectiveShiftForLongPress,
                 params.capsLockEnabled,
                 shiftOneShotActive
             )
             if (char.isNotEmpty() && char[0].isLetter()) {
-                Log.d("PastieraIME", "layout commit: '$char'")
+                if (isSuggestionDebugLoggingEnabled()) {
+                    Log.d("PastieraIME", "layout commit: '$char'")
+                }
                 commitTextWithTracking(ic, char)
                 Handler(Looper.getMainLooper()).postDelayed({
                     callbacks.updateStatusBar()
@@ -615,7 +763,9 @@ class InputEventRouter(
         if (ic != null && event != null && event.unicodeChar != 0) {
             val ch = event.unicodeChar.toChar()
             if (ch.isLetter()) {
-                Log.d("PastieraIME", "fallback commit: '$ch'")
+                if (isSuggestionDebugLoggingEnabled()) {
+                    Log.d("PastieraIME", "fallback commit: '$ch'")
+                }
                 commitTextWithTracking(ic, ch.toString())
                 Handler(Looper.getMainLooper()).postDelayed({
                     callbacks.updateStatusBar()
@@ -668,6 +818,13 @@ class InputEventRouter(
         }
 
         return false
+    }
+
+    private fun shouldSuppressUppercaseEszettMultiTap(
+        mapping: LayoutMapping,
+        resolvedUppercase: Boolean
+    ): Boolean {
+        return resolvedUppercase && mapping.taps.drop(1).any { it.uppercase == "ẞ" }
     }
 
     fun handleTextInputPipeline(
@@ -763,6 +920,42 @@ class InputEventRouter(
             return true
         }
 
+        if (
+            textInputController.handleSpacedHyphenToEnDash(
+                keyCode = keyCode,
+                inputConnection = inputConnection,
+                shouldDisableSmartPunctuation = inputContextState?.shouldDisableSmartFeatures == true
+            )
+        ) {
+            return true
+        }
+
+        val smartReplacementTextForPipeline =
+            if (isSpaceKey) " " else event?.unicodeChar?.takeIf { it != 0 }?.toChar()?.toString().orEmpty()
+        if (
+            textInputController.handlePendingMidWordQuoteToApostrophe(
+                typedText = smartReplacementTextForPipeline,
+                inputConnection = inputConnection,
+                shouldDisableSmartPunctuation = inputContextState?.shouldDisableSmartFeatures == true
+            )
+        ) {
+            suggestionController?.onCharacterCommitted("'", inputConnection)
+            if (smartReplacementTextForPipeline.isNotEmpty()) {
+                suggestionController?.onCharacterCommitted(smartReplacementTextForPipeline, inputConnection)
+            }
+            return true
+        }
+
+        if (
+            textInputController.handleSmartQuoteReplacement(
+                typedText = smartReplacementTextForPipeline,
+                inputConnection = inputConnection,
+                shouldDisableSmartPunctuation = inputContextState?.shouldDisableSmartFeatures == true
+            )
+        ) {
+            return true
+        }
+
         // Handle auto-capitalization after period (if enabled)
         textInputController.handleAutoCapAfterPeriod(
             keyCode,
@@ -829,15 +1022,20 @@ class InputEventRouter(
             val inputType = editorInfo?.inputType ?: 0
             val isMultiline = (inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0
 
-            val handled = autoCorrectionManager.handleBoundaryKey(
-                keyCode,
-                event,
-                inputConnection,
-                isAutoCorrectEnabled,
-                commitBoundary = isMultiline, // commit newline inside autocorrect only for multiline
-                onStatusBarUpdate = updateStatusBar,
-                boundaryCharOverride = '\n'
-            )
+            val handled = if (shouldDisableSuggestions || suggestionController == null) {
+                autoCorrectionManager.handleBoundaryKey(
+                    keyCode,
+                    event,
+                    inputConnection,
+                    isAutoCorrectEnabled,
+                    commitBoundary = isMultiline, // commit newline inside autocorrect only for multiline
+                    onStatusBarUpdate = updateStatusBar,
+                    boundaryCharOverride = '\n',
+                    isKnownWord = { word -> suggestionController?.isKnownWordInActiveDictionaries(word) == true }
+                )
+            } else {
+                false
+            }
             if (handled) {
                 suggestionController?.onContextReset()
                 // For multiline with commitBoundary=true, newline was already committed; consume Enter.
@@ -864,14 +1062,26 @@ class InputEventRouter(
         }
 
         if (
+            (isBoundaryKey || isPunctuation) &&
+            (shouldDisableSuggestions || suggestionController == null) &&
             autoCorrectionManager.handleBoundaryKey(
                 keyCode,
                 event,
                 inputConnection,
                 isAutoCorrectEnabled,
                 commitBoundary = true,
-                onStatusBarUpdate = updateStatusBar
+                onStatusBarUpdate = updateStatusBar,
+                isKnownWord = { word -> suggestionController?.isKnownWordInActiveDictionaries(word) == true }
             )
+        ) {
+            suggestionController?.onContextReset()
+            return true
+        }
+        if (
+            isPunctuation &&
+            SettingsManager.shouldApplyFrenchPunctuationSpacing(context) &&
+            inputConnection != null &&
+            it.palsoftware.pastiera.core.Punctuation.commitFrenchSpacedPunctuation(inputConnection, typedChar)
         ) {
             suggestionController?.onContextReset()
             return true
@@ -879,8 +1089,7 @@ class InputEventRouter(
 
         // Handle suggestions on boundary keys/punctuation (if suggestions enabled)
         if (!shouldDisableSuggestions && inputConnection != null && (isBoundaryKey || isPunctuation) && suggestionController != null) {
-            suggestionController?.onBoundaryKey(keyCode, event, inputConnection)
-            return true
+            return suggestionController?.onBoundaryKey(keyCode, event, inputConnection)?.committed == true
         }
 
         autoCorrectionManager.handleAcceptOrResetOnOtherKeys(
@@ -891,18 +1100,82 @@ class InputEventRouter(
         return false
     }
 
+    fun handleBoundaryText(
+        context: android.content.Context,
+        text: String,
+        inputConnection: InputConnection?,
+        shouldDisableSuggestions: Boolean,
+        isAutoCorrectEnabled: Boolean,
+        autoCorrectionManager: AutoCorrectionManager,
+        updateStatusBar: () -> Unit
+    ): Boolean {
+        val input = inputConnection ?: return false
+        if (text.length != 1) return false
+        val boundaryChar = it.palsoftware.pastiera.core.Punctuation.normalizeApostrophe(text[0])
+        if (boundaryChar == '\'' || boundaryChar !in it.palsoftware.pastiera.core.Punctuation.BOUNDARY) {
+            return false
+        }
+
+        if (
+            (shouldDisableSuggestions || suggestionController == null) &&
+            autoCorrectionManager.handleBoundaryKey(
+                keyCode = KeyEvent.KEYCODE_UNKNOWN,
+                event = null,
+                inputConnection = input,
+                isAutoCorrectEnabled = isAutoCorrectEnabled,
+                commitBoundary = true,
+                onStatusBarUpdate = updateStatusBar,
+                boundaryCharOverride = boundaryChar,
+                isKnownWord = { word ->
+                    suggestionController?.isKnownWordInActiveDictionaries(word) == true
+                }
+            )
+        ) {
+            suggestionController?.onContextReset()
+            return true
+        }
+
+        if (
+            SettingsManager.shouldApplyFrenchPunctuationSpacing(context) &&
+            it.palsoftware.pastiera.core.Punctuation.commitFrenchSpacedPunctuation(input, boundaryChar)
+        ) {
+            suggestionController?.onContextReset()
+            updateStatusBar()
+            return true
+        }
+
+        val controller = suggestionController
+        if (!shouldDisableSuggestions && controller != null) {
+            controller.onBoundaryKey(
+                keyCode = KeyEvent.KEYCODE_UNKNOWN,
+                event = null,
+                inputConnection = input,
+                boundaryCharOverride = boundaryChar
+            )
+            updateStatusBar()
+            return true
+        }
+
+        return false
+    }
+
     fun handleNumericAndSym(
         keyCode: Int,
         event: KeyEvent?,
         inputConnection: InputConnection?,
         isNumericField: Boolean,
-        altSymManager: AltSymManager,
+        alternateCharacterManager: AlternateCharacterManager,
         symLayoutController: SymLayoutController,
         ctrlLatchActive: Boolean,
+        ctrlPressed: Boolean,
+        ctrlPhysicallyPressed: Boolean,
+        ctrlLatchFromNavMode: Boolean,
         ctrlOneShot: Boolean,
         altLatchActive: Boolean,
+        altMappingsOverride: Map<Int, String>? = null,
         cursorUpdateDelayMs: Long,
         updateStatusBar: () -> Unit,
+        handleBoundaryText: (String, InputConnection?) -> Boolean = { _, _ -> false },
         callSuper: () -> Boolean
     ): Boolean {
         val ic = inputConnection ?: return false
@@ -910,11 +1183,21 @@ class InputEventRouter(
         // Numeric fields always use the Alt mapping for every key press (short press included).
         // However, if Ctrl is active, let Ctrl handling take precedence (e.g., for copy/paste).
         if (isNumericField) {
-            val isCtrlActive = event?.isCtrlPressed == true || ctrlLatchActive || ctrlOneShot
+            val isCtrlActive = event?.isCtrlPressed == true ||
+                ctrlLatchActive ||
+                ctrlOneShot ||
+                ctrlPressed ||
+                ctrlPhysicallyPressed ||
+                ctrlLatchFromNavMode
             if (!isCtrlActive) {
-                val altChar = altSymManager.getAltMappings()[keyCode]
+                val altChar = (altMappingsOverride ?: alternateCharacterManager.getAltModifierMappings())[keyCode]
                 if (altChar != null) {
-                    ic.commitText(altChar, 1)
+                    val dpadKeyCode = deviceLayerDpadKeyCode(altChar)
+                    if (dpadKeyCode != null) {
+                        sendModifiedKeyEvent(ic, dpadKeyCode, ctrl = false, shift = false)
+                    } else {
+                        ic.commitText(altChar, 1)
+                    }
                     Handler(Looper.getMainLooper()).postDelayed({
                         updateStatusBar()
                     }, cursorUpdateDelayMs)
@@ -934,7 +1217,8 @@ class InputEventRouter(
                     ic,
                     ctrlLatchActive = ctrlLatchActive,
                     altLatchActive = altLatchActive,
-                    updateStatusBar = updateStatusBar
+                    updateStatusBar = updateStatusBar,
+                    handleBoundaryText = handleBoundaryText
                 )
             ) {
                 SymKeyResult.CONSUME -> true
@@ -955,7 +1239,8 @@ class InputEventRouter(
         keyCode: Int,
         event: KeyEvent?,
         inputConnection: InputConnection?,
-        altSymManager: AltSymManager,
+        alternateCharacterManager: AlternateCharacterManager,
+        altMappingsOverride: Map<Int, String>? = null,
         updateStatusBar: () -> Unit,
         callSuperWithKey: (Int, KeyEvent?) -> Boolean
     ): Boolean {
@@ -968,10 +1253,19 @@ class InputEventRouter(
             return true
         }
 
-        val result = altSymManager.handleAltCombination(
+        val altBindingValue = (altMappingsOverride ?: alternateCharacterManager.getAltModifierMappings())[keyCode]
+        val mappedDpad = deviceLayerDpadKeyCode(altBindingValue)
+        if (mappedDpad != null) {
+            sendModifiedKeyEvent(ic, mappedDpad, ctrl = false, shift = false)
+            updateStatusBar()
+            return true
+        }
+
+        val result = alternateCharacterManager.handleAltCombination(
             keyCode,
             ic,
-            event
+            event,
+            mappingsOverride = altMappingsOverride
         ) { defaultKeyCode, defaultEvent ->
             // Fallback: delegate to caller (typically super.onKeyDown)
             callSuperWithKey(defaultKeyCode, defaultEvent)
@@ -996,12 +1290,13 @@ class InputEventRouter(
         ctrlLatchFromNavMode: Boolean,
         ctrlOneShot: Boolean,
         ctrlPhysicallyPressed: Boolean,
+        selectionShiftActive: Boolean = false,
+        forceBasicContextMenuActions: Boolean = false,
         clearCtrlOneShot: () -> Unit,
         updateStatusBar: () -> Unit,
         callSuper: () -> Boolean,
         toggleMinimalUi: () -> Unit
     ): Boolean {
-        val ic = inputConnection ?: return false
         val isPhysicalCtrlCombo = event?.isCtrlPressed == true || ctrlPhysicallyPressed
         val useNavModeForHeldCtrl = SettingsManager.getNavModeCtrlHoldEnabled(context)
         val useLayoutAwareCtrlShortcuts = SettingsManager.getLayoutAwareCtrlShortcutsEnabled(context)
@@ -1010,8 +1305,17 @@ class InputEventRouter(
         } else {
             keyCode
         }
+        val usesPhysicalNavGrid = ctrlLatchFromNavMode ||
+            (isPhysicalCtrlCombo && useNavModeForHeldCtrl)
+        val mappingKeyCode = if (usesPhysicalNavGrid) keyCode else shortcutKeyCode
+        val ctrlMapping = ctrlKeyMap[mappingKeyCode]
+        val shouldForceContextMenuAction =
+            forceBasicContextMenuActions &&
+            ctrlMapping?.type == "action" &&
+                ctrlMapping.value in restrictedFieldBasicCtrlActions
 
         fun passThroughCtrlCombo(): Boolean {
+            val ic = inputConnection ?: return false
             if (event != null) {
                 ic.sendKeyEvent(event.withKeyCodeAndCtrl(shortcutKeyCode))
             } else {
@@ -1024,7 +1328,7 @@ class InputEventRouter(
 
         // When Ctrl is physically held, prefer native app shortcuts (rich-text editors, IDEs, etc.).
         // This must take precedence over one-shot, because a physical press sets one-shot internally.
-        if (isPhysicalCtrlCombo && !ctrlLatchFromNavMode && !useNavModeForHeldCtrl) {
+        if (isPhysicalCtrlCombo && !ctrlLatchFromNavMode && !useNavModeForHeldCtrl && !shouldForceContextMenuAction) {
             return passThroughCtrlCombo()
         }
 
@@ -1033,7 +1337,29 @@ class InputEventRouter(
             updateStatusBar()
         }
 
-        val ctrlMapping = ctrlKeyMap[shortcutKeyCode]
+        if (ctrlMapping?.type == "command") {
+            val command = CommandRegistry(context).resolve(ctrlMapping.value)
+                ?: return callSuper()
+            if (!command.defaultSurfaces.contains(CommandSurface.NavMode)) {
+                return callSuper()
+            }
+            KeyboardEventTracker.notifyKeyEvent(
+                keyCode,
+                event,
+                "KEY_DOWN",
+                origin = "ime_router",
+                outputKeyCode = null,
+                outputKeyCodeName = ctrlMapping.value
+            )
+            return CommandExecutor(
+                context = context,
+                navModeController = navModeController,
+                inputConnectionProvider = { inputConnection }
+            ).execute(command).isSuccess
+        }
+
+        val ic = inputConnection ?: return false
+
         if (ctrlMapping != null) {
             when (ctrlMapping.type) {
                 "action" -> {
@@ -1069,9 +1395,17 @@ class InputEventRouter(
                                 "KEY_DOWN",
                                 origin = "ime_router",
                                 outputKeyCode = null,
-                                outputKeyCodeName = "move_word_left"
+                                outputKeyCodeName = if (selectionShiftActive) {
+                                    "expand_selection_word_left"
+                                } else {
+                                    "move_word_left"
+                                }
                             )
-                            TextSelectionHelper.moveCursorWordLeft(ic)
+                            if (selectionShiftActive) {
+                                TextSelectionHelper.expandSelectionWordLeft(ic)
+                            } else {
+                                TextSelectionHelper.moveCursorWordLeft(ic)
+                            }
                             return true
                         }
                         "move_word_right" -> {
@@ -1081,9 +1415,17 @@ class InputEventRouter(
                                 "KEY_DOWN",
                                 origin = "ime_router",
                                 outputKeyCode = null,
-                                outputKeyCodeName = "move_word_right"
+                                outputKeyCodeName = if (selectionShiftActive) {
+                                    "expand_selection_word_right"
+                                } else {
+                                    "move_word_right"
+                                }
                             )
-                            TextSelectionHelper.moveCursorWordRight(ic)
+                            if (selectionShiftActive) {
+                                TextSelectionHelper.expandSelectionWordRight(ic)
+                            } else {
+                                TextSelectionHelper.moveCursorWordRight(ic)
+                            }
                             return true
                         }
                         "expand_selection_word_left" -> {
@@ -1108,6 +1450,30 @@ class InputEventRouter(
                                 outputKeyCodeName = "expand_selection_word_right"
                             )
                             TextSelectionHelper.expandSelectionWordRight(ic)
+                            return true
+                        }
+                        "page_start", "page_end" -> {
+                            val targetKeyCode = when (ctrlMapping.value) {
+                                "page_start" -> KeyEvent.KEYCODE_MOVE_HOME
+                                "page_end" -> KeyEvent.KEYCODE_MOVE_END
+                                else -> null
+                            } ?: return callSuper()
+                            KeyboardEventTracker.notifyKeyEvent(
+                                keyCode,
+                                event,
+                                "KEY_DOWN",
+                                origin = "ime_router",
+                                outputKeyCode = targetKeyCode,
+                                outputKeyCodeName = if (selectionShiftActive) {
+                                    "ctrl_shift_${KeyboardEventTracker.getOutputKeyCodeName(targetKeyCode)}"
+                                } else {
+                                    "ctrl_${KeyboardEventTracker.getOutputKeyCodeName(targetKeyCode)}"
+                                }
+                            )
+                            sendModifiedKeyEvent(ic, targetKeyCode, ctrl = true, shift = selectionShiftActive)
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                updateStatusBar()
+                            }, 50)
                             return true
                         }
                         "toggle_minimal_ui" -> {
@@ -1175,6 +1541,8 @@ class InputEventRouter(
                         "DPAD_RIGHT" -> KeyEvent.KEYCODE_DPAD_RIGHT
                         "DPAD_CENTER" -> KeyEvent.KEYCODE_DPAD_CENTER
                         "TAB" -> KeyEvent.KEYCODE_TAB
+                        "MOVE_HOME" -> KeyEvent.KEYCODE_MOVE_HOME
+                        "MOVE_END" -> KeyEvent.KEYCODE_MOVE_END
                         "PAGE_UP" -> KeyEvent.KEYCODE_PAGE_UP
                         "PAGE_DOWN" -> KeyEvent.KEYCODE_PAGE_DOWN
                         "ESCAPE" -> KeyEvent.KEYCODE_ESCAPE
@@ -1188,16 +1556,26 @@ class InputEventRouter(
                             "KEY_DOWN",
                             origin = "ime_router",
                             outputKeyCode = mappedKeyCode,
-                            outputKeyCodeName = KeyboardEventTracker.getOutputKeyCodeName(mappedKeyCode)
+                            outputKeyCodeName = if (selectionShiftActive && mappedKeyCode.isSelectionAwareNavKey()) {
+                                "shift_${KeyboardEventTracker.getOutputKeyCodeName(mappedKeyCode)}"
+                            } else {
+                                KeyboardEventTracker.getOutputKeyCodeName(mappedKeyCode)
+                            }
                         )
-                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, mappedKeyCode))
-                        ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, mappedKeyCode))
+                        sendModifiedKeyEvent(
+                            inputConnection = ic,
+                            keyCode = mappedKeyCode,
+                            ctrl = false,
+                            shift = selectionShiftActive && mappedKeyCode.isSelectionAwareNavKey()
+                        )
 
                         if (mappedKeyCode in listOf(
                                 KeyEvent.KEYCODE_DPAD_UP,
                                 KeyEvent.KEYCODE_DPAD_DOWN,
                                 KeyEvent.KEYCODE_DPAD_LEFT,
                                 KeyEvent.KEYCODE_DPAD_RIGHT,
+                                KeyEvent.KEYCODE_MOVE_HOME,
+                                KeyEvent.KEYCODE_MOVE_END,
                                 KeyEvent.KEYCODE_PAGE_UP,
                                 KeyEvent.KEYCODE_PAGE_DOWN
                             )
@@ -1271,6 +1649,40 @@ class InputEventRouter(
         audioManager.dispatchMediaKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, keyCode, 0))
         audioManager.dispatchMediaKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, keyCode, 0))
         return true
+    }
+
+    private fun deviceLayerDpadKeyCode(value: String?): Int? = when (value) {
+        "__DPAD_UP__" -> KeyEvent.KEYCODE_DPAD_UP
+        "__DPAD_DOWN__" -> KeyEvent.KEYCODE_DPAD_DOWN
+        "__DPAD_LEFT__" -> KeyEvent.KEYCODE_DPAD_LEFT
+        "__DPAD_RIGHT__" -> KeyEvent.KEYCODE_DPAD_RIGHT
+        else -> null
+    }
+
+    private fun sendModifiedKeyEvent(
+        inputConnection: InputConnection,
+        keyCode: Int,
+        ctrl: Boolean,
+        shift: Boolean
+    ): Boolean {
+        val eventTime = SystemClock.uptimeMillis()
+        val metaState =
+            (if (ctrl) KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON else 0) or
+                (if (shift) KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON else 0)
+        inputConnection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, keyCode, 0, metaState))
+        inputConnection.sendKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, keyCode, 0, metaState))
+        return true
+    }
+
+    private fun Int.isSelectionAwareNavKey(): Boolean {
+        return this == KeyEvent.KEYCODE_DPAD_UP ||
+            this == KeyEvent.KEYCODE_DPAD_DOWN ||
+            this == KeyEvent.KEYCODE_DPAD_LEFT ||
+            this == KeyEvent.KEYCODE_DPAD_RIGHT ||
+            this == KeyEvent.KEYCODE_MOVE_HOME ||
+            this == KeyEvent.KEYCODE_MOVE_END ||
+            this == KeyEvent.KEYCODE_PAGE_UP ||
+            this == KeyEvent.KEYCODE_PAGE_DOWN
     }
 
     private fun resolveLayoutShortcutKeyCode(keyCode: Int): Int {

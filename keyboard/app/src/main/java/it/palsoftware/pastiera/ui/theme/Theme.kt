@@ -9,6 +9,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
@@ -48,6 +49,13 @@ fun PastieraTheme(
 
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
+    }.let {
+        // Mutterboard: paint only the canvas in the app's own peach/charcoal so
+        // these screens read as part of the same app. Everything else stays
+        // Pastiera's. Values mirror BrandBackground* in the app module, which
+        // this library cannot see.
+        val canvas = if (darkTheme) Color(0xFF1A1411) else Color(0xFFFCF2EB)
+        it.copy(background = canvas, surface = canvas)
     }
 
     MaterialTheme(

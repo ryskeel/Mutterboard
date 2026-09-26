@@ -2,6 +2,7 @@ package it.palsoftware.pastiera.inputmethod.ui
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.ColorDrawable
@@ -33,12 +34,14 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import android.content.res.Configuration
 import it.palsoftware.pastiera.R
+import it.palsoftware.pastiera.SettingsManager
 import it.palsoftware.pastiera.data.emoji.EmojiRepository
 import it.palsoftware.pastiera.data.emoji.RecentEmojiManager
 import it.palsoftware.pastiera.data.emoji.EmojiSearchRepository
 import android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -67,11 +70,14 @@ class EmojiPickerView(
     private val searchPanel: FrameLayout
     private val searchToggleButton: ImageView
     private val closeButton: ImageView
+    private var roundedControls = false
+    private var roundedIconSize = 0f
+    val edgeControls: Pair<View, View> get() = searchToggleButton to closeButton
 
     private var coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var loadingJob: Job? = null
 
-    private val compactHeight = dpToPx(177f)
+    private val compactHeight = dpToPx(COMPACT_HEIGHT_DP)
     private val emojiSize = dpToPx(48f)
     private val spacing = dpToPx(4f)
     private val smallPadding = dpToPx(8f)
@@ -99,9 +105,19 @@ class EmojiPickerView(
     private var isSearchMode: Boolean = false
     private var isSearchPanelVisible: Boolean = false
     private var searchInputCaptureEnabled: Boolean = true
-    private val selectedTabBackground = createTabBackground(true)
-    private val unselectedTabBackground = createTabBackground(false)
+    private var containerReordering: Boolean = false
+    private var pendingSearchReplacementRange: IntRange? = null
     private var tabCategoryIds: List<String> = emptyList()
+    private var lastSearchResults: List<EmojiSearchRepository.EmojiSearchResult> = emptyList()
+    var onSearchPanelVisibilityChanged: ((Boolean) -> Unit)? = null
+    var themeOverride: KeyboardThemeColors? = null
+        set(value) {
+            if (field == value) {
+                return
+            }
+            field = value
+            applyTheme()
+        }
 
     init {
         setBackgroundColor(Color.TRANSPARENT)
@@ -120,8 +136,6 @@ class EmojiPickerView(
 
         searchField = EditText(context).apply {
             hint = context.getString(R.string.emoji_picker_search_placeholder)
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.argb(160, 255, 255, 255))
             textSize = 14f
             setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT
@@ -156,7 +170,7 @@ class EmojiPickerView(
 
         searchPanel = FrameLayout(context).apply {
             visibility = View.GONE
-            setBackgroundColor(Color.rgb(24, 24, 24))
+            setBackgroundColor(themeOverride?.background ?: Color.rgb(24, 24, 24))
             val panelPadding = dpToPx(6f)
             setPadding(panelPadding, panelPadding, panelPadding, panelPadding)
             layoutParams = FrameLayout.LayoutParams(
@@ -174,7 +188,6 @@ class EmojiPickerView(
         closeButton = ImageView(context).apply {
             setImageResource(R.drawable.ic_close_24)
             contentDescription = context.getString(R.string.close)
-            setColorFilter(Color.WHITE)
             background = createCloseButtonBackground()
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             val pad = dpToPx(4f)
@@ -197,6 +210,9 @@ class EmojiPickerView(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            // Recents updates must appear silently ("as if the emoji was always there"),
+            // so disable insert/change animations entirely.
+            itemAnimator = null
         }
 
         val gridLayoutManager = GridLayoutManager(context, columns, RecyclerView.VERTICAL, false)
@@ -262,7 +278,6 @@ class EmojiPickerView(
         emptyView = TextView(context).apply {
             text = context.getString(R.string.emoji_picker_error)
             textSize = 14f
-            setTextColor(Color.argb(128, 255, 255, 255))
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -276,7 +291,6 @@ class EmojiPickerView(
         searchToggleButton = ImageView(context).apply {
             setImageResource(R.drawable.ic_search_24)
             contentDescription = context.getString(R.string.emoji_picker_search_label)
-            setColorFilter(Color.WHITE)
             background = createTabBackground(false)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             val pad = dpToPx(4f)
@@ -311,7 +325,6 @@ class EmojiPickerView(
         keyboardSwitcherButton = ImageView(context).apply {
             setImageResource(R.drawable.ic_close_24)
             contentDescription = context.getString(R.string.close)
-            setColorFilter(Color.WHITE)
             background = createTabBackground(false)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             val pad = dpToPx(4f)
@@ -330,6 +343,9 @@ class EmojiPickerView(
                     1f
                 )
                 addView(recyclerView)
+                // Keep empty/error states inside the result area. A root-level MATCH_PARENT
+                // overlay would hide the search field and bottom controls when no emoji matches.
+                addView(emptyView)
                 addView(searchPanel)
             }
         )
@@ -349,13 +365,13 @@ class EmojiPickerView(
 
         addView(vertical)
         addView(loadingView)
-        addView(emptyView)
 
         layoutParams = LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             compactHeight
         )
 
+        applyTheme()
         loadCategories()
     }
 
@@ -363,12 +379,82 @@ class EmojiPickerView(
         currentInputConnection = connection
     }
 
-    fun configureSoftwareKeyboardMode(heightPx: Int?, onKeyboardLayoutRequested: (() -> Unit)?) {
-        val configuredHeight = if (it.palsoftware.pastiera.SettingsManager.getEmojiPickerExpandedHeight(context)) {
-            (compactHeight * 1.5f).toInt()
-        } else {
-            compactHeight
+    fun configureRoundedControls(enabled: Boolean, rowHeight: Int, iconSize: Float) {
+        roundedControls = enabled
+        roundedIconSize = iconSize
+        // Reserve the slot; rounded mode uses the chrome's shared SYM close control.
+        closeButton.visibility = if (enabled) View.INVISIBLE else View.VISIBLE
+        val height = if (enabled) rowHeight else dpToPx(32f)
+        val bar = closeButton.parent as LinearLayout
+        bar.layoutParams = bar.layoutParams.apply { this.height = height }
+        tabScrollView.layoutParams = tabScrollView.layoutParams.apply { this.height = height }
+        tabRow.layoutParams = tabRow.layoutParams.apply { this.height = height }
+        tabRow.setPadding(smallPadding / 2, 0, smallPadding / 2, 0)
+        for (index in 0 until tabRow.childCount) {
+            val category = tabRow.getChildAt(index)
+            category.layoutParams = category.layoutParams.apply {
+                this.height = if (enabled) ViewGroup.LayoutParams.MATCH_PARENT else dpToPx(32f)
+            }
+            (category as? ImageView)?.scaleType = ImageView.ScaleType.CENTER_INSIDE
         }
+        fun sizeControls(width: Int) {
+            listOf(searchToggleButton, closeButton).forEach { button ->
+                button.layoutParams = (button.layoutParams as LinearLayout.LayoutParams).apply {
+                    this.width = if (enabled) {
+                        if (button === closeButton) width - (width / 10) * 9 else width / 10
+                    } else dpToPx(if (button === closeButton) 36f else 32f)
+                    this.height = height
+                    marginEnd = if (button === searchToggleButton) spacing else 0
+                }
+            }
+            applyEdgeControlAppearance()
+        }
+        sizeControls(width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels)
+        requestLayout()
+    }
+
+    private fun applyEdgeControlAppearance() {
+        listOf(searchToggleButton, closeButton).forEach { button ->
+            if (roundedControls) {
+                button.background = if (button === closeButton) createCloseButtonBackground() else createTabBackground(isSearchPanelVisible)
+                if (roundedControls) button.background = android.graphics.drawable.InsetDrawable(
+                    button.background,
+                    if (button === searchToggleButton) dpToPx(3f) else 0,
+                    0,
+                    if (button === closeButton) dpToPx(3f) else 0,
+                    dpToPx(3f)
+                )
+                button.setPadding(0, 0, 0, 0)
+                button.scaleType = ImageView.ScaleType.MATRIX
+                button.drawable?.let { icon ->
+                    val scale = roundedIconSize / icon.intrinsicHeight.coerceAtLeast(1)
+                    button.imageMatrix = Matrix().apply {
+                        setScale(scale, scale)
+                        postTranslate(
+                            (button.layoutParams.width - icon.intrinsicWidth * scale) / 2f +
+                                dpToPx(8f) * if (button === searchToggleButton) 1 else -1,
+                            (button.layoutParams.height - icon.intrinsicHeight * scale) / 2f - dpToPx(2f)
+                        )
+                    }
+                }
+            } else {
+                val pad = dpToPx(4f)
+                button.setPadding(pad, pad, pad, pad)
+                button.scaleType = ImageView.ScaleType.CENTER_INSIDE
+                button.background = if (button === closeButton) createCloseButtonBackground() else createTabBackground(isSearchPanelVisible)
+                if (roundedControls) button.background = android.graphics.drawable.InsetDrawable(
+                    button.background,
+                    if (button === searchToggleButton) dpToPx(3f) else 0,
+                    0,
+                    if (button === closeButton) dpToPx(3f) else 0,
+                    dpToPx(3f)
+                )
+            }
+        }
+    }
+
+    fun configureSoftwareKeyboardMode(heightPx: Int?, onKeyboardLayoutRequested: (() -> Unit)?) {
+        val configuredHeight = configuredHeightPx(context)
         val targetHeight = heightPx?.takeIf { it > 0 } ?: configuredHeight
         updateHeight(targetHeight)
         keyboardSwitcherButton.visibility = if (onKeyboardLayoutRequested != null) View.VISIBLE else View.GONE
@@ -396,6 +482,61 @@ class EmojiPickerView(
         return isSearchPanelVisible && searchInputCaptureEnabled
     }
 
+    fun isSearchPanelShowing(): Boolean {
+        return isSearchPanelVisible
+    }
+
+    /**
+     * Routes on-screen keyboard text input into the emoji search field while the
+     * search input capture is active (analogous to the hardware key path).
+     */
+    fun handleSearchTextInput(text: String): Boolean {
+        if (!isSearchInputActive()) return false
+        if (text.isNotEmpty()) {
+            appendSearchText(text)
+        }
+        return true
+    }
+
+    /**
+     * Routes on-screen keyboard backspace into the emoji search field while the
+     * search input capture is active.
+     */
+    fun handleSearchBackspace(): Boolean {
+        if (!isSearchInputActive()) return false
+        deleteSearchTextBackwards()
+        return true
+    }
+
+    /**
+     * Commits the top emoji search result and closes the picker.
+     * Stays neutral when the search input capture is inactive or there are no results.
+     */
+    fun commitTopSearchResultAndClose() {
+        if (!isSearchInputActive()) return
+        val top = lastSearchResults.firstOrNull() ?: return
+        onEmojiSelected(top.entry.base, top.categoryId, closeAfterCommit = true)
+    }
+
+    private fun deleteSearchTextBackwards() {
+        val text = searchField.text ?: return
+        if (text.isEmpty()) return
+        val replacementRange = selectedSearchRange(text.length)
+        val start = replacementRange?.first
+            ?: minOf(searchField.selectionStart, searchField.selectionEnd).coerceAtLeast(0)
+        val end = replacementRange?.last?.plus(1)
+            ?: maxOf(searchField.selectionStart, searchField.selectionEnd).coerceAtMost(text.length)
+        if (start < end) {
+            text.delete(start, end)
+            pendingSearchReplacementRange = null
+        } else {
+            val cursor = searchField.selectionStart.coerceIn(0, text.length)
+            if (cursor > 0) {
+                text.delete(cursor - 1, cursor)
+            }
+        }
+    }
+
     fun createSearchInputConnection(): InputConnection? {
         if (!isSearchInputActive()) return null
         focusSearchField()
@@ -415,26 +556,28 @@ class EmojiPickerView(
      * IME hardware keys do not automatically target this EditText.
      * Handle printable keys manually while emoji picker page is open.
      */
-    fun handleSearchKeyDown(event: KeyEvent, ctrlActive: Boolean = event.isCtrlPressed): Boolean {
+    fun handleSearchKeyDown(
+        event: KeyEvent,
+        ctrlActive: Boolean = event.isCtrlPressed,
+        resolveTypedText: ((KeyEvent) -> String?)? = null
+    ): Boolean {
         if (!isSearchPanelVisible) return false
         if (!searchInputCaptureEnabled) return false
         if (event.isAltPressed || event.isMetaPressed) return false
         if (ctrlActive) {
             focusSearchField()
+            if (handleTextEditingCtrlShortcut(event.keyCode)) {
+                return true
+            }
             val ctrlEvent = event.withCtrlMeta()
             return searchField.onKeyShortcut(ctrlEvent.keyCode, ctrlEvent) ||
                 searchField.dispatchKeyEvent(ctrlEvent)
         }
         focusSearchField()
-        if (searchField.dispatchKeyEvent(event)) {
-            return true
-        }
 
         return when (event.keyCode) {
             KeyEvent.KEYCODE_DEL -> {
-                val text = searchField.text ?: return true
-                if (text.isEmpty()) return true
-                text.delete(text.length - 1, text.length)
+                deleteSearchTextBackwards()
                 true
             }
             KeyEvent.KEYCODE_SPACE -> {
@@ -442,13 +585,23 @@ class EmojiPickerView(
                 true
             }
             KeyEvent.KEYCODE_ENTER,
-            KeyEvent.KEYCODE_NUMPAD_ENTER -> true
+            KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                commitTopSearchResultAndClose()
+                true
+            }
             else -> {
-                val unicode = event.unicodeChar
-                if (unicode <= 0) return false
-                val ch = unicode.toChar()
-                if (Character.isISOControl(ch)) return false
-                appendSearchText(ch.toString())
+                val typedText = resolveTypedText?.invoke(event) ?: run {
+                    val unicode = event.unicodeChar
+                    if (unicode <= 0) {
+                        return searchField.dispatchKeyEvent(event)
+                    }
+                    val ch = unicode.toChar()
+                    if (Character.isISOControl(ch)) {
+                        return searchField.dispatchKeyEvent(event)
+                    }
+                    ch.toString()
+                }
+                appendSearchText(typedText)
                 true
             }
         }
@@ -495,6 +648,10 @@ class EmojiPickerView(
                 event.keyCode == KeyEvent.KEYCODE_PAGE_DOWN
         }
 
+        if (event.isCtrlPressed && handleTextEditingCtrlShortcut(event.keyCode)) {
+            return true
+        }
+
         return when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 moveSearchCursorBy(-1)
@@ -535,6 +692,22 @@ class EmojiPickerView(
     private fun setSearchSelection(index: Int) {
         val text = searchField.text ?: return
         Selection.setSelection(text, index.coerceIn(0, text.length))
+        pendingSearchReplacementRange = null
+    }
+
+    private fun selectedSearchRange(textLength: Int): IntRange? {
+        val selectionStart = searchField.selectionStart
+        val selectionEnd = searchField.selectionEnd
+        if (selectionStart >= 0 && selectionEnd >= 0 && selectionStart != selectionEnd) {
+            val start = minOf(selectionStart, selectionEnd).coerceIn(0, textLength)
+            val endExclusive = maxOf(selectionStart, selectionEnd).coerceIn(0, textLength)
+            if (start < endExclusive) return start until endExclusive
+        }
+        return pendingSearchReplacementRange?.let { range ->
+            val start = range.first.coerceIn(0, textLength)
+            val endExclusive = (range.last + 1).coerceIn(0, textLength)
+            if (start < endExclusive) start until endExclusive else null
+        }
     }
 
     private fun isTextEditingCtrlShortcut(keyCode: Int): Boolean {
@@ -542,6 +715,29 @@ class EmojiPickerView(
             keyCode == KeyEvent.KEYCODE_C ||
             keyCode == KeyEvent.KEYCODE_X ||
             keyCode == KeyEvent.KEYCODE_V
+    }
+
+    private fun handleTextEditingCtrlShortcut(keyCode: Int): Boolean {
+        focusSearchField()
+        return when (keyCode) {
+            KeyEvent.KEYCODE_A -> {
+                searchField.text?.let { text ->
+                    Selection.selectAll(text)
+                    pendingSearchReplacementRange = 0 until text.length
+                }
+                true
+            }
+            KeyEvent.KEYCODE_C -> searchField.onTextContextMenuItem(android.R.id.copy)
+            KeyEvent.KEYCODE_X -> {
+                pendingSearchReplacementRange = null
+                searchField.onTextContextMenuItem(android.R.id.cut)
+            }
+            KeyEvent.KEYCODE_V -> {
+                pendingSearchReplacementRange = null
+                searchField.onTextContextMenuItem(android.R.id.paste)
+            }
+            else -> false
+        }
     }
 
     private fun focusSearchField() {
@@ -642,8 +838,28 @@ class EmojiPickerView(
     private fun appendSearchText(text: String) {
         if (text.isEmpty()) return
         val editable = searchField.text ?: return
-        editable.append(text)
-        searchField.setSelection(editable.length)
+        val selectionStart = searchField.selectionStart
+        val selectionEnd = searchField.selectionEnd
+        val replacementRange = selectedSearchRange(editable.length)
+        if (replacementRange != null) {
+            val start = replacementRange.first
+            val end = replacementRange.last + 1
+            editable.replace(start, end, text)
+            searchField.setSelection(start + text.length)
+            pendingSearchReplacementRange = null
+        } else if (selectionStart >= 0 && selectionEnd >= 0 && selectionStart != selectionEnd) {
+            val start = minOf(selectionStart, selectionEnd).coerceIn(0, editable.length)
+            val end = maxOf(selectionStart, selectionEnd).coerceIn(0, editable.length)
+            editable.replace(start, end, text)
+            searchField.setSelection(start + text.length)
+        } else {
+            val cursor = selectionStart
+                .takeIf { it == selectionEnd }
+                ?.coerceIn(0, editable.length)
+                ?: editable.length
+            editable.insert(cursor, text)
+            searchField.setSelection(cursor + text.length)
+        }
     }
 
     fun disableSearchInputCapture() {
@@ -661,22 +877,26 @@ class EmojiPickerView(
             }
         } else {
             searchField.clearFocus()
+            pendingSearchReplacementRange = null
         }
     }
 
     private fun setSearchPanelVisible(visible: Boolean) {
         isSearchPanelVisible = visible
         searchPanel.visibility = if (visible) View.VISIBLE else View.GONE
-        searchToggleButton.background = if (visible) selectedTabBackground else unselectedTabBackground
+        searchToggleButton.background = createTabBackground(visible)
+        applyEdgeControlAppearance()
         setSearchInputCaptureEnabled(visible)
         if (visible) {
             searchField.requestFocus()
         }
+        onSearchPanelVisibilityChanged?.invoke(visible)
     }
 
     private fun applySearchNow() {
         val query = searchQuery.trim()
         if (query.isEmpty()) {
+            lastSearchResults = emptyList()
             setSearchMode(false)
             emptyView.text = context.getString(R.string.emoji_picker_error)
             emptyView.visibility = View.GONE
@@ -686,6 +906,7 @@ class EmojiPickerView(
 
         val index = searchIndex
         if (index == null) {
+            lastSearchResults = emptyList()
             setSearchMode(true)
             emptyView.text = context.getString(R.string.emoji_picker_error)
             emptyView.visibility = View.VISIBLE
@@ -694,6 +915,7 @@ class EmojiPickerView(
         }
 
         val results = EmojiSearchRepository.search(index, query)
+        lastSearchResults = results
         setSearchMode(true)
         searchAdapter.submitList(results)
         if (results.isEmpty()) {
@@ -768,8 +990,8 @@ class EmojiPickerView(
                 setImageResource(iconRes)
                 contentDescription = label
                 scaleType = ImageView.ScaleType.CENTER_INSIDE
-                setColorFilter(Color.WHITE)
-                background = if (isSelected) selectedTabBackground else unselectedTabBackground
+                setColorFilter(themeOverride?.textAndIcons ?: Color.WHITE)
+                background = createTabBackground(isSelected)
                 // Icon always visible (alpha 1), background changes
                 val pad = dpToPx(4f) // Minimal padding
                 setPadding(pad, pad, pad, pad)
@@ -777,7 +999,7 @@ class EmojiPickerView(
                 isFocusable = true
                 layoutParams = LinearLayout.LayoutParams(
                     0, // Use weight
-                    tabHeight,
+                    if (roundedControls) ViewGroup.LayoutParams.MATCH_PARENT else tabHeight,
                     1f // Equal weight for all tabs
                 )
                 setOnClickListener {
@@ -809,25 +1031,38 @@ class EmojiPickerView(
             val categoryId = tabCategoryIds.getOrNull(i)
             val isSelected = categoryId == selectedCategoryId
             // Icon always visible, only background changes
-            view.background = if (isSelected) selectedTabBackground else unselectedTabBackground
+            view.background = createTabBackground(isSelected)
         }
     }
 
-    private fun onEmojiSelected(emoji: String, categoryId: String) {
-        currentInputConnection?.commitText(emoji, 1)
-        // Save to storage and refresh recents when safe for UX.
-        val requiresNotRecents = categoryId == EmojiRepository.RECENTS_CATEGORY_ID
-        coroutineScope.launch(Dispatchers.IO) {
+    private fun onEmojiSelected(emoji: String, categoryId: String, closeAfterCommit: Boolean? = null) {
+        val inputConnection = currentInputConnection
+        // Recents persistence must survive the SYM auto-close: closing the picker evicts this
+        // view from its container, which cancels coroutineScope; ATOMIC guarantees the write
+        // still runs even when cancellation lands before the coroutine body starts.
+        coroutineScope.launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
             val changed = RecentEmojiManager.addRecentEmoji(
                 context,
                 emoji,
                 moveToTopWhenExists = true
             )
             if (changed) {
+                val requiresNotRecents = categoryId == EmojiRepository.RECENTS_CATEGORY_ID
                 withContext(Dispatchers.Main) {
                     requestRecentsRefresh(requireTop = !requiresNotRecents, requireNotRecents = requiresNotRecents)
                 }
             }
+        }
+        // Commit synchronously before closing: a post{} on a view that the close detaches
+        // would only run again when the picker is re-attached (i.e. the next time it opens).
+        inputConnection?.commitText(emoji, 1)
+        val shouldClose = closeAfterCommit
+            ?: (
+                SettingsManager.getSymAutoClose(context) &&
+                    SettingsManager.getSymAutoCloseOnTouch(context)
+                )
+        if (shouldClose) {
+            onCloseRequested?.invoke()
         }
     }
 
@@ -943,30 +1178,75 @@ class EmojiPickerView(
     }
 
     private fun createTabBackground(isSelected: Boolean): GradientDrawable {
+        val theme = themeOverride
         return GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            // Selected: visible background, not selected: transparent
-            val color = if (isSelected) Color.argb(100, 255, 255, 255) else Color.argb(0, 255, 255, 255)
+            val color = if (theme != null) {
+                if (isSelected) colorWithAlpha(theme.accent, 100) else Color.TRANSPARENT
+            } else if (isSelected) {
+                Color.argb(100, 255, 255, 255)
+            } else {
+                Color.TRANSPARENT
+            }
             setColor(color)
+            if (theme != null && isSelected) {
+                setStroke(dpToPx(1f), theme.divider)
+            }
             cornerRadius = dpToPx(6f).toFloat()
         }
     }
 
     private fun createCloseButtonBackground(): GradientDrawable {
+        val theme = themeOverride
         return GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            setColor(Color.argb(95, 220, 38, 38))
+            setColor(theme?.statusBarButton ?: Color.argb(95, 220, 38, 38))
+            if (theme != null) {
+                setStroke(dpToPx(1f), theme.divider)
+            }
             cornerRadius = dpToPx(6f).toFloat()
         }
     }
 
     private fun createSearchFieldBackground(): GradientDrawable {
+        val theme = themeOverride
         return GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            setColor(Color.argb(36, 255, 255, 255))
+            setColor(theme?.suggestion ?: Color.argb(36, 255, 255, 255))
+            if (theme != null) {
+                setStroke(dpToPx(1f), theme.divider)
+            }
             cornerRadius = dpToPx(7f).toFloat()
         }
     }
+
+    private fun applyTheme() {
+        val theme = themeOverride
+        val background = theme?.background ?: Color.TRANSPARENT
+        setBackgroundColor(background)
+        vertical.setBackgroundColor(background)
+        recyclerView.setBackgroundColor(background)
+        searchPanel.setBackgroundColor(background)
+        loadingView.setBackgroundColor(background)
+        emptyView.setBackgroundColor(background)
+        searchField.setTextColor(theme?.textAndIcons ?: Color.WHITE)
+        searchField.setHintTextColor(colorWithAlpha(theme?.textAndIcons ?: Color.WHITE, 160))
+        searchField.background = createSearchFieldBackground()
+        closeButton.setColorFilter(theme?.textAndIcons ?: Color.WHITE)
+        closeButton.background = createCloseButtonBackground()
+        searchToggleButton.setColorFilter(theme?.textAndIcons ?: Color.WHITE)
+        searchToggleButton.background = createTabBackground(isSearchPanelVisible)
+        keyboardSwitcherButton.setColorFilter(theme?.textAndIcons ?: Color.WHITE)
+        keyboardSwitcherButton.background = createTabBackground(false)
+        applyEdgeControlAppearance()
+        emptyView.setTextColor(colorWithAlpha(theme?.textAndIcons ?: Color.WHITE, 128))
+        updateTabsSelection()
+        sectionAdapter.notifyDataSetChanged()
+        searchAdapter.notifyDataSetChanged()
+    }
+
+    private fun colorWithAlpha(color: Int, alpha: Int): Int =
+        Color.argb(alpha.coerceIn(0, 255), Color.red(color), Color.green(color), Color.blue(color))
 
     private fun showVariantsPopup(anchor: View, entry: EmojiRepository.EmojiEntry, categoryId: String) {
         val context = anchor.context
@@ -990,9 +1270,7 @@ class EmojiPickerView(
                 textSize = 24f
                 gravity = Gravity.CENTER
                 setPadding(itemHorizontalPadding, itemVerticalPadding, itemHorizontalPadding, itemVerticalPadding)
-                val nightModeFlags = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-                val isDarkTheme = nightModeFlags == Configuration.UI_MODE_NIGHT_YES
-                setTextColor(if (isDarkTheme) Color.WHITE else Color.BLACK)
+                setTextColor(themeOverride?.textAndIcons ?: Color.BLACK)
             }
             textView.setOnClickListener {
                 onEmojiSelected(emoji, categoryId)
@@ -1012,7 +1290,7 @@ class EmojiPickerView(
             WRAP_CONTENT,
             false // Don't take focus to avoid closing emoji picker
         ).apply {
-            setBackgroundDrawable(ColorDrawable(Color.parseColor("#EEFFFFFF")))
+            setBackgroundDrawable(ColorDrawable(themeOverride?.keyPopup ?: Color.parseColor("#EEFFFFFF")))
             isOutsideTouchable = true
             isFocusable = false
             elevation = 12f
@@ -1053,7 +1331,45 @@ class EmojiPickerView(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        coroutineScope.cancel()
+        if (!containerReordering) {
+            coroutineScope.cancel()
+            // Detach outside a host reorder means the picker actually left the screen
+            // (IME hidden or SYM closed): reopen fresh instead of resuming the search.
+            resetSearchStateQuietly()
+        }
+    }
+
+    /**
+     * Wraps a host-side reordering of this view within its container (remove + re-add in
+     * one step, e.g. stacking the software keyboard below). The transient detach must not
+     * reset the search state.
+     */
+    fun reorderingWithinContainer(block: () -> Unit) {
+        containerReordering = true
+        try {
+            block()
+        } finally {
+            containerReordering = false
+        }
+    }
+
+    private fun resetSearchStateQuietly() {
+        if (!isSearchPanelVisible) {
+            if (searchQuery.isNotEmpty()) {
+                searchQuery = ""
+                lastSearchResults = emptyList()
+                searchField.setText("")
+            }
+            return
+        }
+        // Quiet: no onSearchPanelVisibilityChanged notification, the view is off-screen.
+        isSearchPanelVisible = false
+        searchPanel.visibility = View.GONE
+        searchToggleButton.background = createTabBackground(false)
+        setSearchInputCaptureEnabled(false)
+        searchQuery = ""
+        lastSearchResults = emptyList()
+        searchField.setText("")
     }
 
     private inner class SectionAdapter(private val columns: Int) :
@@ -1106,9 +1422,7 @@ class EmojiPickerView(
                 }
                 is SectionItem.Emoji -> {
                     (holder as EmojiViewHolder).textView.text = item.entry.base
-                    val nightModeFlags = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
-                    val isDarkTheme = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
-                    holder.textView.setTextColor(if (isDarkTheme) Color.WHITE else Color.BLACK)
+                    holder.textView.setTextColor(themeOverride?.textAndIcons ?: Color.WHITE)
                     holder.textView.setOnClickListener {
                         onEmojiSelected(item.entry.base, item.categoryId)
                     }
@@ -1149,9 +1463,7 @@ class EmojiPickerView(
         override fun onBindViewHolder(holder: SearchEmojiViewHolder, position: Int) {
             val item = getItem(position)
             holder.textView.text = item.entry.base
-            val nightModeFlags = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-            val isDarkTheme = nightModeFlags == Configuration.UI_MODE_NIGHT_YES
-            holder.textView.setTextColor(if (isDarkTheme) Color.WHITE else Color.BLACK)
+            holder.textView.setTextColor(themeOverride?.textAndIcons ?: Color.WHITE)
             holder.textView.setOnClickListener {
                 onEmojiSelected(item.entry.base, item.categoryId)
             }
@@ -1307,7 +1619,21 @@ class EmojiPickerView(
     }
 
     companion object {
+        private const val COMPACT_HEIGHT_DP = 177f
         private const val VIEW_TYPE_HEADER = 0
         private const val VIEW_TYPE_EMOJI = 1
+
+        fun configuredHeightPx(context: Context): Int {
+            val compactHeight = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                COMPACT_HEIGHT_DP,
+                context.resources.displayMetrics
+            ).toInt()
+            return if (SettingsManager.getEmojiPickerExpandedHeight(context)) {
+                (compactHeight * 1.5f).toInt()
+            } else {
+                compactHeight
+            }
+        }
     }
 }

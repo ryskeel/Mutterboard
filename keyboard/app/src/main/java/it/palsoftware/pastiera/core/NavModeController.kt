@@ -8,6 +8,9 @@ import android.view.KeyEvent
 import android.view.inputmethod.InputConnection
 import it.palsoftware.pastiera.R
 import it.palsoftware.pastiera.SettingsManager
+import it.palsoftware.pastiera.commands.CommandExecutor
+import it.palsoftware.pastiera.commands.CommandRegistry
+import it.palsoftware.pastiera.commands.CommandSurface
 import it.palsoftware.pastiera.data.mappings.KeyMappingLoader
 import it.palsoftware.pastiera.inputmethod.NavModeHandler
 import it.palsoftware.pastiera.inputmethod.NotificationHelper
@@ -97,22 +100,47 @@ class NavModeController(
             return false
         }
 
-        val inputConnection = inputConnectionProvider() ?: return false
-
         if (keyCode == KeyEvent.KEYCODE_ENTER) {
+            val inputConnection = inputConnectionProvider() ?: return false
             return sendMappedKey(KeyEvent.KEYCODE_DPAD_CENTER, event, inputConnection)
         }
 
         val ctrlMapping = ctrlKeyMap[keyCode] ?: return false
-        return when (ctrlMapping.type) {
+        if (ctrlMapping.type == "command") {
+            val command = CommandRegistry(context).resolve(ctrlMapping.value) ?: return false
+            if (!command.defaultSurfaces.contains(CommandSurface.NavMode)) return false
+            return CommandExecutor(
+                context = context,
+                navModeController = this,
+                inputConnectionProvider = inputConnectionProvider
+            ).execute(command).isSuccess
+        }
+
+        val inputConnection = inputConnectionProvider() ?: return false
+        return if (ctrlMapping.type == "native_ctrl") {
+            sendNativeCtrlKey(keyCode, event, inputConnection)
+        } else {
+            executeMapping(ctrlMapping.type, ctrlMapping.value, event, inputConnection)
+        }
+    }
+
+    fun executeMapping(
+        mappingType: String,
+        mappingValue: String,
+        event: KeyEvent?,
+        inputConnection: InputConnection
+    ): Boolean {
+        return when (mappingType) {
             "keycode" -> {
-                val mappedKeyCode = when (ctrlMapping.value) {
+                val mappedKeyCode = when (mappingValue) {
                     "DPAD_UP" -> KeyEvent.KEYCODE_DPAD_UP
                     "DPAD_DOWN" -> KeyEvent.KEYCODE_DPAD_DOWN
                     "DPAD_LEFT" -> KeyEvent.KEYCODE_DPAD_LEFT
                     "DPAD_RIGHT" -> KeyEvent.KEYCODE_DPAD_RIGHT
                     "DPAD_CENTER" -> KeyEvent.KEYCODE_DPAD_CENTER
                     "TAB" -> KeyEvent.KEYCODE_TAB
+                    "MOVE_HOME" -> KeyEvent.KEYCODE_MOVE_HOME
+                    "MOVE_END" -> KeyEvent.KEYCODE_MOVE_END
                     "PAGE_UP" -> KeyEvent.KEYCODE_PAGE_UP
                     "PAGE_DOWN" -> KeyEvent.KEYCODE_PAGE_DOWN
                     "ESCAPE" -> KeyEvent.KEYCODE_ESCAPE
@@ -121,8 +149,8 @@ class NavModeController(
                 } ?: return false
                 sendMappedKey(mappedKeyCode, event, inputConnection)
             }
-            "action" -> performMappedAction(ctrlMapping.value, inputConnection)
-            "native_ctrl" -> sendNativeCtrlKey(keyCode, event, inputConnection)
+            "action" -> performMappedAction(mappingValue, inputConnection)
+            "native_ctrl" -> false
             else -> false
         }
     }

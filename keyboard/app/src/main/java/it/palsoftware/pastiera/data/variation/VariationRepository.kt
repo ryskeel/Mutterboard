@@ -48,6 +48,11 @@ object VariationRepository {
                     }
                 }
             }
+            layoutPriorities.forEach { (baseChar, priorityList) ->
+                if (!variationsMap.containsKey(baseChar)) {
+                    variationsMap[baseChar] = priorityList
+                }
+            }
             variationsMap
         } catch (e: Exception) {
             Log.e(TAG, "Error loading character variations", e)
@@ -74,7 +79,7 @@ object VariationRepository {
     }
 
     /**
-     * Loads static utility variations for Alt layer.
+     * Loads static utility variations for the Device SYM layer.
      */
     fun loadStaticVariationsAlt(assets: AssetManager, context: Context? = null): List<String> {
         return loadVariationsArray(assets, context, "staticVariationsAlt")

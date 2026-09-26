@@ -165,8 +165,8 @@ object AutoCapitalizeHelper {
     /**
      * Single entry point to evaluate and set/clear smart Shift.
      * Also considers field-specific capitalization flags (CAP_WORDS, CAP_SENTENCES).
-     * For CAP_SENTENCES, user settings take precedence over field flags.
-     * Field-specific flags take precedence over user settings only for CAP_WORDS and CAP_CHARACTERS.
+     * User settings take precedence over CAP_WORDS and CAP_SENTENCES.
+     * CAP_CHARACTERS remains an explicit caps-lock field requirement.
      */
     fun maybeEnableSmartShift(
         context: android.content.Context,
@@ -182,8 +182,7 @@ object AutoCapitalizeHelper {
             return
         }
 
-        // Check field-specific capitalization flags FIRST
-        // These take precedence over user settings and shouldDisableAutoCapitalize
+        // Check field-specific capitalization flags first.
         if (inputContextState != null) {
             // CAP_CHARACTERS is handled separately (caps lock)
             if (inputContextState.requiresCapCharacters) {
@@ -191,8 +190,11 @@ object AutoCapitalizeHelper {
                 return
             }
             
-            // CAP_WORDS: capitalize at start of word (ignore user settings)
-            if (inputContextState.requiresCapWords) {
+            // CAP_WORDS: capitalize at start of word when enabled by the user.
+            if (
+                inputContextState.requiresCapWords &&
+                SettingsManager.getAutoCapitalizeFirstLetter(context)
+            ) {
                 if (isAtStartOfWord(ic)) {
                     if (enableShift()) {
                         smartShiftRequested = true
@@ -431,7 +433,7 @@ object AutoCapitalizeHelper {
      * Handles input field capitalization flags (CAP_CHARACTERS, CAP_WORDS, CAP_SENTENCES).
      * This is called when entering a new input field to apply field-specific
      * capitalization rules.
-     * For CAP_SENTENCES, user settings take precedence over field flags.
+     * User settings take precedence over CAP_WORDS and CAP_SENTENCES.
      */
     fun handleInputFieldCapitalizationFlags(
         context: android.content.Context,
@@ -451,7 +453,10 @@ object AutoCapitalizeHelper {
         }
         
         // Handle textCapWords: enable shift one-shot if at start of word
-        if (state.requiresCapWords) {
+        if (
+            state.requiresCapWords &&
+            SettingsManager.getAutoCapitalizeFirstLetter(context)
+        ) {
             if (isAtStartOfWord(inputConnection)) {
                 if (enableShiftOneShot()) {
                     smartShiftRequested = true
@@ -501,7 +506,7 @@ object AutoCapitalizeHelper {
     /**
      * Checks if capitalization should be applied after a boundary key (space, enter, punctuation)
      * based on field capitalization flags. This is called when a boundary key is pressed.
-     * For CAP_SENTENCES, user settings take precedence over field flags.
+     * User settings take precedence over CAP_WORDS and CAP_SENTENCES.
      */
     fun shouldCapitalizeAfterBoundary(
         context: android.content.Context,
@@ -518,7 +523,11 @@ object AutoCapitalizeHelper {
         val isEnter = keyCode == KeyEvent.KEYCODE_ENTER
         
         // For CAP_WORDS: capitalize after space or enter
-        if (state.requiresCapWords && (isSpace || isEnter)) {
+        if (
+            state.requiresCapWords &&
+            SettingsManager.getAutoCapitalizeFirstLetter(context) &&
+            (isSpace || isEnter)
+        ) {
             return true
         }
         

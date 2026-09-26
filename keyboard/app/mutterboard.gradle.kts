@@ -42,6 +42,9 @@ android {
         // Pastiera's updater checks Pastiera's GitHub releases and would offer to
         // install Pastiera over Mutterboard.
         buildConfigField("boolean", "ENABLE_GITHUB_UPDATE_CHECKS", "false")
+        // Read by the successor-release announcement, which the updater being
+        // off keeps from ever firing.
+        buildConfigField("String", "SUCCESSOR_GITHUB_REPOSITORY", "\"pkb-rocks/plektra\"")
     }
 
     compileOptions {
@@ -66,6 +69,7 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

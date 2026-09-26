@@ -33,9 +33,9 @@ object JsonLayoutLoader {
         layoutName: String
     ): Map<Int, LayoutMapping>? {
         return try {
-            val filePath = "common/layouts/$layoutName.json"
-            assets.open(filePath).use { inputStream ->
-                LayoutFileStore.loadLayoutFromStream(inputStream)
+            val inputStream = BundledLayoutAssets.openLayout(assets, layoutName) ?: return null
+            inputStream.use {
+                LayoutFileStore.loadLayoutFromStream(it)
             }?.also {
                 Log.d(TAG, "Loaded layout from assets: $layoutName with ${it.size} mappings")
             }
@@ -66,4 +66,3 @@ object JsonLayoutLoader {
         }
     }
 }
-

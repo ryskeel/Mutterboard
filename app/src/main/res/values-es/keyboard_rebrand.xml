@@ -8,6 +8,7 @@
     <string name="enable_pastiera">Activar Mutterboard</string>
     <string name="pastiera_not_enabled">Mutterboard no está activado</string>
     <string name="pastiera_not_selected">Mutterboard no está seleccionado</string>
+    <string name="auto_correct_manage_user_dict_description">Palabras que Mutterboard debe conocer y sugerir, sin crear reglas de reemplazo.</string>
     <string name="about_build_info">Physical keyboard based on Pastiera by Palsoftware (GPL-3.0)</string>
     <string name="notification_nav_mode_channel_name">Mutterboard Nav Mode</string>
     <string name="notification_nav_mode_channel_description">Notificaciones para el modo nav de Mutterboard</string>
@@ -28,11 +29,12 @@
     <string name="tutorial_enable_first_message">Activa primero Mutterboard en la página anterior</string>
     <string name="tutorial_selected_message">¡Mutterboard está seleccionado!</string>
     <string name="restore_from_file_description">Importar un archivo ZIP de copia de seguridad de Mutterboard</string>
+    <string name="successor_dialog_title">Mutterboard tiene un sucesor</string>
+    <string name="successor_dialog_message">Plektra sucede a Mutterboard. %1$s está disponible en GitHub.</string>
     <string name="trackpad_tutorial_shizuku_required_description">Esta función requiere Shizuku para acceder a los eventos del trackpad.\n\n1. Instala Shizuku desde las versiones de GitHub\n2. Habilita las opciones de desarrollador en la configuración de Android\n3. Conecta tu dispositivo a una PC con ADB instalado\n4. Ejecuta el comando que Shizuku muestra en su aplicación\n5. Concede permiso a Mutterboard en Shizuku\n\nLa función funcionará automáticamente una vez que Shizuku esté en ejecución.</string>
     <string name="notification_update_channel_name">Actualizaciones de Mutterboard</string>
     <string name="notification_update_channel_description">Notificaciones sobre nuevas versiones de Mutterboard</string>
-    <string name="notification_update_available_title">Mutterboard - Nueva actualización disponible</string>
-    <string name="notification_update_available_text">Hay una nueva versión de Mutterboard disponible (%1$s)</string>
+    <string name="notification_successor_release_text">%1$s está disponible como sucesor de Mutterboard.</string>
     <string name="tutorial_page_software_keyboard_description">Elige qué superficie de teclado debe usar Mutterboard aquí.</string>
     <string name="starter_launcher_shortcuts_title">Mutterboard-QuickLauncher</string>
     <string name="starter_launcher_shortcuts_intro">Estos ajustes comparten una única lista de asignaciones de app a tecla. Elige dónde debe escuchar Mutterboard esas teclas asignadas.</string>
@@ -64,14 +66,14 @@ Overrides
 Cada tecla puede configurarse como Keycode, Acción, Native Ctrl o Ninguno. Usa overrides para resolver conflictos específicos de una app sin cambiar todo el modo.</string>
     <string name="layout_aware_ctrl_shortcuts_description">Cuando Ctrl mantenido se pasa a las apps, traduce primero Ctrl+letra mediante el layout activo de Mutterboard.</string>
     <string name="layout_aware_ctrl_shortcuts_info_text">Hay dos rutas para Ctrl mantenido. Si la navegación con Ctrl mantenido está activada, Mutterboard gestiona Ctrl+tecla con las asignaciones de Nav Mode que se muestran abajo. Si está desactivada, Mutterboard pasa Ctrl+tecla a la app. Esta opción solo afecta a esa ruta de app: si está activada, Ctrl+letra se traduce primero mediante el layout activo de Mutterboard, para que los atajos puedan seguir las letras que escribes. Si está desactivada, las apps reciben las posiciones físicas originales de las teclas.</string>
-    <string name="app_enter_behavior_enable_description">Usa overrides de Mutterboard para las apps de mensajería seleccionadas. Las apps probadas muestran la estrategia que Mutterboard usa realmente.</string>
-    <string name="app_enter_behavior_status_app_default">Mutterboard no interviene.</string>
-    <string name="app_enter_behavior_status_native_result">Predeterminado de la app: Mutterboard no interviene.</string>
-    <string name="app_enter_behavior_strategy_whatsapp_newline_ctrl_send">Mutterboard inserta nuevas líneas directamente y envía mediante la acción de envío de la app.</string>
-    <string name="app_enter_behavior_strategy_whatsapp_send_shift_newline">Mutterboard envía mediante la acción de envío de la app. Shift+Intro se inserta directamente como nueva línea.</string>
-    <string name="app_enter_behavior_strategy_whatsapp_newline_only">Probado: Mutterboard inserta Intro directamente como nueva línea y no activa el envío.</string>
-    <string name="app_enter_behavior_strategy_discord_app_default_detail">Probado: Discord ya se comporta correctamente para Intro envía y Shift+Intro nueva línea. Mutterboard no interviene aquí.</string>
-    <string name="app_enter_behavior_strategy_experimental_detail">No confirmado: Mutterboard está probando la acción de envío de la app y la inserción directa de nueva línea.</string>
+    <string name="app_enter_behaviour_enable_description">Usa overrides de Mutterboard para las apps de mensajería seleccionadas. Las apps probadas muestran la estrategia que Mutterboard usa realmente.</string>
+    <string name="app_enter_behaviour_status_app_default">Mutterboard no interviene.</string>
+    <string name="app_enter_behaviour_status_native_result">Predeterminado de la app: Mutterboard no interviene.</string>
+    <string name="app_enter_behaviour_strategy_whatsapp_newline_ctrl_send">Mutterboard inserta nuevas líneas directamente y envía mediante la acción de envío de la app.</string>
+    <string name="app_enter_behaviour_strategy_whatsapp_send_shift_newline">Mutterboard envía mediante la acción de envío de la app. Shift+Intro se inserta directamente como nueva línea.</string>
+    <string name="app_enter_behaviour_strategy_whatsapp_newline_only">Probado: Mutterboard inserta Intro directamente como nueva línea y no activa el envío.</string>
+    <string name="app_enter_behaviour_strategy_discord_app_default_detail">Probado: Discord ya se comporta correctamente para Intro envía y Shift+Intro nueva línea. Mutterboard no interviene aquí.</string>
+    <string name="app_enter_behaviour_strategy_experimental_detail">No confirmado: Mutterboard está probando la acción de envío de la app y la inserción directa de nueva línea.</string>
     <string name="tutorial_android16_ime_caption_description">Los dispositivos Titan 2 pueden mostrar una barra IME extra bajo Mutterboard. Este ajuste OEM la oculta y mantiene Mutterboard compacta.</string>
     <string name="tutorial_android16_ime_caption_after">Después: Mutterboard compacta</string>
     <string name="tutorial_whats_new_docs_button">Abrir documentación de Mutterboard</string>

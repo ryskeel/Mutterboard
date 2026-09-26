@@ -8,13 +8,20 @@ import android.util.TypedValue
 import android.util.Log
 import android.view.View
 import android.view.ViewTreeObserver
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import it.palsoftware.pastiera.inputmethod.StatusBarController
 
 /**
  * Puts one of the keyboard's bars into its dictating look and takes it out
- * again: the suggestion row gives way to the wave and a cancel button, and the
- * whole bar sits in the overlay's mist, which thins away when the dictation
- * ends rather than switching off.
+ * again: the suggested words give way to the wave and a cancel button, and the
+ * whole bar sits in the overlay's mist.
+ *
+ * Only the words are covered, not the row they sit in. In the one-row bar the
+ * menu and the mic share that row, and the mic is the stop button while
+ * recording, so hiding the row took stop away with it.
  *
  * The keyboard keeps two bars (full, and candidates-only), so there is one of
  * these per bar. Owned by Pastiera's StatusBarController, which only forwards.
@@ -23,6 +30,7 @@ class DictationBar(
     private val context: Context,
     private val layout: () -> LinearLayout?,
     private val suggestions: () -> View?,
+    private val words: () -> View?,
 ) {
     private var strip: DictationStripView? = null
     private var aura: AuraDrawable? = null
@@ -36,7 +44,9 @@ class DictationBar(
      * taller for a moment. Whatever it asked for is remembered and restored.
      */
     private val holdSuggestionsDown = ViewTreeObserver.OnPreDrawListener {
-        val view = suggestions()
+        keepMistVisible()
+        fitStripToWords()
+        val view = words()
         if (view != null && view.visibility != View.GONE) {
             suggestionsVisibilityBefore = view.visibility
             view.visibility = View.GONE
@@ -46,6 +56,73 @@ class DictationBar(
         }
     }
     private var holding = false
+
+    /**
+     * The mist is the bar's background, so anything painting a flat colour on
+     * top of it hides it. Stable had nothing doing that; nightly has two: the
+     * themed rows fill themselves, and the Titan 2 Elite rounded corners paint
+     * solid fills beside and below the bottom row. Both are cleared while the
+     * mist is up and put back after. Pastiera re-applies its theme on every
+     * status refresh, which the dictation causes, so this runs every frame.
+     */
+    private val clearedFills = mutableMapOf<View, Drawable>()
+    private var chromeColorsBefore: List<Any>? = null
+
+    private fun keepMistVisible() {
+        val bar = layout() ?: return
+        val aura = aura ?: return
+        if (bar.background !== aura) {
+            (bar.background as? ColorDrawable)?.let { backgroundBefore = it }
+            bar.background = aura
+        }
+        clearFlatFills(bar)
+        (bar as? StatusBarController.ImeChromeLayout)?.let { chrome ->
+            if (chromeColorsBefore == null) {
+                chromeColorsBefore = listOf(
+                    chrome.regularCornerColors, chrome.compactCornerColors,
+                    chrome.bottomFillColors, chrome.expandedCloseColor
+                )
+            }
+            val clear = Color.TRANSPARENT to Color.TRANSPARENT
+            if (chrome.bottomFillColors != clear || chrome.regularCornerColors != clear) {
+                chrome.regularCornerColors = clear
+                chrome.compactCornerColors = clear
+                chrome.bottomFillColors = clear
+                chrome.expandedCloseColor = Color.TRANSPARENT
+                chrome.invalidate()
+            }
+        }
+    }
+
+    // Flat colour fills only: buttons and suggestion pills draw shapes, which
+    // are what the mist is supposed to sit behind.
+    private fun clearFlatFills(group: ViewGroup) {
+        for (i in 0 until group.childCount) {
+            val child = group.getChildAt(i)
+            if (child === strip) continue
+            val bg = child.background
+            if (bg is ColorDrawable && bg.alpha > 0) {
+                clearedFills.putIfAbsent(child, bg)
+                child.background = null
+            }
+            if (child is ViewGroup) clearFlatFills(child)
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun restoreFills() {
+        clearedFills.forEach { (view, bg) -> if (view.background == null) view.background = bg }
+        clearedFills.clear()
+        val before = chromeColorsBefore ?: return
+        (layout() as? StatusBarController.ImeChromeLayout)?.let { chrome ->
+            chrome.regularCornerColors = before[0] as Pair<Int, Int>
+            chrome.compactCornerColors = before[1] as Pair<Int, Int>
+            chrome.bottomFillColors = before[2] as Pair<Int, Int>
+            chrome.expandedCloseColor = before[3] as Int
+            chrome.invalidate()
+        }
+        chromeColorsBefore = null
+    }
 
     private fun trace(what: String) {
         val bar = layout()
@@ -62,16 +139,22 @@ class DictationBar(
     fun begin(onCancel: () -> Unit) {
         trace("begin")
         val bar = layout() ?: return
+        val row = suggestions() as? FrameLayout ?: return
         val strip = strip ?: DictationStripView(context, dp(36f)).also {
             strip = it
-            bar.addView(it, 0)
+            row.addView(it, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         }
+        // Drawn over the words, under the row's buttons.
+        row.removeView(strip)
+        row.addView(strip, 1, strip.layoutParams)
+        fitStripToWords()
         strip.onCancel = onCancel
+        strip.setInk(inkFor((bar.background as? ColorDrawable)?.color ?: backgroundBefore.let { (it as? ColorDrawable)?.color } ?: Color.BLACK))
         strip.setCaption(null)
         strip.setLevel(0f)
         strip.setPosture(DictationStripView.Posture.LISTENING)
         strip.visibility = View.VISIBLE
-        val suggestionsView = suggestions()
+        val suggestionsView = words()
         if (!holding) {
             suggestionsVisibilityBefore = suggestionsView?.visibility
             bar.viewTreeObserver.addOnPreDrawListener(holdSuggestionsDown)
@@ -93,6 +176,7 @@ class DictationBar(
                 it.appear()
             }
         }
+        keepMistVisible()
     }
 
     fun setPhase(phase: ExternalDictation.Phase, caption: String?) {
@@ -135,16 +219,44 @@ class DictationBar(
         }
         aura = null
         backgroundBefore = null
+        restoreFills()
         if (holding) {
             layout()?.viewTreeObserver?.removeOnPreDrawListener(holdSuggestionsDown)
             holding = false
         }
-        suggestionsVisibilityBefore?.let { suggestions()?.visibility = it }
+        suggestionsVisibilityBefore?.let { words()?.visibility = it }
         suggestionsVisibilityBefore = null
+    }
+
+    // Dark ink on a light theme's bar, white on a dark one; the wave was
+    // white on every theme and all but vanished on the light ones.
+    private fun inkFor(background: Int): Int {
+        val luminance = (0.299 * Color.red(background) + 0.587 * Color.green(background) + 0.114 * Color.blue(background)) / 255
+        return if (luminance > 0.55) Color.rgb(0x1F, 0x1F, 0x1F) else Color.WHITE
+    }
+
+    // The words' container is padded clear of the row's side buttons; the
+    // strip takes the same margins so it sits where the words were. On the
+    // right it stops short: its cancel button would otherwise sit against the
+    // stop button, and a miss there throws the dictation away.
+    private fun fitStripToWords() {
+        val strip = strip ?: return
+        val words = words() ?: return
+        val params = strip.layoutParams as? FrameLayout.LayoutParams ?: return
+        // Pastiera insets the words with margins, not padding.
+        val inset = words.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+        val left = inset.leftMargin + words.paddingLeft
+        val right = inset.rightMargin + words.paddingRight + dp(CANCEL_GAP_DP)
+        if (params.leftMargin != left || params.rightMargin != right) {
+            params.leftMargin = left
+            params.rightMargin = right
+            strip.layoutParams = params
+        }
     }
 
     private companion object {
         const val TAG = "MutterboardDictation"
+        const val CANCEL_GAP_DP = 28f
     }
 
     private fun dp(v: Float) =

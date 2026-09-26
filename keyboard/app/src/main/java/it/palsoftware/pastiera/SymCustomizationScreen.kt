@@ -1,7 +1,10 @@
 package it.palsoftware.pastiera
 
 import android.content.Context
+import android.content.Intent
 import android.view.KeyEvent
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.rememberScrollState
@@ -26,38 +29,51 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import it.palsoftware.pastiera.R
 import it.palsoftware.pastiera.inputmethod.StatusBarController
+import kotlinx.coroutines.launch
 
 /**
  * Screen for customizing SYM mappings.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SymCustomizationScreen(
     modifier: Modifier = Modifier,
     initialPage: Int = 0,
     initialKeyCode: Int? = null,
     openInitialPicker: Boolean = false,
+    returnAfterInitialPicker: Boolean = false,
+    onInitialPickerClosed: () -> Unit = {},
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    
+    val coroutineScope = rememberCoroutineScope()
+    val screenScrollState = rememberScrollState()
+
     // Load saved auto-close SYM value
-    var symAutoClose by remember { 
+    var symAutoClose by remember {
         mutableStateOf(SettingsManager.getSymAutoClose(context))
+    }
+    var symAutoCloseOnTouch by remember {
+        mutableStateOf(SettingsManager.getSymAutoCloseOnTouch(context))
     }
     var emojiPickerExpandedHeight by remember {
         mutableStateOf(SettingsManager.getEmojiPickerExpandedHeight(context))
     }
 
-    var titan2LayoutEnabled by remember {
-        mutableStateOf(SettingsManager.isTitan2LayoutEnabled(context))
+    val titan2LayoutEnabled = remember {
+        SettingsManager.isTitan2LayoutEnabled(context)
     }
-    
+
     // Load SYM pages configuration (enabled pages + order)
     var symPagesConfig by remember {
         mutableStateOf(SettingsManager.getSymPagesConfig(context))
@@ -77,11 +93,24 @@ fun SymCustomizationScreen(
         persistSymPagesConfig(symPagesConfig.copy(symPageOrder = mutable))
     }
     fun symPageTitle(pageId: String): String = when (pageId) {
-        SymPagesConfig.PAGE_EMOJI -> context.getString(R.string.sym_enable_emoji_page_title)
-        SymPagesConfig.PAGE_SYMBOLS -> context.getString(R.string.sym_enable_symbols_page_title)
-        SymPagesConfig.PAGE_CLIPBOARD -> context.getString(R.string.sym_enable_clipboard_page_title)
-        SymPagesConfig.PAGE_EMOJI_PICKER -> context.getString(R.string.sym_enable_emoji_picker_page_title)
+        SymPagesConfig.PAGE_DEVICE -> context.getString(R.string.sym_cycle_device_layer)
+        SymPagesConfig.PAGE_EMOJI -> context.getString(R.string.sym_cycle_emoji_layer)
+        SymPagesConfig.PAGE_SYMBOLS -> context.getString(R.string.sym_cycle_symbols_layer)
+        SymPagesConfig.PAGE_CLIPBOARD -> context.getString(R.string.sym_cycle_clipboard_panel)
+        SymPagesConfig.PAGE_EMOJI_PICKER -> context.getString(R.string.sym_cycle_emoji_picker_panel)
         else -> pageId
+    }
+    fun setPageEnabled(pageId: String, enabled: Boolean) {
+        persistSymPagesConfig(
+            when (pageId) {
+                SymPagesConfig.PAGE_DEVICE -> symPagesConfig.copy(deviceEnabled = enabled)
+                SymPagesConfig.PAGE_EMOJI -> symPagesConfig.copy(emojiEnabled = enabled)
+                SymPagesConfig.PAGE_SYMBOLS -> symPagesConfig.copy(symbolsEnabled = enabled)
+                SymPagesConfig.PAGE_CLIPBOARD -> symPagesConfig.copy(clipboardEnabled = enabled)
+                SymPagesConfig.PAGE_EMOJI_PICKER -> symPagesConfig.copy(emojiPickerEnabled = enabled)
+                else -> symPagesConfig
+            }
+        )
     }
     var draggingPageId by remember { mutableStateOf<String?>(null) }
     var dragStartIndex by remember { mutableStateOf<Int?>(null) }
@@ -100,12 +129,20 @@ fun SymCustomizationScreen(
         dropTargetIndex = null
         dragOffsetY = 0f
     }
-    
+
     // Selected tab (0 = Emoji, 1 = Characters)
     var selectedTab by remember {
         mutableStateOf(if (initialPage == 2) 1 else 0)
     }
-    
+    var editingLayerPage by remember {
+        mutableStateOf(settingsChild(context, "sym_editor")?.toIntOrNull() ?: initialPage.takeIf { it == 1 || it == 2 })
+    }
+    val settingHighlight = LocalSettingHighlightId.current
+    LaunchedEffect(settingHighlight) {
+        if (settingHighlight?.startsWith("sym.") == true) editingLayerPage = null
+    }
+
+
     // Helper to load mappings from JSON
     fun loadMappingsFromJson(filePath: String): Map<Int, String> {
         return try {
@@ -143,17 +180,17 @@ fun SymCustomizationScreen(
             emptyMap<Int, String>()
         }
     }
-    
+
     // Load default mappings for page 1 (emoji)
     val defaultMappingsPage1 = remember {
         loadMappingsFromJson("common/sym/sym_key_mappings.json")
     }
-    
+
     // Load default mappings for page 2 (characters)
     val defaultMappingsPage2 = remember {
         loadMappingsFromJson("common/sym/sym_key_mappings_page2.json")
     }
-    
+
     // Load custom mappings or fallback to defaults for page 1
     var symMappingsPage1 by remember {
         mutableStateOf(
@@ -161,7 +198,7 @@ fun SymCustomizationScreen(
                 ?: defaultMappingsPage1
         )
     }
-    
+
     // Load custom mappings or fallback to defaults for page 2
     var symMappingsPage2 by remember {
         mutableStateOf(
@@ -169,20 +206,21 @@ fun SymCustomizationScreen(
                 ?: defaultMappingsPage2
         )
     }
-    
+
     // State for picker dialogs
     var showEmojiPicker by remember { mutableStateOf(false) }
     var showCharacterPicker by remember { mutableStateOf(false) }
     var selectedKeyCode by remember { mutableStateOf<Int?>(null) }
     var initialPickerHandled by remember { mutableStateOf(false) }
-    
+    var initialPickerActive by remember { mutableStateOf(false) }
+
     // State for reset confirmation dialog
     var showResetConfirmDialog by remember { mutableStateOf(false) }
     var resetPage by remember { mutableStateOf<Int?>(null) } // 1 for page1, 2 for page2
-    
+
     // Note: System back button is handled by Activity.onBackPressedDispatcher
     // to follow Android history. This BackHandler is removed to allow default behavior.
-    
+
     // Helper function to convert keycode to letter
     fun getLetterFromKeyCode(keyCode: Int): String {
         return when (keyCode) {
@@ -226,13 +264,14 @@ fun SymCustomizationScreen(
         val keyCode = initialKeyCode ?: return@LaunchedEffect
         if (!openInitialPicker) return@LaunchedEffect
         selectedKeyCode = keyCode
+        initialPickerActive = returnAfterInitialPicker
         if (initialPage == 2) {
             showCharacterPicker = true
         } else {
             showEmojiPicker = true
         }
     }
-    
+
     Scaffold(
         topBar = {
             Surface(
@@ -247,14 +286,20 @@ fun SymCustomizationScreen(
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        onBack()
+                    }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.settings_back_content_description)
                         )
                     }
                     Text(
-                        text = stringResource(R.string.sym_customize_title),
+                        text = when (editingLayerPage) {
+                            1 -> stringResource(R.string.sym_edit_emoji_layer_title)
+                            2 -> stringResource(R.string.sym_edit_symbols_layer_title)
+                            else -> stringResource(R.string.sym_customize_title)
+                        },
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(start = 8.dp)
@@ -267,390 +312,12 @@ fun SymCustomizationScreen(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(paddingValues)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(screenScrollState),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-        
-        // Auto-Close SYM Layout option (in alto)
+        if (editingLayerPage == null) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Keyboard,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.sym_auto_close_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = stringResource(R.string.sym_auto_close_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
-                    )
-                }
-                Switch(
-                    checked = symAutoClose,
-                    onCheckedChange = { enabled ->
-                        symAutoClose = enabled
-                        SettingsManager.setSymAutoClose(context, enabled)
-                    }
-                )
-            }
-        }
-
-        // Titan 2 Layout Alignment toggle
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Keyboard,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.titan2_layout_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = stringResource(R.string.titan2_layout_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
-                    )
-                }
-                Switch(
-                    checked = titan2LayoutEnabled,
-                    onCheckedChange = { enabled ->
-                        titan2LayoutEnabled = enabled
-                        SettingsManager.setTitan2LayoutEnabled(context, enabled)
-                    }
-                )
-            }
-        }
-        
-        HorizontalDivider()
-        
-        // Tab selector (visualizzazione del layout)
-        TabRow(selectedTabIndex = selectedTab) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text(stringResource(R.string.sym_tab_emoji)) }
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                text = { Text(stringResource(R.string.sym_tab_characters)) }
-            )
-        }
-        
-        // Customizable keyboard grid - uses the same layout as the real keyboard
-        val statusBarController = remember { StatusBarController(context) }
-        
-        // Show the grid based on the selected tab
-        when (selectedTab) {
-            0 -> {
-                // Emoji tab
-                key(symMappingsPage1, titan2LayoutEnabled) {
-                    AndroidView(
-                        factory = { ctx ->
-                            statusBarController.createCustomizableEmojiKeyboard(symMappingsPage1, { keyCode, emoji ->
-                                selectedKeyCode = keyCode
-                                showEmojiPicker = true
-                            }, page = 1)
-                        },
-                        update = { _ ->
-                            // The key(titan2LayoutEnabled) will trigger a full recomposition/re-factory
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-            1 -> {
-                // Characters tab
-                key(symMappingsPage2, titan2LayoutEnabled) {
-                    AndroidView(
-                        factory = { ctx ->
-                            statusBarController.createCustomizableEmojiKeyboard(symMappingsPage2, { keyCode, character ->
-                                selectedKeyCode = keyCode
-                                showCharacterPicker = true
-                            }, page = 2)
-                        },
-                        update = { _ ->
-                            // The key(titan2LayoutEnabled) will trigger a full recomposition/re-factory
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        // Reset button (ripristina predefiniti)
-        Button(
-            onClick = {
-                resetPage = selectedTab + 1 // 1 for emoji tab, 2 for characters tab
-                showResetConfirmDialog = true
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.error
-            )
-        ) {
-            Text(
-                stringResource(R.string.sym_reset_to_default), 
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onError
-            )
-        }
-        
-        HorizontalDivider()
-
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Keyboard,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.emoji_picker_expanded_height_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = stringResource(R.string.emoji_picker_expanded_height_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
-                    )
-                }
-                Switch(
-                    checked = emojiPickerExpandedHeight,
-                    onCheckedChange = { enabled ->
-                        emojiPickerExpandedHeight = enabled
-                        SettingsManager.setEmojiPickerExpandedHeight(context, enabled)
-                    }
-                )
-            }
-        }
-        
-        // Emoji page toggle
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Keyboard,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.sym_enable_emoji_page_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = stringResource(R.string.sym_enable_emoji_page_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
-                    )
-                }
-                Switch(
-                    checked = symPagesConfig.emojiEnabled,
-                    onCheckedChange = { enabled ->
-                        persistSymPagesConfig(symPagesConfig.copy(emojiEnabled = enabled))
-                    }
-                )
-            }
-        }
-        
-        // Symbols page toggle
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Keyboard,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.sym_enable_symbols_page_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = stringResource(R.string.sym_enable_symbols_page_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
-                    )
-                }
-                Switch(
-                    checked = symPagesConfig.symbolsEnabled,
-                    onCheckedChange = { enabled ->
-                        persistSymPagesConfig(symPagesConfig.copy(symbolsEnabled = enabled))
-                    }
-                )
-            }
-        }
-
-        // Clipboard page toggle
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Keyboard,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.sym_enable_clipboard_page_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = stringResource(R.string.sym_enable_clipboard_page_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
-                    )
-                }
-                Switch(
-                    checked = symPagesConfig.clipboardEnabled,
-                    onCheckedChange = { enabled ->
-                        persistSymPagesConfig(symPagesConfig.copy(clipboardEnabled = enabled))
-                    }
-                )
-            }
-        }
-
-        // Emoji picker page toggle
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Keyboard,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.sym_enable_emoji_picker_page_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = stringResource(R.string.sym_enable_emoji_picker_page_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
-                    )
-                }
-                Switch(
-                    checked = symPagesConfig.emojiPickerEnabled,
-                    onCheckedChange = { enabled ->
-                        persistSymPagesConfig(symPagesConfig.copy(emojiPickerEnabled = enabled))
-                    }
-                )
-            }
-        }
-
-        // Page order control
-        Surface(
-            modifier = Modifier
+            modifier = Modifier.settingRow("sym.pages")
                 .fillMaxWidth()
         ) {
             Column(
@@ -691,7 +358,8 @@ fun SymCustomizationScreen(
                     val isDragging = draggingPageId == pageId
                     val isDropTarget = dropTargetIndex == index && !isDragging && draggingPageId != null
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth(),
                         tonalElevation = if (isDragging) 6.dp else 1.dp,
                         color = if (isDropTarget) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
                         shape = MaterialTheme.shapes.small
@@ -700,30 +368,6 @@ fun SymCustomizationScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                                .pointerInput(pageId, normalizedSymPageOrder) {
-                                    detectDragGesturesAfterLongPress(
-                                        onDragStart = {
-                                            draggingPageId = pageId
-                                            dragStartIndex = index
-                                            dropTargetIndex = index
-                                            dragOffsetY = 0f
-                                        },
-                                        onDragCancel = {
-                                            endPageOrderDrag()
-                                        },
-                                        onDragEnd = {
-                                            endPageOrderDrag()
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            val start = dragStartIndex ?: return@detectDragGesturesAfterLongPress
-                                            dragOffsetY += dragAmount.y
-                                            val deltaSlots = (dragOffsetY / rowStepPx).toInt()
-                                            val target = (start + deltaSlots).coerceIn(0, normalizedSymPageOrder.lastIndex)
-                                            dropTargetIndex = target
-                                        }
-                                    )
-                                }
                                 .graphicsLayer {
                                     translationY = if (isDragging) dragOffsetY else 0f
                                     scaleX = if (isDragging) 1.02f else 1f
@@ -737,41 +381,343 @@ fun SymCustomizationScreen(
                             Icon(
                                 imageVector = Icons.Filled.DragHandle,
                                 contentDescription = null,
-                                tint = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.pointerInput(pageId, normalizedSymPageOrder) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            draggingPageId = pageId
+                                            dragStartIndex = index
+                                            dropTargetIndex = index
+                                            dragOffsetY = 0f
+                                        },
+                                        onDragCancel = { endPageOrderDrag() },
+                                        onDragEnd = { endPageOrderDrag() },
+                                        onDrag = { change, dragAmount ->
+                                            change.consume()
+                                            val start = dragStartIndex ?: return@detectDragGesturesAfterLongPress
+                                            dragOffsetY += dragAmount.y
+                                            val deltaSlots = (dragOffsetY / rowStepPx).toInt()
+                                            dropTargetIndex = (start + deltaSlots)
+                                                .coerceIn(0, normalizedSymPageOrder.lastIndex)
+                                        }
+                                    )
+                                }
                             )
-                            Text(
-                                text = "${index + 1}.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = symPageTitle(pageId),
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = if (enabled) "On" else "Off",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            TextButton(
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = symPageTitle(pageId),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = stringResource(
+                                        if (pageId == SymPagesConfig.PAGE_CLIPBOARD ||
+                                            pageId == SymPagesConfig.PAGE_EMOJI_PICKER
+                                        ) R.string.sym_cycle_type_panel else R.string.sym_cycle_type_key_layer
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (pageId == SymPagesConfig.PAGE_DEVICE) {
+                                FeatureStatusIcon(FeatureStatus.Construction)
+                            }
+                            if (pageId == SymPagesConfig.PAGE_DEVICE ||
+                                pageId == SymPagesConfig.PAGE_EMOJI ||
+                                pageId == SymPagesConfig.PAGE_SYMBOLS
+                            ) {
+                                IconButton(onClick = {
+                                    when (pageId) {
+                                        SymPagesConfig.PAGE_DEVICE -> context.startActivity(
+                                            Intent(context, SettingsActivity::class.java).apply {
+                                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                                    Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                                putExtra(
+                                                    SettingsActivity.EXTRA_DESTINATION,
+                                                    SettingsActivity.DESTINATION_DEVICE_SYM_LAYER_EDITOR
+                                                )
+                                            }
+                                        )
+                                        SymPagesConfig.PAGE_EMOJI -> {
+                                            selectedTab = 0
+                                            openSettingsChild(context, "sym_editor", "1")
+                                            coroutineScope.launch { screenScrollState.animateScrollTo(0) }
+                                        }
+                                        SymPagesConfig.PAGE_SYMBOLS -> {
+                                            selectedTab = 1
+                                            openSettingsChild(context, "sym_editor", "2")
+                                            coroutineScope.launch { screenScrollState.animateScrollTo(0) }
+                                        }
+                                    }
+                                }) {
+                                    Icon(
+                                        Icons.Filled.Edit,
+                                        contentDescription = stringResource(R.string.sym_edit_layer_content_description)
+                                    )
+                                }
+                            }
+                            IconButton(
                                 onClick = { movePageOrderItem(index, index - 1) },
                                 enabled = index > 0
                             ) {
-                                Text("↑")
+                                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.sym_move_up))
                             }
-                            TextButton(
+                            IconButton(
                                 onClick = { movePageOrderItem(index, index + 1) },
                                 enabled = index < normalizedSymPageOrder.lastIndex
                             ) {
-                                Text("↓")
+                                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.sym_move_down))
                             }
+                            Switch(
+                                checked = enabled,
+                                onCheckedChange = { setPageEnabled(pageId, it) }
+                            )
                         }
                     }
                 }
             }
         }
-        
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    context.startActivity(
+                        Intent(context, SettingsActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            putExtra(SettingsActivity.EXTRA_DESTINATION, SettingsActivity.DESTINATION_MODIFIERS)
+                        }
+                    )
+                }
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(Icons.Filled.Keyboard, null, tint = MaterialTheme.colorScheme.primary)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.alt_binding_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        stringResource(R.string.sym_modifiers_deeplink_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, null)
+            }
+        }
+
+        SettingsSectionDivider(stringResource(R.string.sym_behavior_section_title))
+
+
+        // Auto-Close SYM Layout option (in alto)
+        Surface(
+            modifier = Modifier.settingRow("sym.auto_close")
+                .fillMaxWidth()
+                .height(64.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Keyboard,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.sym_auto_close_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = stringResource(R.string.sym_auto_close_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2
+                    )
+                }
+                Switch(
+                    checked = symAutoClose,
+                    onCheckedChange = { enabled ->
+                        symAutoClose = enabled
+                        SettingsManager.setSymAutoClose(context, enabled)
+                    }
+                )
+            }
+        }
+
+        Surface(
+            modifier = Modifier.settingRow("sym.auto_close_touch")
+                .fillMaxWidth()
+                .height(64.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 52.dp, end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.sym_auto_close_touch_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (symAutoClose) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 1
+                    )
+                    Text(
+                        text = stringResource(R.string.sym_auto_close_touch_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2
+                    )
+                }
+                Switch(
+                    checked = symAutoCloseOnTouch,
+                    enabled = symAutoClose,
+                    onCheckedChange = { enabled ->
+                        symAutoCloseOnTouch = enabled
+                        SettingsManager.setSymAutoCloseOnTouch(context, enabled)
+                    }
+                )
+            }
+        }
+
+        HorizontalDivider()
+
+        }
+
+        if (editingLayerPage != null) {
+        // Customizable keyboard grid - uses the same layout as the real keyboard
+        val statusBarController = remember { StatusBarController(context) }
+
+        // Show the grid based on the selected tab
+        when (editingLayerPage) {
+            1 -> {
+                // Emoji tab
+                key(symMappingsPage1, titan2LayoutEnabled) {
+                    AndroidView(
+                        factory = { ctx ->
+                            statusBarController.createCustomizableEmojiKeyboard(symMappingsPage1, { keyCode, emoji ->
+                                selectedKeyCode = keyCode
+                                showEmojiPicker = true
+                            }, page = 1)
+                        },
+                        update = { _ ->
+                            // The key(titan2LayoutEnabled) will trigger a full recomposition/re-factory
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+            2 -> {
+                // Characters tab
+                key(symMappingsPage2, titan2LayoutEnabled) {
+                    AndroidView(
+                        factory = { ctx ->
+                            statusBarController.createCustomizableEmojiKeyboard(symMappingsPage2, { keyCode, character ->
+                                selectedKeyCode = keyCode
+                                showCharacterPicker = true
+                            }, page = 2)
+                        },
+                        update = { _ ->
+                            // The key(titan2LayoutEnabled) will trigger a full recomposition/re-factory
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Reset button (ripristina predefiniti)
+        Button(
+            onClick = {
+                resetPage = editingLayerPage ?: 1
+                showResetConfirmDialog = true
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error
+            )
+        ) {
+            Text(
+                stringResource(R.string.sym_reset_to_default),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onError
+            )
+        }
+
+        }
+
+        if (editingLayerPage == null) {
+
+        Surface(
+            modifier = Modifier.settingRow("sym.emoji_height")
+                .fillMaxWidth()
+                .height(64.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Keyboard,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.emoji_picker_expanded_height_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = stringResource(R.string.emoji_picker_expanded_height_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2
+                    )
+                }
+                Switch(
+                    checked = emojiPickerExpandedHeight,
+                    onCheckedChange = { enabled ->
+                        emojiPickerExpandedHeight = enabled
+                        SettingsManager.setEmojiPickerExpandedHeight(context, enabled)
+                    }
+                )
+            }
+        }
+
+        HorizontalDivider()
+
+        }
+
         // Emoji picker dialog
         if (showEmojiPicker && selectedKeyCode != null) {
             val selectedLetter = getLetterFromKeyCode(selectedKeyCode!!)
@@ -784,14 +730,22 @@ fun SymCustomizationScreen(
                     SettingsManager.saveSymMappings(context, symMappingsPage1)
                     showEmojiPicker = false
                     selectedKeyCode = null
+                    if (initialPickerActive) {
+                        initialPickerActive = false
+                        onInitialPickerClosed()
+                    }
                 },
                 onDismiss = {
                     showEmojiPicker = false
                     selectedKeyCode = null
+                    if (initialPickerActive) {
+                        initialPickerActive = false
+                        onInitialPickerClosed()
+                    }
                 }
             )
         }
-        
+
         // Unicode character picker dialog
         if (showCharacterPicker && selectedKeyCode != null) {
             val selectedLetter = getLetterFromKeyCode(selectedKeyCode!!)
@@ -814,18 +768,26 @@ fun SymCustomizationScreen(
                     SettingsManager.saveSymMappingsPage2(context, symMappingsPage2)
                     showCharacterPicker = false
                     selectedKeyCode = null
+                    if (initialPickerActive) {
+                        initialPickerActive = false
+                        onInitialPickerClosed()
+                    }
                 },
                 onDismiss = {
                     showCharacterPicker = false
                     selectedKeyCode = null
+                    if (initialPickerActive) {
+                        initialPickerActive = false
+                        onInitialPickerClosed()
+                    }
                 }
             )
         }
-        
+
         // Reset confirmation dialog
         if (showResetConfirmDialog) {
             AlertDialog(
-                onDismissRequest = { 
+                onDismissRequest = {
                     showResetConfirmDialog = false
                     resetPage = null
                 },

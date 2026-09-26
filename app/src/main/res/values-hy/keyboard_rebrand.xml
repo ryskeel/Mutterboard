@@ -7,10 +7,12 @@
     <string name="enable_pastiera">Միացնել Mutterboard-ն</string>
     <string name="pastiera_not_enabled">Mutterboard-ը միացված չէ</string>
     <string name="pastiera_not_selected">Mutterboard-ը ընտրված չէ</string>
+    <string name="auto_correct_manage_user_dict_description">Բառեր, որոնք Mutterboard-ն պետք է ճանաչի և առաջարկի՝ առանց փոխարինման կանոններ ստեղծելու։</string>
     <string name="notification_update_channel_name">Mutterboard թարմացումներ</string>
     <string name="notification_update_channel_description">Ծանուցումներ Mutterboard-ի նոր տարբերակների մասին</string>
-    <string name="notification_update_available_title">Mutterboard - Նոր թարմացում հասանելի է</string>
-    <string name="notification_update_available_text">Mutterboard-ի նոր տարբերակ հասանելի է (%1$s)</string>
+    <string name="notification_successor_release_text">%1$s-ը հասանելի է որպես Mutterboard-ի հաջորդ։</string>
+    <string name="successor_dialog_title">Mutterboard-ն ունի հաջորդ</string>
+    <string name="successor_dialog_message">Plektra-ն հաջորդում է Mutterboard-ին։ %1$s-ը հասանելի է GitHub-ում։</string>
     <string name="keyboard_title">Mutterboard</string>
     <string name="about_build_info">Physical keyboard based on Pastiera by Palsoftware (GPL-3.0)</string>
     <string name="auto_correct_ricette_pastiera_name">Ricette Mutterboard</string>
@@ -61,14 +63,14 @@ Nav Mode-ը օգտագործում է ստեղնի ֆիզիկական դիրքը
 Յուրաքանչյուր ստեղն կարելի է կազմաձևել որպես Keycode, Action, Native Ctrl կամ None։ Օգտագործեք վերասահմանումներ՝ հավելվածին հատուկ կոնֆլիկտները լուծելու համար՝ առանց ամբողջ ռեժիմը փոխելու։</string>
     <string name="layout_aware_ctrl_shortcuts_description">Երբ պահված Ctrl-ը փոխանցվում է հավելվածներին, նախ Ctrl+տառը թարգմանել ակտիվ Mutterboard դասավորության միջոցով։</string>
     <string name="layout_aware_ctrl_shortcuts_info_text">Պահված Ctrl-ի համար կա երկու ուղի։ Եթե պահված Ctrl-ով նավիգացիան միացված է, Mutterboard-ն Ctrl+ստեղնը մշակում է ստորև ցուցադրված Nav Mode նշանակումներով։ Եթե այն անջատված է, Mutterboard-ն Ctrl+ստեղնը փոխանցում է հավելվածին։ Այս ընտրանքը ազդում է միայն այդ հավելվածային ուղու վրա․ միացված լինելու դեպքում Ctrl+տառը նախ թարգմանվում է ակտիվ Mutterboard դասավորության միջոցով, որպեսզի դյուրանցումները հետևեն ձեր մուտքագրած տառերին։ Անջատված լինելու դեպքում հավելվածները ստանում են ստեղների սկզբնական ֆիզիկական դիրքերը։</string>
-    <string name="app_enter_behavior_enable_description">Օգտագործեք Mutterboard վերասահմանումները ընտրված հաղորդագրությունների հավելվածների համար։ Փորձարկված հավելվածները ցույց են տալիս Mutterboard-ի իրականում օգտագործվող ռազմավարությունը։</string>
-    <string name="app_enter_behavior_status_app_default">Mutterboard-ն չի միջամտում։</string>
-    <string name="app_enter_behavior_status_native_result">Հավելվածի լռելյայնը․ Mutterboard-ն չի միջամտում։</string>
-    <string name="app_enter_behavior_strategy_whatsapp_newline_ctrl_send">Mutterboard-ն նոր տողերը տեղադրում է ուղղակիորեն և ուղարկում է հավելվածի ուղարկման գործողությամբ։</string>
-    <string name="app_enter_behavior_strategy_whatsapp_send_shift_newline">Mutterboard-ն ուղարկում է հավելվածի ուղարկման գործողությամբ։ Shift+Enter-ը ուղղակիորեն տեղադրվում է որպես նոր տող։</string>
-    <string name="app_enter_behavior_strategy_whatsapp_newline_only">Փորձարկված է․ Mutterboard-ն Enter-ը ուղղակիորեն տեղադրում է որպես նոր տող և չի գործարկում ուղարկումը։</string>
-    <string name="app_enter_behavior_strategy_discord_app_default_detail">Փորձարկված է․ Discord-ը արդեն ճիշտ է աշխատում՝ Enter-ը ուղարկում է, Shift+Enter-ը նոր տող է։ Mutterboard-ն այստեղ չի միջամտում։</string>
-    <string name="app_enter_behavior_strategy_experimental_detail">Չհաստատված է․ Mutterboard-ն փորձում է հավելվածի ուղարկման գործողությունը և նոր տողի ուղղակի տեղադրումը։</string>
+    <string name="app_enter_behaviour_enable_description">Օգտագործեք Mutterboard վերասահմանումները ընտրված հաղորդագրությունների հավելվածների համար։ Փորձարկված հավելվածները ցույց են տալիս Mutterboard-ի իրականում օգտագործվող ռազմավարությունը։</string>
+    <string name="app_enter_behaviour_status_app_default">Mutterboard-ն չի միջամտում։</string>
+    <string name="app_enter_behaviour_status_native_result">Հավելվածի լռելյայնը․ Mutterboard-ն չի միջամտում։</string>
+    <string name="app_enter_behaviour_strategy_whatsapp_newline_ctrl_send">Mutterboard-ն նոր տողերը տեղադրում է ուղղակիորեն և ուղարկում է հավելվածի ուղարկման գործողությամբ։</string>
+    <string name="app_enter_behaviour_strategy_whatsapp_send_shift_newline">Mutterboard-ն ուղարկում է հավելվածի ուղարկման գործողությամբ։ Shift+Enter-ը ուղղակիորեն տեղադրվում է որպես նոր տող։</string>
+    <string name="app_enter_behaviour_strategy_whatsapp_newline_only">Փորձարկված է․ Mutterboard-ն Enter-ը ուղղակիորեն տեղադրում է որպես նոր տող և չի գործարկում ուղարկումը։</string>
+    <string name="app_enter_behaviour_strategy_discord_app_default_detail">Փորձարկված է․ Discord-ը արդեն ճիշտ է աշխատում՝ Enter-ը ուղարկում է, Shift+Enter-ը նոր տող է։ Mutterboard-ն այստեղ չի միջամտում։</string>
+    <string name="app_enter_behaviour_strategy_experimental_detail">Չհաստատված է․ Mutterboard-ն փորձում է հավելվածի ուղարկման գործողությունը և նոր տողի ուղղակի տեղադրումը։</string>
     <string name="tutorial_whats_new_docs_button">Բացել Mutterboard փաստաթղթերը</string>
     <string name="tutorial_android16_ime_caption_description">Titan 2 սարքերը կարող են Mutterboard-ի տակ ցույց տալ լրացուցիչ IME գոտի։ Այս OEM կարգավորումը թաքցնում է այն և Mutterboard-ն պահում կոմպակտ։</string>
     <string name="tutorial_android16_ime_caption_after">Հետո՝ կոմպակտ Mutterboard</string>
