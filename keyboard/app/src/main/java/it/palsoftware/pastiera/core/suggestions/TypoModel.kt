@@ -37,6 +37,11 @@ class TypoModel(
         val doubledKey: Double = 1.5,
         val swap: Double = 2.5,
         val firstLetter: Double = 2.0,
+        // A missed first key ("ight" for "right") is its own slip: the finger
+        // rolling off the space bar. It is far commoner than a wrong first key.
+        val firstLetterDropped: Double = 0.0,
+        // Two-letter words ("cn" for "can") need more confidence than three.
+        val twoLetterThreshold: Double = 5.0,
         val properNounPenalty: Double = 2.0,
         val maxCost: Double = 7.0,
         val threshold: Double = 3.25,
@@ -94,7 +99,9 @@ class TypoModel(
             .toList()
 
         val best = scored.firstOrNull() ?: return null
-        val threshold = if (input.length <= 3) {
+        val threshold = if (input.length == 2) {
+            tuning.twoLetterThreshold
+        } else if (input.length <= 3) {
             tuning.shortWordThreshold
         } else {
             (tuning.threshold - tuning.perLetterRelief * (input.length - 4)).coerceAtLeast(tuning.minThreshold)
@@ -139,7 +146,9 @@ class TypoModel(
             }
         }
         var cost = d[n][m]
-        if (typed.first() != intended.first()) cost += tuning.firstLetter
+        if (typed.first() != intended.first()) {
+            cost += if (typed.first() == intended.getOrNull(1)) tuning.firstLetterDropped else tuning.firstLetter
+        }
         return cost
     }
 
@@ -171,7 +180,7 @@ class TypoModel(
     }
 
     companion object {
-        private const val MIN_LENGTH = 3
+        private const val MIN_LENGTH = 2
         private const val USER_WORD_FREQUENCY = 150
 
 

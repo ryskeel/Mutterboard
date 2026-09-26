@@ -113,7 +113,8 @@ class SuggestionController(
                 TypoModel(dictionaryRepository, currentLocale) { BigramModel.shared(appContext.assets) }
             } else {
                 null
-            }
+            },
+            bigrams = { if (currentLocale.language == "en") BigramModel.shared(appContext.assets) else null }
         )
     }
     

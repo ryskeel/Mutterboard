@@ -376,8 +376,18 @@ prediction as good as Gboard's.
   Pastiera offered an add-word button that vanished once the cursor moved and
   otherwise forgot the undo at the next letter. A learned word also beats the
   fixed contraction rules (`isUserWord`), or "id" would go on becoming "I'd".
-- Next: a trigram or conversational unigram prior if the scorecards say it is
-  worth it.
+- **Apostrophe words are decided by context, not dropped.** "ill", "its",
+  "lets", "cant", "wed", "shed", "shell", "id" are words and contractions both.
+  Removing their rules (2026-09-25) made things worse: on held-out text the
+  fixed rule was right 82-100% of the time and Ry noticed "Ill" at once. The
+  rules are back and the previous word overrides them (`contextPrefersTypedWord`),
+  which takes "its" from 82% to 93%.
+- **A dropped first letter is cheap, two-letter words are allowed** (stricter
+  bar). Ry types "ight", "imes", "cn"; neither kind was ever fixed before. Both
+  are too ambiguous to fix well without the previous word, so judge them on the
+  context scorecard, not the plain one.
+- Next: real-word typos ("an there" for "and there") need the word after, so
+  a correction would have to land retroactively.
 
 ## The refiners are the heart of this app
 

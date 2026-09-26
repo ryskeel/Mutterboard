@@ -37,7 +37,7 @@ MIN_CONTEXT_TOTAL = 20   # a previous word seen fewer times predicts nothing use
 MAX_CONTINUATIONS = 256   # per previous word; the bar shows three
 MIN_PAIR_COUNT = 3
 MAX_CONTEXTS = 12000
-HELDOUT_SAMPLE = 4000
+HELDOUT_SAMPLE = 20000
 
 TOKEN = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)*")
 

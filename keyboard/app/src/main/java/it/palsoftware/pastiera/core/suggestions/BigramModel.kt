@@ -66,7 +66,21 @@ class BigramModel private constructor(
         return ln((pair + 1.0) / (expected + 1.0))
     }
 
+    /**
+     * Estimated probability of [word] right after [previous], smoothed toward
+     * how common the word is overall. For choosing between two spellings of
+     * the same keystrokes ("ill" or "I'll"), where only the ratio matters.
+     */
+    fun likelihood(previous: String?, word: String): Double {
+        val id = ids[WordNormalization.normalizeApostrophes(word).lowercase(Locale.ROOT)]
+        val overall = ((id?.let { unigrams[it] } ?: 0) + 0.5) / totalTokens
+        val context = contexts[key(previous)] ?: return overall
+        val pair = id?.let { context.count(it) } ?: 0
+        return (pair + SMOOTHING * overall) / (context.total + SMOOTHING)
+    }
+
     companion object {
+        private const val SMOOTHING = 100.0
         const val SENTENCE_START = "<s>"
         private const val TAG = "BigramModel"
         private const val ASSET = "common/dictionaries/en_bigrams.tsv"

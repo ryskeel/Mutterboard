@@ -17,7 +17,8 @@ class AutoReplaceController(
     private val exactReplacementProvider: ((String, Char?) -> String?)? = null,
     // Mutterboard's corrector. When present it decides fuzzy corrections in place
     // of the suggestion-bar ranking below; see TypoModel for why.
-    private val typoModel: TypoModel? = null
+    private val typoModel: TypoModel? = null,
+    private val bigrams: () -> BigramModel? = { null }
 ) {
     private fun triggerFromBoundaryChar(boundaryChar: Char?): DebugCaptureStore.AutoCorrectionTrigger {
         return when (boundaryChar) {
@@ -333,7 +334,9 @@ class AutoReplaceController(
             null
         }
         exactReplacement?.let { replacement ->
-            if (!rejectedWords.contains(wordLower) && !isUserWord(word)) {
+            if (!rejectedWords.contains(wordLower) && !isUserWord(word) &&
+                !contextPrefersTypedWord(inputConnection, word, replacement)
+            ) {
                 inputConnection.beginBatchEdit()
                 inputConnection.deleteSurroundingText(word.length, 0)
                 val shouldAppendBoundary = boundaryChar != null &&
@@ -652,6 +655,21 @@ class AutoReplaceController(
     
     fun clearRejectedWords() {
         rejectedWords.clear()
+    }
+
+    /**
+     * "ill", "its", "lets", "wed", "shell", "cant" are words as well as
+     * apostrophe-less contractions, and a fixed rule gets one of the two wrong
+     * every time. The previous word settles it: "Ill type" (sentence start) is
+     * "I'll", "feel ill" stays. Without a bundled table the rule applies as it
+     * always did.
+     */
+    private fun contextPrefersTypedWord(inputConnection: InputConnection, word: String, replacement: String): Boolean {
+        if (word.contains('\'') || !replacement.contains('\'')) return false
+        if (!(knownWordProvider?.invoke(word) ?: repository.isKnownWord(word))) return false
+        val table = bigrams() ?: return false
+        val previous = previousWord(inputConnection, word)
+        return table.likelihood(previous, word) > table.likelihood(previous, replacement)
     }
 
     /**

@@ -34,6 +34,8 @@ object TypoGenerator {
         return word.removeRange(i, i + 1)
     }
 
+    fun droppedFirstLetter(word: String, random: Random): String? = word.substring(1)
+
     fun swappedPair(word: String, random: Random): String? {
         val i = 1 + random.nextInt(word.length - 2)
         if (word[i] == word[i + 1]) return null
@@ -56,6 +58,7 @@ object TypoGenerator {
             "dropped letter" to ::droppedLetter,
             "swapped pair" to ::swappedPair,
             "double letter" to ::doubleLetter,
+            "dropped first" to ::droppedFirstLetter,
         )
         val (kind, make) = kinds[random.nextInt(kinds.size)]
         return make(word, random)?.let { it to kind }

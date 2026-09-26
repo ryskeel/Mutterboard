@@ -50,24 +50,25 @@ class AutocorrectScorecardTest {
         val context = RuntimeEnvironment.getApplication()
         val repository = englishRepository(context)
         val cases = handWritten + generateTypos(loadEnglish(), repository)
-        val lines = StringBuilder("fpl  thr  short relief | fixed wrong changed\n")
-        for (fpl in listOf(16.0, 20.0, 26.0))
-        for (thr in listOf(3.0, 4.0, 5.0, 6.0))
-        for (short in listOf(6.0, 7.0))
-        for (relief in listOf(0.0, 0.25, 0.5, 0.75)) {
-            val maxCost = relief
+        val lines = StringBuilder("fixed%/wrong%\n")
+        for (fpl in listOf(20.0))
+        for (thr in listOf(5.0))
+        for (dropped in listOf(0.0, 0.5, 1.0, 1.5, 2.0))
+        for (two in listOf(4.0, 5.0, 6.0, 99.0)) {
             val model = TypoModel(repository, Locale.ENGLISH, TypoModel.Tuning(
-                frequencyPerLogUnit = fpl, threshold = thr * 13.0 / fpl, shortWordThreshold = short * 13.0 / fpl, perLetterRelief = relief))
-            var fixed = 0; var wrong = 0
-            for (c in cases) {
-                val out = model.correct(c.typed)?.word
-                if (out == c.intended) fixed++ else if (out != null) wrong++
+                firstLetterDropped = dropped, twoLetterThreshold = two))
+            fun rate(subset: List<Case>): String {
+                var fixed = 0; var wrong = 0
+                for (c in subset) {
+                    val out = model.correct(c.typed)?.word
+                    if (out == c.intended) fixed++ else if (out != null) wrong++
+                }
+                return "%3d%%/%2d%%".format(fixed * 100 / subset.size.coerceAtLeast(1), wrong * 100 / subset.size.coerceAtLeast(1))
             }
-            val changed = leaveAlone.count { w ->
-                !repository.isKnownWord(w) && model.correct(w) != null
-            }
-            lines.append("%4.0f %4.1f %5.1f %4.2f | %4d%% %4d%% %3d\n".format(
-                fpl, thr, short, maxCost, fixed * 100 / cases.size, wrong * 100 / cases.size, changed))
+            val changed = leaveAlone.filter { w -> !repository.isKnownWord(w) && model.correct(w) != null }
+            lines.append("dropped %.1f twoThr %4.1f | all %s  first %s  2-letter %s  changed %d %s\n".format(
+                dropped, two, rate(cases), rate(cases.filter { it.kind == "dropped first" }),
+                rate(cases.filter { it.typed.length == 2 }), changed.size, changed.joinToString(",")))
         }
         File("build/autocorrect-sweep.txt").writeText(lines.toString())
     }
@@ -171,7 +172,7 @@ class AutocorrectScorecardTest {
         // Common everyday words, not the function words at the very top.
         val words = entries.asSequence()
             .map { it.word }
-            .filter { w -> w.length >= 4 && w.all { it in 'a'..'z' } }
+            .filter { w -> w.length >= 3 && w.all { it in 'a'..'z' } }
             .drop(50)
             .toList()
             .let { it.take(400) + it.drop(400).take(4000).filterIndexed { i, _ -> i % 10 == 0 } }
@@ -183,6 +184,7 @@ class AutocorrectScorecardTest {
                 TypoGenerator.droppedLetter(word, random)?.let { Case(it, word, "dropped letter") },
                 TypoGenerator.swappedPair(word, random)?.let { Case(it, word, "swapped pair") },
                 TypoGenerator.doubleLetter(word, random)?.let { Case(it, word, "double letter") },
+                TypoGenerator.droppedFirstLetter(word, random)?.let { Case(it, word, "dropped first") },
             )
             out += candidates.filter { !repository.isKnownWord(it.typed) }
         }
@@ -208,6 +210,9 @@ class AutocorrectScorecardTest {
         // Typed on the Titan, 2026-09-25.
         Case("rsndomly", "randomly", "hand"),
         Case("typong", "typing", "hand"),
+        Case("ight", "right", "hand"),
+        Case("imes", "times", "hand"),
+        Case("cn", "can", "hand"),
     )
 
     private val leaveAlone = listOf(
@@ -217,6 +222,8 @@ class AutocorrectScorecardTest {
         "haha", "hahaha", "hmm", "ugh", "tho", "bruh", "cuz", "ya", "yall", "ok",
         "Venmo", "Spotify", "Airbnb", "TikTok", "iPhone", "Pixel", "WhatsApp", "Reddit",
         "adb", "apk", "repo", "json", "regex", "localhost", "async",
+        "hmu", "wyd", "lmk", "gg", "tf", "af", "irl", "pov", "fomo", "yolo", "smh",
+        "Ry", "Titan", "Niagara", "Pastiera", "Plektra", "Tatoeba", "Groq's",
     )
 
     private class FakeInputConnection(context: Context, initialText: String) :
