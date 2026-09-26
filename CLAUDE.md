@@ -283,6 +283,11 @@ session read it that way and wrote it into the backlog.
 
 - **Pastiera is GPL-3.0, so Mutterboard is too.** Ry agreed; it is a hobby
   project and stays open source.
+- **The "Material You" keyboard theme is resolved at runtime**
+  (`mutterboard/MaterialYouTheme`), not stored: a `materialYou` flag on the
+  theme makes `getEffectiveKeyboardTheme` repaint it from the system palette
+  for the current light/dark mode. The strip behind the pill is the secondary
+  container, the pill the surface. Its stored colours are only a fallback.
 - **Pastiera's settings screens stay; only their canvas is ours.** They are
   Compose screens over one `SettingsManager`, and rebuilding them would mean
   re-porting every nightly feature's UI. `PastieraTheme` paints `background`
