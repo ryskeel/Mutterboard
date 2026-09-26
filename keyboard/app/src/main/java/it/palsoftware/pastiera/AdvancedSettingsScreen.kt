@@ -41,7 +41,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -107,9 +106,6 @@ fun AdvancedSettingsScreen(
     }
     var shizukuStatus by remember { mutableStateOf(ShizukuStatus.NotConnected) }
     var trackpadProvider by remember { mutableStateOf(SettingsManager.getTrackpadProvider(context)) }
-    var experimentalCandidatesViewEnabled by remember {
-        mutableStateOf(SettingsManager.getExperimentalCandidatesViewEnabled(context))
-    }
     var pendingDeviceChangeRestore by remember {
         mutableStateOf<Pair<Uri, RestoreManager.DeviceChange>?>(null)
     }
@@ -131,9 +127,6 @@ fun AdvancedSettingsScreen(
                 }
                 "trackpad_provider" -> {
                     trackpadProvider = SettingsManager.getTrackpadProvider(context)
-                }
-                "experimental_candidates_view_enabled" -> {
-                    experimentalCandidatesViewEnabled = SettingsManager.getExperimentalCandidatesViewEnabled(context)
                 }
             }
         }
@@ -595,43 +588,6 @@ fun AdvancedSettingsScreen(
                                         contentDescription = stringResource(R.string.clipboard_retention_apply)
                                     )
                                 }
-                            }
-                        }
-
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .settingRow(SettingLinkIds.ADVANCED_EXPERIMENTAL_CANDIDATES_VIEW)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.experimental_candidates_view_title),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.experimental_candidates_view_description),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Switch(
-                                    checked = experimentalCandidatesViewEnabled,
-                                    onCheckedChange = { enabled ->
-                                        experimentalCandidatesViewEnabled = enabled
-                                        SettingsManager.setExperimentalCandidatesViewEnabled(context, enabled)
-                                    }
-                                )
                             }
                         }
 
