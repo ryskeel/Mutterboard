@@ -392,8 +392,22 @@ prediction as good as Gboard's.
   bar). Ry types "ight", "imes", "cn"; neither kind was ever fixed before. Both
   are too ambiguous to fix well without the previous word, so judge them on the
   context scorecard, not the plain one.
-- Next: real-word typos ("an there" for "and there") need the word after, so
-  a correction would have to land retroactively.
+- **The bar while typing is `WordBarRanker`** (English): completions ranked by
+  the previous word, with the space bar's correction in the first (centre)
+  slot so the bar shows what space will do. Pastiera's list only fills gaps.
+  Held-out: the word is in the bar after one letter 52% of the time (Pastiera
+  16%). The typo fixer also blends in the table's everyday word counts
+  (`everydayWeight`), because the prose dictionary thinks "wired" beats "weird".
+- **Next-word prediction backs off from two words to one** ("I want" -> to):
+  33% in the top three on held-out text, from 26%. The table holds up to
+  40,000 two-word contexts; it is 4 MB.
+- **Real-word slips are fixed one word late** (`RealWordFixer`: "we where
+  going" -> were), in place, and an immediate backspace puts the word back.
+  The bar is set by clean text, not by catches: 0.6 correct words changed per
+  thousand for 42% of slips. Loosening it catches more and changes up to
+  fifteen per thousand; do not.
+- **All of these numbers are measured on Tatoeba**, the same kind of text the
+  table is built from, so Ry's own typing will score lower.
 
 ## The refiners are the heart of this app
 

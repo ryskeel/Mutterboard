@@ -43,8 +43,24 @@ class BigramModel private constructor(
     }
 
     /** Continuations of [previous] in descending frequency, display-cased ("I", "don't"). */
-    fun continuations(previous: String?, limit: Int = 16): List<Pair<String, Int>> {
-        val context = contexts[key(previous)] ?: return emptyList()
+    fun continuations(previous: String?, limit: Int = 16): List<Pair<String, Int>> =
+        contexts[key(previous)]?.let { take(it, limit) }.orEmpty()
+
+    /**
+     * Continuations of the last two words ("I want" -> to), then of the last
+     * one to fill. [twoBack] is the word before [previous], or null when
+     * [previous] opened the sentence; see [SENTENCE_START].
+     */
+    fun continuations(twoBack: String?, previous: String?, limit: Int): List<Pair<String, Int>> {
+        if (previous == null) return continuations(null, limit)
+        val pair = contexts[key(twoBack) + " " + key(previous)]?.let { take(it, limit) }.orEmpty()
+        if (pair.size >= limit) return pair
+        val seen = pair.mapTo(HashSet()) { it.first.lowercase(Locale.ROOT) }
+        return pair + continuations(previous, limit * 2).filter { seen.add(it.first.lowercase(Locale.ROOT)) }
+            .take(limit - pair.size)
+    }
+
+    private fun take(context: Context, limit: Int): List<Pair<String, Int>> {
         val n = minOf(limit, context.byFrequency.size)
         return (0 until n).map { vocabulary[context.byFrequency[it]] to context.frequencyCounts[it] }
     }
@@ -77,6 +93,12 @@ class BigramModel private constructor(
         val context = contexts[key(previous)] ?: return overall
         val pair = id?.let { context.count(it) } ?: 0
         return (pair + SMOOTHING * overall) / (context.total + SMOOTHING)
+    }
+
+    /** How often [word] appears in everyday English overall, 0 if never seen. */
+    fun unigramProbability(word: String): Double {
+        val id = ids[WordNormalization.normalizeApostrophes(word).lowercase(Locale.ROOT)] ?: return 0.0
+        return unigrams[id].toDouble() / totalTokens
     }
 
     companion object {

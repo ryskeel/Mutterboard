@@ -2,6 +2,8 @@ package it.palsoftware.pastiera.core.suggestions
 
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.ln
 
 /**
  * Mutterboard's autocorrect decision: which dictionary word did the user most
@@ -53,6 +55,9 @@ class TypoModel(
         // Weight on how well a candidate follows the previous word. Settles the
         // close calls frequency cannot: "the tem" is team, "for tem" is them.
         val contextWeight: Double = 0.5,
+        // Share of a word's commonness taken from the everyday table rather
+        // than the prose dictionary, where "wired" outranks "weird".
+        val everydayWeight: Double = 0.75,
     )
 
     data class Correction(val word: String, val score: Double, val runnerUpScore: Double?)
@@ -84,7 +89,7 @@ class TypoModel(
                     ?: return@mapNotNull null
                 val cost = channelCost(input, item.term)
                 if (cost >= tuning.maxCost) return@mapNotNull null
-                var score = logPrior(entry) - cost
+                var score = logPrior(entry, context) - cost
                 val fit = if (context != null) tuning.contextWeight * context.contextScore(previousWord, entry.word) else 0.0
                 // A lowercase word turning into a capitalised one is usually a
                 // name the user was not typing.
@@ -113,13 +118,20 @@ class TypoModel(
     // The bundled dictionaries store frequency on a log scale: across English,
     // one step of natural-log frequency is about thirteen units (rank 100 sits
     // at 165, rank 10,000 at 105).
-    private fun logPrior(entry: DictionaryEntry): Double {
+    private fun logPrior(entry: DictionaryEntry, table: BigramModel?): Double {
         val raw = when (entry.source) {
             SuggestionSource.MAIN -> entry.frequency
             // The user's own words are words they actually type.
             SuggestionSource.USER, SuggestionSource.DEFAULT_USER -> maxOf(entry.frequency, USER_WORD_FREQUENCY)
         }
-        return raw / tuning.frequencyPerLogUnit
+        val prose = raw / tuning.frequencyPerLogUnit
+        if (table == null || tuning.everydayWeight <= 0.0 || entry.source != SuggestionSource.MAIN) return prose
+        // Same scale as the prose score: the blend moves it by however much
+        // likelier (or rarer) the word is in everyday text.
+        val proseProbability = THE_PROBABILITY * exp((raw - THE_FREQUENCY) / NATURAL_FREQUENCY_PER_LOG_UNIT)
+        val blended = tuning.everydayWeight * table.unigramProbability(entry.word) +
+            (1 - tuning.everydayWeight) * proseProbability
+        return prose + NATURAL_FREQUENCY_PER_LOG_UNIT / tuning.frequencyPerLogUnit * ln(blended / proseProbability)
     }
 
     /**
@@ -182,6 +194,9 @@ class TypoModel(
     companion object {
         private const val MIN_LENGTH = 2
         private const val USER_WORD_FREQUENCY = 150
+        private const val THE_PROBABILITY = 0.05
+        private const val THE_FREQUENCY = 222.0
+        private const val NATURAL_FREQUENCY_PER_LOG_UNIT = 13.0
 
 
 

@@ -18,7 +18,8 @@ class AutoReplaceController(
     // Mutterboard's corrector. When present it decides fuzzy corrections in place
     // of the suggestion-bar ranking below; see TypoModel for why.
     private val typoModel: TypoModel? = null,
-    private val bigrams: () -> BigramModel? = { null }
+    private val bigrams: () -> BigramModel? = { null },
+    private val realWordFixer: RealWordFixer? = null
 ) {
     private fun triggerFromBoundaryChar(boundaryChar: Char?): DebugCaptureStore.AutoCorrectionTrigger {
         return when (boundaryChar) {
@@ -44,6 +45,8 @@ class AutoReplaceController(
     )
 
     companion object {
+        // "...lead middle last " with single spaces, at the cursor.
+        private val RETRO_RUN = Regex("^(.*?)(?<=^|\\s)(\\p{L}+) (\\p{L}+(?:['’]\\p{L}+)*) $", RegexOption.DOT_MATCHES_ALL)
         private val PREVIOUS_WORD = Regex("[\\p{L}]+(?:['’][\\p{L}]+)*$")
 
         internal data class ApostropheSplit(val prefix: String, val root: String)
@@ -216,6 +219,50 @@ class AutoReplaceController(
     }
 
     fun handleBoundary(
+        keyCode: Int,
+        event: KeyEvent?,
+        tracker: CurrentWordTracker,
+        inputConnection: InputConnection?,
+        boundaryCharOverride: Char? = null
+    ): ReplaceResult {
+        lastRetroFix = null
+        val result = handleWordBoundary(keyCode, event, tracker, inputConnection, boundaryCharOverride)
+        if (inputConnection != null && settingsProvider().autoReplaceOnSpaceEnter) {
+            fixWordBeforeLast(inputConnection)
+        }
+        return result
+    }
+
+    // Mutterboard: a real-word slip fixed one word late, kept so an immediate
+    // backspace can put it back.
+    private data class RetroFix(val original: String, val fixed: String, val tail: String)
+    private var lastRetroFix: RetroFix? = null
+
+    /**
+     * Once "an there " is typed, "an" can be judged against the word after
+     * it; see [RealWordFixer]. Only a plain "word word " run is touched, so a
+     * comma, a line break or a cursor jump leaves the text alone.
+     */
+    private fun fixWordBeforeLast(inputConnection: InputConnection) {
+        val fixer = realWordFixer ?: return
+        val before = inputConnection.getTextBeforeCursor(96, 0)?.toString() ?: return
+        val match = RETRO_RUN.find(before) ?: return
+        val (lead, middle, last) = match.destructured
+        if (middle.lowercase() in rejectedWords || isUserWord(middle)) return
+        val previous = PREVIOUS_WORD.find(lead.trimEnd())?.value?.takeUnless { lead.trimEnd().lastOrNull()?.let { it in ".!?" } == true }
+        val fixed = fixer.fix(previous, middle, last) ?: return
+        val replacement = applyCasing(fixed, middle)
+        if (replacement == middle) return
+        val tail = " $last "
+        inputConnection.beginBatchEdit()
+        inputConnection.deleteSurroundingText(middle.length + tail.length, 0)
+        inputConnection.commitText(replacement + tail, 1)
+        inputConnection.endBatchEdit()
+        lastRetroFix = RetroFix(middle, replacement, tail)
+        Log.d("AutoReplaceController", "Real-word fix '$middle' -> '$replacement' before '$last'")
+    }
+
+    private fun handleWordBoundary(
         keyCode: Int,
         event: KeyEvent?,
         tracker: CurrentWordTracker,
@@ -591,6 +638,20 @@ class AutoReplaceController(
             return false
         }
 
+        lastRetroFix?.let { retro ->
+            lastRetroFix = null
+            val expected = retro.fixed + retro.tail
+            val text = inputConnection.getTextBeforeCursor(expected.length, 0)?.toString()
+            if (text == expected) {
+                inputConnection.beginBatchEdit()
+                inputConnection.deleteSurroundingText(expected.length, 0)
+                inputConnection.commitText(retro.original + retro.tail, 1)
+                inputConnection.endBatchEdit()
+                rejectedWords.add(retro.original.lowercase())
+                return true
+            }
+        }
+
         val replacement = lastReplacement ?: return false
         
         // Get text before cursor (need extra chars to check for boundary char)
@@ -651,6 +712,7 @@ class AutoReplaceController(
 
     fun clearLastReplacement() {
         lastReplacement = null
+        lastRetroFix = null
     }
     
     fun clearRejectedWords() {

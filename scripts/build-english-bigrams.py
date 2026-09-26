@@ -37,6 +37,11 @@ MIN_CONTEXT_TOTAL = 20   # a previous word seen fewer times predicts nothing use
 MAX_CONTINUATIONS = 256   # per previous word; the bar shows three
 MIN_PAIR_COUNT = 3
 MAX_CONTEXTS = 12000
+# Two-word contexts ("I want" -> to), for next-word prediction. Only the
+# commonest are kept: the bar shows three, and the one-word table backs off.
+MIN_PAIR_CONTEXT_TOTAL = 30
+MAX_PAIR_CONTEXTS = 40000
+MAX_PAIR_CONTINUATIONS = 8
 HELDOUT_SAMPLE = 20000
 
 TOKEN = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)*")
@@ -52,6 +57,8 @@ def main() -> None:
     src = Path(sys.argv[1])
     pairs = collections.Counter()
     totals = collections.Counter()
+    triples = collections.Counter()
+    pair_totals = collections.Counter()
     unigrams = collections.Counter()
     casing = collections.defaultdict(collections.Counter)
     heldout = []
@@ -68,7 +75,7 @@ def main() -> None:
             tokens = TOKEN.findall(text.replace("’", "'"))
             if not tokens:
                 continue
-            prev = START
+            prev2, prev = None, START
             for i, tok in enumerate(tokens):
                 low = tok.lower()
                 if i > 0:  # sentence-initial capitals say nothing about the word
@@ -76,7 +83,10 @@ def main() -> None:
                 unigrams[low] += 1
                 pairs[(prev, low)] += 1
                 totals[prev] += 1
-                prev = low
+                if prev2 is not None:
+                    triples[(prev2 + " " + prev, low)] += 1
+                    pair_totals[prev2 + " " + prev] += 1
+                prev2, prev = prev, low
 
     def display(low: str) -> str:
         forms = casing.get(low)
@@ -93,7 +103,7 @@ def main() -> None:
         out.write("# Word pairs from Tatoeba (tatoeba.org, CC BY 2.0 FR). "
                   "Built by scripts/build-english-bigrams.py; do not edit.\n")
         out.write("# Line 3: total tokens. Then: previous word, times seen, "
-                  "then next:count pairs.\n")
+                  "then next:count pairs. A context with a space is the two words before.\n")
         out.write(f"{sum(unigrams.values())}\n")
         # Unigram counts ride along under the empty context, so the model can
         # tell a pair that is common from a word that is just common.
@@ -107,6 +117,20 @@ def main() -> None:
                 continue
             out.write(prev + "\t" + str(totals[prev]) + "\t" +
                       " ".join(f"{display(w)}:{n}" for n, w in kept) + "\n")
+
+        # Two-word contexts share the format; their key has a space in it.
+        pair_contexts = [c for c, t in pair_totals.most_common() if t >= MIN_PAIR_CONTEXT_TOTAL][:MAX_PAIR_CONTEXTS]
+        wanted = set(pair_contexts)
+        by_pair = collections.defaultdict(list)
+        for (ctx, nxt), n in triples.items():
+            if n >= MIN_PAIR_COUNT and ctx in wanted:
+                by_pair[ctx].append((n, nxt))
+        for ctx in pair_contexts:
+            nexts = sorted(by_pair.get(ctx, []), reverse=True)
+            kept = [(n, w) for n, w in nexts if not is_name(display(w))][:MAX_PAIR_CONTINUATIONS]
+            if kept:
+                out.write(ctx + "\t" + str(pair_totals[ctx]) + "\t" +
+                          " ".join(f"{display(w)}:{n}" for n, w in kept) + "\n")
 
     random.Random(20260925).shuffle(heldout)
     HELDOUT.parent.mkdir(parents=True, exist_ok=True)
