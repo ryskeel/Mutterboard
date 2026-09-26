@@ -66,13 +66,14 @@ class AutocorrectScorecardTest {
         val context = RuntimeEnvironment.getApplication()
         val repository = englishRepository(context)
         val cases = handWritten + generateTypos(loadEnglish(), repository)
-        val lines = StringBuilder("fpl  thr  short maxc | fixed wrong changed\n")
-        for (fpl in listOf(13.0, 16.0, 20.0, 26.0))
+        val lines = StringBuilder("fpl  thr  short relief | fixed wrong changed\n")
+        for (fpl in listOf(16.0, 20.0, 26.0))
         for (thr in listOf(3.0, 4.0, 5.0, 6.0))
-        for (short in listOf(6.0, 7.0, 8.0, 9.0))
-        for (maxCost in listOf(7.0, 9.0)) {
+        for (short in listOf(6.0, 7.0))
+        for (relief in listOf(0.0, 0.25, 0.5, 0.75)) {
+            val maxCost = relief
             val model = TypoModel(repository, Locale.ENGLISH, TypoModel.Tuning(
-                frequencyPerLogUnit = fpl, threshold = thr * 13.0 / fpl, shortWordThreshold = short * 13.0 / fpl, maxCost = maxCost))
+                frequencyPerLogUnit = fpl, threshold = thr * 13.0 / fpl, shortWordThreshold = short * 13.0 / fpl, perLetterRelief = relief))
             var fixed = 0; var wrong = 0
             for (c in cases) {
                 val out = model.correct(c.typed)?.word
@@ -81,7 +82,7 @@ class AutocorrectScorecardTest {
             val changed = leaveAlone.count { w ->
                 !repository.isKnownWord(w) && model.correct(w) != null
             }
-            lines.append("%4.0f %4.1f %5.1f %4.0f | %4d%% %4d%% %3d\n".format(
+            lines.append("%4.0f %4.1f %5.1f %4.2f | %4d%% %4d%% %3d\n".format(
                 fpl, thr, short, maxCost, fixed * 100 / cases.size, wrong * 100 / cases.size, changed))
         }
         File("build/autocorrect-sweep.txt").writeText(lines.toString())
@@ -191,8 +192,8 @@ class AutocorrectScorecardTest {
             .map { it.word }
             .filter { w -> w.length >= 4 && w.all { it in 'a'..'z' } }
             .drop(50)
-            .take(400)
             .toList()
+            .let { it.take(400) + it.drop(400).take(4000).filterIndexed { i, _ -> i % 10 == 0 } }
         val out = mutableListOf<Case>()
         for (word in words) {
             val candidates = listOfNotNull(
@@ -266,6 +267,9 @@ class AutocorrectScorecardTest {
         Case("abotu", "about", "hand"),
         Case("pepole", "people", "hand"),
         Case("comming", "coming", "hand"),
+        // Typed on the Titan, 2026-09-25.
+        Case("rsndomly", "randomly", "hand"),
+        Case("typong", "typing", "hand"),
     )
 
     private val leaveAlone = listOf(

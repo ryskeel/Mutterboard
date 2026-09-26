@@ -463,6 +463,7 @@ class StatusBarController(
             chrome.bottomFillColors = activeColors.background to activeColors.background
             chrome.expandedCloseColor = activeColors.background
             chrome.expandedKeyHeightPx = hardwareSymKeyHeightPx(activeColors)
+            chrome.pillRimColor = activeColors.divider
             chrome.invalidate()
         }
         emojiKeyboardContainer?.setBackgroundColor(activeColors.background)
@@ -3917,6 +3918,38 @@ class StatusBarController(
                 applyBottomCornerClip()
                 requestLayout()
             }
+
+        /**
+         * Hairline round the pill. Light themes paint it near-white, which on a
+         * light app (Claude, Messages) left the bar with no edge at all: the
+         * words floated over the app with nothing marking them as a keyboard.
+         */
+        var pillRimColor: Int? = null
+            set(value) {
+                if (field == value) return
+                field = value
+                invalidate()
+            }
+        private val pillRimPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+        }
+
+        override fun dispatchDraw(canvas: android.graphics.Canvas) {
+            super.dispatchDraw(canvas)
+            val insets = pillInsetsPx ?: return
+            val color = pillRimColor ?: return
+            val stroke = resources.displayMetrics.density
+            pillRimPaint.color = color
+            pillRimPaint.strokeWidth = stroke
+            val half = stroke / 2f
+            val top = insets.top.toFloat()
+            val bottom = (height - insets.bottom).toFloat()
+            val radius = it.palsoftware.pastiera.inputmethod.mutterboard.PillBar.radiusFor(context, (bottom - top).toInt())
+            canvas.drawRoundRect(
+                insets.left + half, top + half, width - insets.right - half, bottom - half,
+                radius - half, radius - half, pillRimPaint
+            )
+        }
 
         private fun applyPillClip(insets: android.graphics.Rect) {
             outlineProvider = object : ViewOutlineProvider() {

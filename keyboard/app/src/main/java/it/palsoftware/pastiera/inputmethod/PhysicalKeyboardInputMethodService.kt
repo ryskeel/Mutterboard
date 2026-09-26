@@ -255,6 +255,7 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
     
     // Constants
     private val DOUBLE_TAP_THRESHOLD = 500L
+    private val DOUBLE_SPACE_PERIOD_THRESHOLD = 1100L
     private val CURSOR_UPDATE_DELAY = 50L
     private val MULTI_TAP_TIMEOUT_MS = 400L
 
@@ -1688,7 +1689,10 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
         textInputController = TextInputController(
             context = this,
             modifierStateController = modifierStateController,
-            doubleTapThreshold = DOUBLE_TAP_THRESHOLD
+            // Mutterboard: not the modifier double-tap window. Two spaces at
+            // ordinary typing pace missed 500ms often enough to feel random;
+            // AOSP's keyboard allows 1100ms for exactly this.
+            doubleTapThreshold = DOUBLE_SPACE_PERIOD_THRESHOLD
         )
         autoCorrectionManager = AutoCorrectionManager(this)
         val suggestionDebugLogging = SettingsManager.isSuggestionDebugLoggingEnabled(this)

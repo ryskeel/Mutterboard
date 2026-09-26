@@ -39,6 +39,10 @@ class TypoModel(
         val maxCost: Double = 7.0,
         val threshold: Double = 3.25,
         val shortWordThreshold: Double = 3.9,
+        // Taken off the threshold per letter past four: a long string the
+        // dictionary does not know is almost always a typo ("typong").
+        val perLetterRelief: Double = 0.5,
+        val minThreshold: Double = 1.0,
     )
 
     data class Correction(val word: String, val score: Double, val runnerUpScore: Double?)
@@ -73,7 +77,11 @@ class TypoModel(
             .toList()
 
         val best = scored.firstOrNull() ?: return null
-        val threshold = if (input.length <= 3) tuning.shortWordThreshold else tuning.threshold
+        val threshold = if (input.length <= 3) {
+            tuning.shortWordThreshold
+        } else {
+            (tuning.threshold - tuning.perLetterRelief * (input.length - 4)).coerceAtLeast(tuning.minThreshold)
+        }
         if (best.second < threshold) return null
         return Correction(best.first, best.second, scored.getOrNull(1)?.second)
     }
