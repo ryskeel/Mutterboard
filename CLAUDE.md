@@ -371,8 +371,12 @@ prediction as good as Gboard's.
   build drops capitalised words other than "I" from predictions.
 - **The bar's next-word order:** pairs you typed, then the bundled table, then
   Pastiera's most-common-words filler. English only.
-- Next: remember a word after you undo its correction, and a trigram or
-  conversational unigram prior if the scorecards say it is worth it.
+- **Undoing a correction teaches the word, on the first undo**, as in Gboard.
+  Pastiera offered an add-word button that vanished once the cursor moved and
+  otherwise forgot the undo at the next letter. A learned word also beats the
+  fixed contraction rules (`isUserWord`), or "id" would go on becoming "I'd".
+- Next: a trigram or conversational unigram prior if the scorecards say it is
+  worth it.
 
 ## The refiners are the heart of this app
 

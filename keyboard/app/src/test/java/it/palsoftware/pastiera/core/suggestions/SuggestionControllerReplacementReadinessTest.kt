@@ -273,6 +273,32 @@ class SuggestionControllerReplacementReadinessTest {
         assertFalse(repository.isReady)
     }
 
+    @Test
+    fun undoingACorrectionTeachesTheWord() {
+        val repository = FakeDictionaryRepository().apply { isReady = true }
+        val controller = newController(
+            repository,
+            experimentalSuggestionsEnabled = true,
+            suggestionsEnabled = false,
+            autoReplaceOnSpaceEnter = true
+        )
+        val input = FakeInputConnection(context, "im")
+
+        assertTrue(controller.onBoundaryKey(KeyEvent.KEYCODE_SPACE, null, input).replaced)
+        assertEquals("I'm ", input.text)
+        assertTrue(controller.handleBackspaceUndo(KeyEvent.KEYCODE_DEL, input))
+        assertEquals("im", input.text)
+
+        // Typing on is what used to wipe Pastiera's in-memory "rejected" list.
+        input.appendFromEditor(" ")
+        "im".forEach { ch ->
+            input.appendFromEditor(ch.toString())
+            controller.onCharacterCommitted(ch.toString(), input)
+        }
+        assertFalse(controller.onBoundaryKey(KeyEvent.KEYCODE_SPACE, null, input).replaced)
+        assertEquals("im im ", input.text)
+    }
+
     private fun newController(
         repository: DictionaryRepository,
         experimentalSuggestionsEnabled: Boolean,

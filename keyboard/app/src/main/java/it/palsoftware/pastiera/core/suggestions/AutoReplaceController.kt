@@ -333,7 +333,7 @@ class AutoReplaceController(
             null
         }
         exactReplacement?.let { replacement ->
-            if (!rejectedWords.contains(wordLower)) {
+            if (!rejectedWords.contains(wordLower) && !isUserWord(word)) {
                 inputConnection.beginBatchEdit()
                 inputConnection.deleteSurroundingText(word.length, 0)
                 val shouldAppendBoundary = boundaryChar != null &&
@@ -652,6 +652,19 @@ class AutoReplaceController(
     
     fun clearRejectedWords() {
         rejectedWords.clear()
+    }
+
+    /**
+     * A word the user taught the keyboard, usually by undoing a correction of
+     * it. The fuzzy path already leaves it alone as a known word; this keeps
+     * the fixed rules ("id" -> "I'd") from overriding the lesson.
+     */
+    private fun isUserWord(word: String): Boolean {
+        if (!repository.isReady) return false
+        val normalized = WordNormalization.normalizeForDictionary(word, Locale.ROOT)
+        return repository.topByNormalized(normalized, limit = 8).any {
+            it.source == SuggestionSource.USER && it.word.equals(word, ignoreCase = true)
+        }
     }
 
     /**
