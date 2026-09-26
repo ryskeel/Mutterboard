@@ -256,6 +256,7 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
     // Constants
     private val DOUBLE_TAP_THRESHOLD = 500L
     private val DOUBLE_SPACE_PERIOD_THRESHOLD = 1100L
+    private var lastNightMode = Configuration.UI_MODE_NIGHT_UNDEFINED
     private val CURSOR_UPDATE_DELAY = 50L
     private val MULTI_TAP_TIMEOUT_MS = 400L
 
@@ -4042,6 +4043,15 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if (::textExpansionController.isInitialized) textExpansionController.clear()
+
+        // Mutterboard: repaint on a light/dark switch, which the Material You
+        // theme and follow-system themes both read. Before, the bar kept the
+        // old mode's colours until something else redrew it.
+        val nightMode = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        if (nightMode != lastNightMode) {
+            lastNightMode = nightMode
+            Handler(Looper.getMainLooper()).post { updateStatusBarText() }
+        }
 
         val systemLocalesSignature = newConfig.locales.toLanguageTags()
         if (systemLocalesSignature == lastSystemLocalesSignature) {

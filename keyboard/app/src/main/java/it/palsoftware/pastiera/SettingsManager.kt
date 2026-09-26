@@ -499,7 +499,8 @@ object SettingsManager {
         val keyPopupAttached: Boolean = true,
         val keyPopupTailEnabled: Boolean = true,
         val keyPreviewAfterLongPress: Boolean = false,
-        val keyAlternatesPopupEnabled: Boolean = true
+        val keyAlternatesPopupEnabled: Boolean = true,
+        val materialYou: Boolean = false
     ) {
         fun toKeyboardThemeColors(): KeyboardThemeColors =
             KeyboardThemeColors(
@@ -911,7 +912,8 @@ object SettingsManager {
                 keyPopupAttached = json.optBoolean("key_popup_attached", defaults.keyPopupAttached),
                 keyPopupTailEnabled = json.optBoolean("key_popup_tail_enabled", defaults.keyPopupTailEnabled),
                 keyPreviewAfterLongPress = json.optBoolean("key_preview_after_long_press", defaults.keyPreviewAfterLongPress),
-                keyAlternatesPopupEnabled = json.optBoolean("key_alternates_popup_enabled", defaults.keyAlternatesPopupEnabled)
+                keyAlternatesPopupEnabled = json.optBoolean("key_alternates_popup_enabled", defaults.keyAlternatesPopupEnabled),
+                materialYou = json.optBoolean("material_you", defaults.materialYou)
             )
         } catch (error: Exception) {
             Log.e(TAG, "Fehler beim Laden des Keyboard-Themes", error)
@@ -985,12 +987,13 @@ object SettingsManager {
         locale: String?,
         layout: String?
     ): KeyboardThemeSettings {
-        findKeyboardThemeLayoutOverride(context, target, locale, layout)?.let { return it.theme }
-        return if (getKeyboardThemeAssignmentMode(context, target) == KEYBOARD_THEME_ASSIGNMENT_MODE_FOLLOW_SYSTEM) {
-            getKeyboardThemeSystemSlot(context, target, dark = isSystemDarkTheme(context))
-        } else {
-            getKeyboardTheme(context, target)
-        }
+        val theme = findKeyboardThemeLayoutOverride(context, target, locale, layout)?.theme
+            ?: if (getKeyboardThemeAssignmentMode(context, target) == KEYBOARD_THEME_ASSIGNMENT_MODE_FOLLOW_SYSTEM) {
+                getKeyboardThemeSystemSlot(context, target, dark = isSystemDarkTheme(context))
+            } else {
+                getKeyboardTheme(context, target)
+            }
+        return it.palsoftware.pastiera.inputmethod.mutterboard.MaterialYouTheme.resolve(context, theme)
     }
 
     fun getKeyboardThemeLayoutOverrides(
@@ -1374,7 +1377,8 @@ object SettingsManager {
             keyPopupAttached = json.optBoolean("key_popup_attached", defaults.keyPopupAttached),
             keyPopupTailEnabled = json.optBoolean("key_popup_tail_enabled", defaults.keyPopupTailEnabled),
             keyPreviewAfterLongPress = json.optBoolean("key_preview_after_long_press", defaults.keyPreviewAfterLongPress),
-            keyAlternatesPopupEnabled = json.optBoolean("key_alternates_popup_enabled", defaults.keyAlternatesPopupEnabled)
+            keyAlternatesPopupEnabled = json.optBoolean("key_alternates_popup_enabled", defaults.keyAlternatesPopupEnabled),
+            materialYou = json.optBoolean("material_you", defaults.materialYou)
         )
 
     private fun keyboardThemeToJson(theme: KeyboardThemeSettings): JSONObject =
@@ -1409,6 +1413,7 @@ object SettingsManager {
             put("key_popup_tail_enabled", theme.keyPopupTailEnabled)
             put("key_preview_after_long_press", theme.keyPreviewAfterLongPress)
             put("key_alternates_popup_enabled", theme.keyAlternatesPopupEnabled)
+            put("material_you", theme.materialYou)
         }
 
     private fun normalizeKeyboardThemePopupStyle(value: String): String =

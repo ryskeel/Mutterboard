@@ -35,7 +35,10 @@ internal data class KeyboardThemePreset(
     val keyPopupAttached: Boolean = true,
     val keyPopupTailEnabled: Boolean = true,
     val keyPreviewAfterLongPress: Boolean = false,
-    val keyAlternatesPopupEnabled: Boolean = true
+    val keyAlternatesPopupEnabled: Boolean = true,
+    // Mutterboard: colours come from the system's Material You palette at
+    // runtime and follow light/dark mode; the stored ones are only a fallback.
+    val materialYou: Boolean = false
 )
 
 internal data class KeyboardThemeOption(
@@ -150,7 +153,8 @@ internal fun KeyboardThemePreset.toSettingsTheme(): SettingsManager.KeyboardThem
         keyPopupAttached = keyPopupAttached,
         keyPopupTailEnabled = keyPopupTailEnabled,
         keyPreviewAfterLongPress = keyPreviewAfterLongPress,
-        keyAlternatesPopupEnabled = keyAlternatesPopupEnabled
+        keyAlternatesPopupEnabled = keyAlternatesPopupEnabled,
+        materialYou = materialYou
     )
 
 internal fun SettingsManager.KeyboardThemeSettings.toKeyboardThemePreset(name: String): KeyboardThemePreset =
@@ -185,7 +189,8 @@ internal fun SettingsManager.KeyboardThemeSettings.toKeyboardThemePreset(name: S
         keyPopupAttached = keyPopupAttached,
         keyPopupTailEnabled = keyPopupTailEnabled,
         keyPreviewAfterLongPress = keyPreviewAfterLongPress,
-        keyAlternatesPopupEnabled = keyAlternatesPopupEnabled
+        keyAlternatesPopupEnabled = keyAlternatesPopupEnabled,
+        materialYou = materialYou
     )
 
 internal fun SettingsManager.NamedKeyboardTheme.toKeyboardThemeOption(): KeyboardThemeOption {
@@ -219,6 +224,9 @@ internal fun keyboardThemeSwatches(): List<Int> = keyboardThemePresets()
     .distinct()
 
 internal fun keyboardThemePresets(): List<KeyboardThemePreset> = listOf(
+    // Mutterboard: these colours are the light-mode fallback for phones older
+    // than Android 12; everywhere else MaterialYouTheme repaints them.
+    KeyboardThemePreset("Material You", 0xFFFDFBFF.toInt(), 0xFFC4C6D0.toInt(), 0xFFF0F0F7.toInt(), 0xFFDAE2F9.toInt(), 0xFF1A1B20.toInt(), 0xFFC4C6D0.toInt(), 0xFF3D5BA9.toInt(), 0xFF775A7C.toInt(), 0xFF3D5BA9.toInt(), keyCornerRadiusRatio = 0.10f, chromeCornerRadiusRatio = 0.10f, materialYou = true),
     KeyboardThemePreset("Pastiera Dark", 0xFF000000.toInt(), 0xFF2C3136.toInt(), 0xFF15191D.toInt(), 0xFF2B3138.toInt(), 0xFFEFEFEF.toInt(), 0xFF303030.toInt(), 0xFF6496FF.toInt(), 0xFFF76300.toInt(), 0xFF6496FF.toInt(), keyCornerRadiusRatio = 0.10f, chromeCornerRadiusRatio = 0.10f),
     KeyboardThemePreset("Pastiera Light", 0xFFF8FAFC.toInt(), 0xFFC7CDD4.toInt(), 0xFFFFFFFF.toInt(), 0xFFE0E6EE.toInt(), 0xFF171A1F.toInt(), 0xFFD1D5DB.toInt(), 0xFF276EF1.toInt(), 0xFFD65A00.toInt(), 0xFF276EF1.toInt(), keyCornerRadiusRatio = 0.10f, chromeCornerRadiusRatio = 0.10f),
     KeyboardThemePreset("Cloud Tap", 0xFFE1E3E7.toInt(), 0xFFD4D7DD.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0xFF050505.toInt(), 0xFFC2C6CE.toInt(), 0xFF0A84FF.toInt(), 0xFFFF9500.toInt(), 0xFF0A84FF.toInt(), 0xFF0A84FF.toInt(), 0xFFFFFFFF.toInt(), 0xFF0A84FF.toInt(), 0xFFDDE0E5.toInt(), 0xFFFFFFFF.toInt(), 0.18186983f, 0.35f, 1.2588017f, 0.971126f, 0.94148767f, 1.05f, true, true, false, 0.9f, 0.88f, true),
