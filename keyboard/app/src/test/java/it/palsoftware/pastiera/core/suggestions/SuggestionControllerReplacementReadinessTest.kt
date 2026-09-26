@@ -82,12 +82,12 @@ class SuggestionControllerReplacementReadinessTest {
             experimentalSuggestionsEnabled = false,
             suggestionsEnabled = false
         )
-        val input = FakeInputConnection(context, "ill")
+        val input = FakeInputConnection(context, "im")
 
         val result = controller.onBoundaryKey(KeyEvent.KEYCODE_SPACE, null, input)
 
         assertTrue(result.replaced)
-        assertEquals("I'll ", input.text)
+        assertEquals("I'm ", input.text)
     }
 
     @Test
@@ -112,13 +112,13 @@ class SuggestionControllerReplacementReadinessTest {
             experimentalSuggestionsEnabled = true,
             suggestionsEnabled = true
         )
-        val input = FakeInputConnection(context, "ill")
-        "ill".forEach { controller.onCharacterCommitted(it.toString(), input) }
+        val input = FakeInputConnection(context, "im")
+        "im".forEach { controller.onCharacterCommitted(it.toString(), input) }
 
         val result = controller.onBoundaryKey(KeyEvent.KEYCODE_SPACE, null, input)
 
         assertTrue(result.replaced)
-        assertEquals("I'll ", input.text)
+        assertEquals("I'm ", input.text)
     }
 
     @Test
@@ -131,10 +131,10 @@ class SuggestionControllerReplacementReadinessTest {
         val input = FakeInputConnection(context, "im")
 
         assertTrue(controller.onBoundaryKey(KeyEvent.KEYCODE_SPACE, null, input).replaced)
-        input.appendFromEditor("ill")
+        input.appendFromEditor("im")
         assertTrue(controller.onBoundaryKey(KeyEvent.KEYCODE_SPACE, null, input).replaced)
 
-        assertEquals("I'm I'll ", input.text)
+        assertEquals("I'm I'm ", input.text)
     }
 
     @Test
@@ -167,12 +167,12 @@ class SuggestionControllerReplacementReadinessTest {
             experimentalSuggestionsEnabled = false,
             suggestionsEnabled = false
         )
-        val input = FakeInputConnection(context, "ill")
+        val input = FakeInputConnection(context, "im")
 
         val result = reboundController.onBoundaryKey(KeyEvent.KEYCODE_SPACE, null, input)
 
         assertTrue(result.replaced)
-        assertEquals("I'll ", input.text)
+        assertEquals("I'm ", input.text)
     }
 
     @Test
@@ -271,6 +271,32 @@ class SuggestionControllerReplacementReadinessTest {
 
         assertTrue(repository.awaitLoadCancellation())
         assertFalse(repository.isReady)
+    }
+
+    @Test
+    fun undoingACorrectionTeachesTheWord() {
+        val repository = FakeDictionaryRepository().apply { isReady = true }
+        val controller = newController(
+            repository,
+            experimentalSuggestionsEnabled = true,
+            suggestionsEnabled = false,
+            autoReplaceOnSpaceEnter = true
+        )
+        val input = FakeInputConnection(context, "im")
+
+        assertTrue(controller.onBoundaryKey(KeyEvent.KEYCODE_SPACE, null, input).replaced)
+        assertEquals("I'm ", input.text)
+        assertTrue(controller.handleBackspaceUndo(KeyEvent.KEYCODE_DEL, input))
+        assertEquals("im", input.text)
+
+        // Typing on is what used to wipe Pastiera's in-memory "rejected" list.
+        input.appendFromEditor(" ")
+        "im".forEach { ch ->
+            input.appendFromEditor(ch.toString())
+            controller.onCharacterCommitted(ch.toString(), input)
+        }
+        assertFalse(controller.onBoundaryKey(KeyEvent.KEYCODE_SPACE, null, input).replaced)
+        assertEquals("im im ", input.text)
     }
 
     private fun newController(

@@ -283,6 +283,11 @@ session read it that way and wrote it into the backlog.
 
 - **Pastiera is GPL-3.0, so Mutterboard is too.** Ry agreed; it is a hobby
   project and stays open source.
+- **The "Material You" keyboard theme is resolved at runtime**
+  (`mutterboard/MaterialYouTheme`), not stored: a `materialYou` flag on the
+  theme makes `getEffectiveKeyboardTheme` repaint it from the system palette
+  for the current light/dark mode. The strip behind the pill is the secondary
+  container, the pill the surface. Its stored colours are only a fallback.
 - **Pastiera's settings screens stay; only their canvas is ours.** They are
   Compose screens over one `SettingsManager`, and rebuilding them would mean
   re-porting every nightly feature's UI. `PastieraTheme` paints `background`
@@ -303,10 +308,14 @@ session read it that way and wrote it into the backlog.
 - **The bar is a one-row pill (`mutterboard/PillBar`).** Menu left,
   suggestions middle, mic right: nightly's Pastierina presentation with its
   buttons chosen, written once on first run so a later choice in settings
-  sticks. The pill is an outline clip inset from the sides and bottom, and it
+  sticks. The pill is inset from the sides, top and bottom and sits on a full-width strip
+  in the theme's key grey (see-through gaps showed Messages' window colour), and it
   switches nightly's Titan 2 Elite traced corners off entirely - they never
   sat flush, and the app showed through slivers at the edges. Dictation covers
   only the words, never the row: the mic in that row is the stop button.
+  Shift/Alt/Ctrl/Sym light the LED strip along the pill's bottom edge, inset
+  (`LED_SIDE_INSET_DP`) so the round ends do not clip it. Moving them into the
+  menu row instead left Ry unable to see what was armed.
 - **Mutterboard is the host, Pastiera is the guest.** Its source sits under
   `keyboard/` (the name is ours to pick; GPL only asks that the copyright
   notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag and then from nightly `474fa10`,
@@ -337,6 +346,53 @@ session read it that way and wrote it into the backlog.
 - **Its strings are rebranded from the app**, generated per locale by
   `scripts/rebrand-keyboard-strings.py`; rerun it after picking nightly changes.
   The About line keeps the Pastiera credit on purpose.
+
+## Autocorrect (started 2026-09-25)
+
+On `feature/autocorrect`: make the physical keyboard's autocorrect and
+prediction as good as Gboard's.
+
+- **Measure it, don't eyeball it.** `AutocorrectScorecardTest` loads the real
+  English `.dict` the phone loads, misspells 400 common words the way a thumb
+  does, and scores fixed / wrong word / left alone, plus how many names and
+  slang it wrongly changes. `SCORECARD_SWEEP=1` runs a grid over the
+  `TypoModel.Tuning` knobs. Report is `keyboard/app/build/autocorrect-scorecard.txt`.
+- **Pastiera never fixed an extra key or a dropped letter.** Fix-on-space
+  shipped off, and even on, a safety rule vetoed any correction whose length
+  differed from the typed word ("quyick" stayed). `TypoModel` replaces that
+  decision for English: word frequency minus keyboard-aware slip cost. Other
+  languages keep Pastiera's path until they are measured.
+- **The English dictionary is written prose, not texting.** It has no "lol",
+  "app", "oops" or "huh", so the corrector "fixed" them. `en_extra.json` patches
+  the worst of it; a conversational frequency list is the real fix.
+- **The previous word settles close calls.** `BigramModel` is a word-pair
+  table counted from Tatoeba's everyday sentences
+  (`scripts/build-english-bigrams.py`, which also writes the held-out test
+  sentences). `ContextScorecardTest` measures on sentences the table never saw.
+  Context may reorder candidates and add confidence but never vetoes a fix: a
+  pair the table pruned reads as a poor fit, and letting that veto cost a fifth
+  of all fixes. Pruning to 16 continuations per word had the same effect
+  ("didn't let" read as rare); it keeps 256, stored as int arrays for memory.
+- **Tatoeba overuses a few names** ("Tom" is in a large share of it). The
+  build drops capitalised words other than "I" from predictions.
+- **The bar's next-word order:** pairs you typed, then the bundled table, then
+  Pastiera's most-common-words filler. English only.
+- **Undoing a correction teaches the word, on the first undo**, as in Gboard.
+  Pastiera offered an add-word button that vanished once the cursor moved and
+  otherwise forgot the undo at the next letter. A learned word also beats the
+  fixed contraction rules (`isUserWord`), or "id" would go on becoming "I'd".
+- **Apostrophe words are decided by context, not dropped.** "ill", "its",
+  "lets", "cant", "wed", "shed", "shell", "id" are words and contractions both.
+  Removing their rules (2026-09-25) made things worse: on held-out text the
+  fixed rule was right 82-100% of the time and Ry noticed "Ill" at once. The
+  rules are back and the previous word overrides them (`contextPrefersTypedWord`),
+  which takes "its" from 82% to 93%.
+- **A dropped first letter is cheap, two-letter words are allowed** (stricter
+  bar). Ry types "ight", "imes", "cn"; neither kind was ever fixed before. Both
+  are too ambiguous to fix well without the previous word, so judge them on the
+  context scorecard, not the plain one.
+- Next: real-word typos ("an there" for "and there") need the word after, so
+  a correction would have to land retroactively.
 
 ## The refiners are the heart of this app
 

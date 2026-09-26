@@ -14,7 +14,11 @@ class AutoReplaceController(
     private val suggestionEngine: SuggestionEngine,
     private val settingsProvider: () -> SuggestionSettings,
     private val knownWordProvider: ((String) -> Boolean)? = null,
-    private val exactReplacementProvider: ((String, Char?) -> String?)? = null
+    private val exactReplacementProvider: ((String, Char?) -> String?)? = null,
+    // Mutterboard's corrector. When present it decides fuzzy corrections in place
+    // of the suggestion-bar ranking below; see TypoModel for why.
+    private val typoModel: TypoModel? = null,
+    private val bigrams: () -> BigramModel? = { null }
 ) {
     private fun triggerFromBoundaryChar(boundaryChar: Char?): DebugCaptureStore.AutoCorrectionTrigger {
         return when (boundaryChar) {
@@ -40,6 +44,8 @@ class AutoReplaceController(
     )
 
     companion object {
+        private val PREVIOUS_WORD = Regex("[\\p{L}]+(?:['’][\\p{L}]+)*$")
+
         internal data class ApostropheSplit(val prefix: String, val root: String)
 
         internal fun normalizeApostrophes(input: String): String {
@@ -328,7 +334,9 @@ class AutoReplaceController(
             null
         }
         exactReplacement?.let { replacement ->
-            if (!rejectedWords.contains(wordLower)) {
+            if (!rejectedWords.contains(wordLower) && !isUserWord(word) &&
+                !contextPrefersTypedWord(inputConnection, word, replacement)
+            ) {
                 inputConnection.beginBatchEdit()
                 inputConnection.deleteSurroundingText(word.length, 0)
                 val shouldAppendBoundary = boundaryChar != null &&
@@ -398,6 +406,51 @@ class AutoReplaceController(
                 Log.d("AutoReplaceController", "Committed primary dictionary case replacement '$word' -> '$caseReplacement'")
                 return ReplaceResult(true, true, caseReplacement)
             }
+        }
+
+        if (typoModel != null) {
+            val isKnown = knownWordProvider?.invoke(lookupWord) ?: repository.isKnownWord(lookupWord)
+            val correction = if (!isKnown && !rejectedWords.contains(wordLower) && apostropheSplit == null) {
+                typoModel.correct(word, previousWord(inputConnection, word))
+            } else {
+                null
+            }
+            val replacement = correction?.let { applyCasing(it.word, word) }
+            if (replacement == null || replacement == word) {
+                DebugCaptureStore.recordAutoCorrectionAttempt(
+                    before = word,
+                    trigger = trigger,
+                    source = "TYPO_MODEL",
+                    after = correction?.word,
+                    outcome = DebugCaptureStore.AutoCorrectionOutcome.SKIPPED,
+                    reason = when {
+                        isKnown -> "known_word"
+                        rejectedWords.contains(wordLower) -> "rejected_by_user"
+                        else -> "not_confident"
+                    }
+                )
+                lastReplacement = null
+                val boundaryCommitted = commitBoundaryAndReset(tracker, inputConnection, boundaryChar, settings)
+                return ReplaceResult(false, boundaryCommitted)
+            }
+            inputConnection.beginBatchEdit()
+            inputConnection.deleteSurroundingText(word.length, 0)
+            inputConnection.commitText(replacement, 1)
+            repository.markUsed(replacement)
+            lastReplacement = LastReplacement(originalWord = word, replacedWord = replacement)
+            tracker.reset()
+            inputConnection.endBatchEdit()
+            val boundaryCommitted = boundaryChar != null && commitBoundary(inputConnection, boundaryChar, settings)
+            DebugCaptureStore.recordAutoCorrectionCommit(
+                before = word,
+                after = replacement,
+                trigger = trigger,
+                source = "TYPO_MODEL",
+                distance = 1,
+                kind = SuggestionKind.CURRENT_WORD.name
+            )
+            Log.d("AutoReplaceController", "TypoModel '$word' -> '$replacement' score=${correction.score} runnerUp=${correction.runnerUpScore}")
+            return ReplaceResult(true, true, replacement)
         }
 
         val suggestions = suggestionEngine.suggest(
@@ -604,6 +657,45 @@ class AutoReplaceController(
         rejectedWords.clear()
     }
 
+    /**
+     * "ill", "its", "lets", "wed", "shell", "cant" are words as well as
+     * apostrophe-less contractions, and a fixed rule gets one of the two wrong
+     * every time. The previous word settles it: "Ill type" (sentence start) is
+     * "I'll", "feel ill" stays. Without a bundled table the rule applies as it
+     * always did.
+     */
+    private fun contextPrefersTypedWord(inputConnection: InputConnection, word: String, replacement: String): Boolean {
+        if (word.contains('\'') || !replacement.contains('\'')) return false
+        if (!(knownWordProvider?.invoke(word) ?: repository.isKnownWord(word))) return false
+        val table = bigrams() ?: return false
+        val previous = previousWord(inputConnection, word)
+        return table.likelihood(previous, word) > table.likelihood(previous, replacement)
+    }
+
+    /**
+     * A word the user taught the keyboard, usually by undoing a correction of
+     * it. The fuzzy path already leaves it alone as a known word; this keeps
+     * the fixed rules ("id" -> "I'd") from overriding the lesson.
+     */
+    private fun isUserWord(word: String): Boolean {
+        if (!repository.isReady) return false
+        val normalized = WordNormalization.normalizeForDictionary(word, Locale.ROOT)
+        return repository.topByNormalized(normalized, limit = 8).any {
+            it.source == SuggestionSource.USER && it.word.equals(word, ignoreCase = true)
+        }
+    }
+
+    /**
+     * The word before [word] in the field, or null at the start of a sentence
+     * or the field, which is what [BigramModel] reads as a sentence start.
+     */
+    private fun previousWord(inputConnection: InputConnection, word: String): String? {
+        val before = inputConnection.getTextBeforeCursor(64 + word.length, 0)?.toString().orEmpty()
+        val rest = before.removeSuffix(word).trimEnd()
+        if (rest.isEmpty() || rest.last() in ".!?\n") return null
+        return PREVIOUS_WORD.find(rest)?.value
+    }
+
     private fun primaryDictionaryCaseVariant(lookupWord: String, originalWord: String): String? {
         if (!repository.isReady || lookupWord != originalWord) return null
         if (originalWord.none { it.isLetter() } || originalWord.any { it.isUpperCase() }) return null
@@ -616,7 +708,10 @@ class AutoReplaceController(
             .firstOrNull { entry ->
                 entry.word != originalWord &&
                     entry.word.equals(originalWord, ignoreCase = true) &&
-                    entry.word.any { it.isUpperCase() }
+                    entry.word.any { it.isUpperCase() } &&
+                    // "ok", "btw" and "imo" are how people type them; only names
+                    // like "monday" -> "Monday" get their capital back.
+                    !isAcronymLike(entry.word)
             }
             ?.word
     }

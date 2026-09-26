@@ -172,6 +172,11 @@ class AndroidDictionaryRepository(
                     index(defaultUserEntries, keepExisting = true)
                 }
 
+                val extraEntries = loadLocaleExtras()
+                if (extraEntries.isNotEmpty()) {
+                    index(extraEntries, keepExisting = true)
+                }
+
                 // Always add user entries
                 val userEntries = userDictionaryStore.loadUserEntries(context)
                 if (userEntries.isNotEmpty()) {
@@ -179,7 +184,13 @@ class AndroidDictionaryRepository(
                 }
 
                 coroutineContext.ensureActive()
-                buildSymSpell()
+                if (symSpellBuilt) {
+                    // The precomputed deletes only know the bundled words; without
+                    // this the corrector could never land on a word the user added.
+                    addToSymSpell(extraEntries + defaultUserEntries + userEntries)
+                } else {
+                    buildSymSpell()
+                }
                 
                 isReady = true
             } catch (ce: CancellationException) {
@@ -222,6 +233,7 @@ class AndroidDictionaryRepository(
         if (defaultUserEntries.isNotEmpty()) {
             index(defaultUserEntries, keepExisting = true)
         }
+        index(loadLocaleExtras(), keepExisting = true)
         index(userEntries, keepExisting = true)
         // Rebuild SymSpell to drop removed entries
         coroutineContext.ensureActive()
@@ -417,7 +429,7 @@ class AndroidDictionaryRepository(
     }
 
     @OptIn(ExperimentalSerializationApi::class)
-    private suspend fun loadSerializedFromFile(file: File): Boolean {
+    internal suspend fun loadSerializedFromFile(file: File): Boolean {
         Log.i(tag, "Attempting to load serialized dictionary from file: ${file.absolutePath}")
         return try {
             coroutineContext.ensureActive()
@@ -511,6 +523,27 @@ class AndroidDictionaryRepository(
         // Re-sort caches using the runtime effective frequency scaling.
         sortCachesByEffectiveFrequency()
         Log.i(tag, "Successfully populated indices from serialized format")
+    }
+
+    /**
+     * Everyday words a language's bundled list is missing. The bundled lists come
+     * from written prose, so English had no "lol", "app" or "oops", and the
+     * corrector treated a word you meant as a typo of the nearest one it knew.
+     * They are ordinary dictionary words, not user words, so they do not jump
+     * the suggestion ranking the way user words do.
+     */
+    internal fun loadLocaleExtras(): List<DictionaryEntry> {
+        return try {
+            val json = assets.open("common/dictionaries/${baseLocale.language}_extra.json")
+                .bufferedReader().use { it.readText() }
+            val array = JSONArray(json)
+            (0 until array.length()).map { i ->
+                val obj = array.getJSONObject(i)
+                DictionaryEntry(obj.getString("w"), obj.optInt("f", 1), SuggestionSource.MAIN)
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     /**
@@ -608,7 +641,7 @@ class AndroidDictionaryRepository(
         sortCachesByEffectiveFrequency()
     }
 
-    private fun buildSymSpell() {
+    internal fun buildSymSpell() {
         if (symSpellBuilt && symSpell != null) return
         val engine = SymSpell(maxEditDistance = 2, prefixLength = cachePrefixLength)
         normalizedIndex.forEach { (normalized, entries) ->
@@ -647,7 +680,7 @@ class AndroidDictionaryRepository(
         }
     }
 
-    private fun addToSymSpell(entries: List<DictionaryEntry>) {
+    internal fun addToSymSpell(entries: List<DictionaryEntry>) {
         val engine = symSpell ?: run {
             buildSymSpell()
             symSpell ?: return

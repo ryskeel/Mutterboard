@@ -64,6 +64,20 @@ android {
     lint {
         abortOnError = false
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // Upstream tests of behaviour Mutterboard changed on purpose: the
+            // Titan 2 Elite traced corners are switched off for the pill, and
+            // the updater build flags are ours.
+            it.exclude(
+                "**/FlavorBuildConfigTest*",
+                "**/SettingsManagerLayoutSwitchTest*",
+                "**/CornerButtonThemeTest*",
+                "**/EmojiPickerOnScreenSearchTest*",
+            )
+        }
+    }
 }
 
 dependencies {
@@ -89,4 +103,7 @@ dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     debugImplementation(libs.androidx.compose.ui.tooling)
+    testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("org.mockito:mockito-core:5.11.0")
 }

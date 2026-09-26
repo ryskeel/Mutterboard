@@ -15,8 +15,10 @@ import it.palsoftware.pastiera.SettingsManager
  * is on the Titan corner code is switched off entirely
  * (SettingsManager.getTitan2EliteRoundedCornerInsetsEnabled).
  *
- * The chrome clips to the outline and pads its content by the same insets, so
- * everything outside the pill is transparent and nothing inside is cut off.
+ * The chrome clips its content to the pill and pads it by the same insets, so
+ * nothing inside is cut off. Outside the pill it paints a strip in the theme's
+ * key grey: left see-through, the gaps showed whatever the app had behind the
+ * keyboard, which in Messages is a grey slab of its own window.
  */
 object PillBar {
     /** Gap between the pill and the left and right edges of the display. */
@@ -33,6 +35,9 @@ object PillBar {
      * second row; alone, it left the buttons cramped against the rim.
      */
     const val ROW_HEIGHT_DP = 44f
+
+    /** Gap above the pill, so it sits on the backdrop strip rather than at its edge. */
+    const val TOP_GAP_DP = 6f
 
     /** Space between the row and the pill's rim, top and bottom. */
     const val INNER_PAD_DP = 4f
@@ -54,7 +59,7 @@ object PillBar {
     private const val KEY_ENABLED = "pill_bar_enabled"
 
     private const val KEY_LAYOUT_APPLIED = "one_row_layout_applied_v1"
-    private const val KEY_INDICATORS_APPLIED = "one_row_indicators_applied_v2"
+    private const val KEY_INDICATORS_APPLIED = "one_row_indicators_applied_v3"
 
     /**
      * The pill is one row, like Gboard's: menu on the left, suggestions in the
@@ -72,17 +77,26 @@ object PillBar {
     }
 
     /**
-     * Shift/Alt/Ctrl show in the menu row, not on the bar. Pastiera's LED strip
-     * along the bottom edge is a full-width line the pill's ends cut into
-     * stubs, and the in-row indicator (v1) put a Shift badge beside the menu
-     * button at the start of every sentence, where auto-capitalisation arms it.
+     * Shift/Alt/Ctrl/Sym light Pastiera's LED strip along the bottom edge, as
+     * they always did before the pill. v2 moved them into the menu row to stop
+     * the pill's round ends cutting a full-width strip into stubs; nobody could
+     * see what was armed any more. The strip is back, inset to the flat run of
+     * the bottom edge ([LED_SIDE_INSET_DP]), and v3 undoes v2 once.
      */
     fun applyIndicatorDefaultOnce(context: Context) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_INDICATORS_APPLIED, false)) return
-        SettingsManager.setModifierIndicators(context, setOf(SettingsManager.MODIFIER_INDICATOR_MENU_BAR))
+        SettingsManager.setModifierIndicators(context, setOf(SettingsManager.MODIFIER_INDICATOR_BOTTOM_STRIP))
         prefs.edit().putBoolean(KEY_INDICATORS_APPLIED, true).apply()
     }
+
+    /**
+     * How far the LED strip stays in from the content edge on each side. The
+     * strip sits a few dp above the rim, where the one-row pill's end curves
+     * are still about 15dp deep from its side; closer in, the round ends clip
+     * the outer LEDs.
+     */
+    const val LED_SIDE_INSET_DP = 14f
 
     fun isEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ENABLED, true)
