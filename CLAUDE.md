@@ -347,10 +347,11 @@ session read it that way and wrote it into the backlog.
   `scripts/rebrand-keyboard-strings.py`; rerun it after picking nightly changes.
   The About line keeps the Pastiera credit on purpose.
 
-## Autocorrect (started 2026-09-25)
+## Autocorrect (2026-09-25 to 2026-09-26, done)
 
-On `feature/autocorrect`: make the physical keyboard's autocorrect and
-prediction as good as Gboard's.
+Made the physical keyboard's autocorrect and prediction as good as Gboard's.
+Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
+2026-09-26. What follows is why it works the way it does.
 
 - **Measure it, don't eyeball it.** `AutocorrectScorecardTest` loads the real
   English `.dict` the phone loads, misspells 400 common words the way a thumb
