@@ -732,7 +732,9 @@ class FullSuggestionsBar(
                         }
                     } else if (addWordCandidate != null && suggestion.equals(addWordCandidate, ignoreCase = true)) {
                         val addDrawable = androidx.core.content.ContextCompat.getDrawable(context, android.R.drawable.ic_input_add)?.mutate()
-                        addDrawable?.setTint(Color.YELLOW)
+                        // Mutterboard: the theme's accent. Pastiera's fixed yellow
+                        // vanished on light themes' white.
+                        addDrawable?.setTint(themeOverride?.accent ?: Color.YELLOW)
                         addDrawable?.setBounds(0, 0, dpToPx(18f), dpToPx(18f))
                         setCompoundDrawables(null, null, addDrawable, null)
                         compoundDrawablePadding = dpToPx(6f)
