@@ -377,10 +377,11 @@ prediction as good as Gboard's.
   build drops capitalised words other than "I" from predictions.
 - **The bar's next-word order:** pairs you typed, then the bundled table, then
   Pastiera's most-common-words filler. English only.
-- **Undoing a correction teaches the word, on the first undo**, as in Gboard.
-  Pastiera offered an add-word button that vanished once the cursor moved and
-  otherwise forgot the undo at the next letter. A learned word also beats the
-  fixed contraction rules (`isUserWord`), or "id" would go on becoming "I'd".
+- **Undoing a correction offers the word; it does not learn it.** v1.24.0
+  learned on every undo, Gboard-style; one stray backspace put "impor" in Ry's
+  dictionary, where it outranked "import". Pastiera's add-word offer is the
+  behaviour Ry wants. A word he does add still beats the fixed contraction rules
+  (`isUserWord`).
 - **Apostrophe words are decided by context, not dropped.** "ill", "its",
   "lets", "cant", "wed", "shed", "shell", "id" are words and contractions both.
   Removing their rules (2026-09-25) made things worse: on held-out text the

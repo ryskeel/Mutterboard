@@ -542,13 +542,10 @@ class SuggestionController(
         if (!isEnabled()) return false
         val undone = autoReplaceController.handleBackspaceUndo(keyCode, inputConnection)
         if (undone) {
-            // Mutterboard: undoing a correction teaches the word, as in Gboard.
-            // Pastiera offered an add-word button that vanished once the cursor
-            // left the word, and otherwise forgot the undo at the next letter,
-            // so a name was "fixed" again one sentence later.
-            val original = autoReplaceController.consumeLastUndoOriginalWord()
-            if (original != null && original.any { it.isLetter() }) addUserWord(original)
-            pendingAddUserWord = null
+            // An undo offers the word; it does not learn it. Learning on every
+            // undo (v1.24.0) put a stray backspace's "impor" into the user
+            // dictionary, where it then outranked "import" in the bar.
+            pendingAddUserWord = autoReplaceController.consumeLastUndoOriginalWord()
         }
         return undone
     }
