@@ -105,7 +105,10 @@ class SuggestionController(
                 )?.takeIf { (original, replacement) ->
                     original == word && replacement != word
                 }?.second
-            }
+            },
+            // Tuned and measured on English (AutocorrectScorecardTest). Other
+            // languages keep Pastiera's corrector until they are measured too.
+            typoModel = if (currentLocale.language == "en") TypoModel(dictionaryRepository, currentLocale) else null
         )
     }
     

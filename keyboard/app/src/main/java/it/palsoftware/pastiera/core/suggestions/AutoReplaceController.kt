@@ -14,7 +14,10 @@ class AutoReplaceController(
     private val suggestionEngine: SuggestionEngine,
     private val settingsProvider: () -> SuggestionSettings,
     private val knownWordProvider: ((String) -> Boolean)? = null,
-    private val exactReplacementProvider: ((String, Char?) -> String?)? = null
+    private val exactReplacementProvider: ((String, Char?) -> String?)? = null,
+    // Mutterboard's corrector. When present it decides fuzzy corrections in place
+    // of the suggestion-bar ranking below; see TypoModel for why.
+    private val typoModel: TypoModel? = null
 ) {
     private fun triggerFromBoundaryChar(boundaryChar: Char?): DebugCaptureStore.AutoCorrectionTrigger {
         return when (boundaryChar) {
@@ -400,6 +403,51 @@ class AutoReplaceController(
             }
         }
 
+        if (typoModel != null) {
+            val isKnown = knownWordProvider?.invoke(lookupWord) ?: repository.isKnownWord(lookupWord)
+            val correction = if (!isKnown && !rejectedWords.contains(wordLower) && apostropheSplit == null) {
+                typoModel.correct(word)
+            } else {
+                null
+            }
+            val replacement = correction?.let { applyCasing(it.word, word) }
+            if (replacement == null || replacement == word) {
+                DebugCaptureStore.recordAutoCorrectionAttempt(
+                    before = word,
+                    trigger = trigger,
+                    source = "TYPO_MODEL",
+                    after = correction?.word,
+                    outcome = DebugCaptureStore.AutoCorrectionOutcome.SKIPPED,
+                    reason = when {
+                        isKnown -> "known_word"
+                        rejectedWords.contains(wordLower) -> "rejected_by_user"
+                        else -> "not_confident"
+                    }
+                )
+                lastReplacement = null
+                val boundaryCommitted = commitBoundaryAndReset(tracker, inputConnection, boundaryChar, settings)
+                return ReplaceResult(false, boundaryCommitted)
+            }
+            inputConnection.beginBatchEdit()
+            inputConnection.deleteSurroundingText(word.length, 0)
+            inputConnection.commitText(replacement, 1)
+            repository.markUsed(replacement)
+            lastReplacement = LastReplacement(originalWord = word, replacedWord = replacement)
+            tracker.reset()
+            inputConnection.endBatchEdit()
+            val boundaryCommitted = boundaryChar != null && commitBoundary(inputConnection, boundaryChar, settings)
+            DebugCaptureStore.recordAutoCorrectionCommit(
+                before = word,
+                after = replacement,
+                trigger = trigger,
+                source = "TYPO_MODEL",
+                distance = 1,
+                kind = SuggestionKind.CURRENT_WORD.name
+            )
+            Log.d("AutoReplaceController", "TypoModel '$word' -> '$replacement' score=${correction.score} runnerUp=${correction.runnerUpScore}")
+            return ReplaceResult(true, true, replacement)
+        }
+
         val suggestions = suggestionEngine.suggest(
             lookupWord,
             limit = 1,
@@ -616,7 +664,10 @@ class AutoReplaceController(
             .firstOrNull { entry ->
                 entry.word != originalWord &&
                     entry.word.equals(originalWord, ignoreCase = true) &&
-                    entry.word.any { it.isUpperCase() }
+                    entry.word.any { it.isUpperCase() } &&
+                    // "ok", "btw" and "imo" are how people type them; only names
+                    // like "monday" -> "Monday" get their capital back.
+                    !isAcronymLike(entry.word)
             }
             ?.word
     }

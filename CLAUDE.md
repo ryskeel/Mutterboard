@@ -338,6 +338,29 @@ session read it that way and wrote it into the backlog.
   `scripts/rebrand-keyboard-strings.py`; rerun it after picking nightly changes.
   The About line keeps the Pastiera credit on purpose.
 
+## Autocorrect (started 2026-09-25)
+
+On `feature/autocorrect`: make the physical keyboard's autocorrect and
+prediction as good as Gboard's.
+
+- **Measure it, don't eyeball it.** `AutocorrectScorecardTest` loads the real
+  English `.dict` the phone loads, misspells 400 common words the way a thumb
+  does, and scores fixed / wrong word / left alone, plus how many names and
+  slang it wrongly changes. `SCORECARD_SWEEP=1` runs a grid over the
+  `TypoModel.Tuning` knobs. Report is `keyboard/app/build/autocorrect-scorecard.txt`.
+- **Pastiera never fixed an extra key or a dropped letter.** Fix-on-space
+  shipped off, and even on, a safety rule vetoed any correction whose length
+  differed from the typed word ("quyick" stayed). `TypoModel` replaces that
+  decision for English: word frequency minus keyboard-aware slip cost. Other
+  languages keep Pastiera's path until they are measured.
+- **The English dictionary is written prose, not texting.** It has no "lol",
+  "app", "oops" or "huh", so the corrector "fixed" them. `en_extra.json` patches
+  the worst of it; a conversational frequency list is the real fix.
+- **Wrong-word fixes left are context problems** ("tem": team or them?), which
+  Gboard settles with the previous word. That, a built-in next-word model (today
+  prediction only knows bigrams you have typed), and learning a word after you
+  undo its correction are what is next.
+
 ## The refiners are the heart of this app
 
 The dictation quality is the product, and it comes from the system prompts in
