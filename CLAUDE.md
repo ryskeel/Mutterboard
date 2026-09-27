@@ -374,6 +374,13 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   fixed rule was right 82-100% of the time and Ry noticed "Ill" at once. The
   rules are back and the previous word overrides them (`contextPrefersTypedWord`),
   which takes "its" from 82% to 93%.
+- **"were"/"we're" and "well"/"we'll" are decided twice** (2026-09-27): by
+  the word before at the space bar, then again once the next word is typed
+  (`reconsiderContraction`), which only ever takes back an apostrophe the
+  keyboard added. Before a comma or full stop the bare word stands ("Well,").
+  `ContractionScorecardTest` measures it: 88.4% -> 97.5% on held-out text,
+  we're 0 -> 94%. "hell" -> "he'll" is left out on purpose: Tatoeba is tame
+  and would turn "hell yeah" into "he'll yeah".
 - **A dropped first letter is cheap, two-letter words are allowed** (stricter
   bar). Ry types "ight", "imes", "cn"; neither kind was ever fixed before. Both
   are too ambiguous to fix well without the previous word, so judge them on the
