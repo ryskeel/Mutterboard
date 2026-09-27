@@ -126,6 +126,18 @@ class BigramModel private constructor(
         return unigrams[id].toDouble() / totalTokens
     }
 
+    /**
+     * How many times [word] was seen in everyday English as a plain lowercase
+     * word of three letters or more; 0 otherwise. Names and the fragments
+     * Tatoeba's tokenizer leaves ("th" from "4th", "ly") do not count.
+     */
+    fun everydayWordCount(word: String): Int {
+        val id = ids[WordNormalization.normalizeApostrophes(word).lowercase(Locale.ROOT)] ?: return 0
+        val display = vocabulary[id]
+        if (display.length < 3 || display.any { !it.isLowerCase() && it != '\'' }) return 0
+        return unigrams[id]
+    }
+
     companion object {
         private const val SMOOTHING = 100.0
         const val SENTENCE_START = "<s>"

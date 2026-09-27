@@ -15,7 +15,9 @@ import java.util.Locale
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
-class RealWordFixTest {
+// "7th", "4oz": the lookups normalize digits away, which made these "th" and
+// "oz" and let autocorrect turn "4th" into "the".
+class NumberWordTest {
 
     private val context: Context = RuntimeEnvironment.getApplication()
     private val repository by lazy { EnglishFixture.repository(context) }
@@ -29,6 +31,10 @@ class RealWordFixTest {
             settingsProvider = { SuggestionSettings(autoReplaceOnSpaceEnter = true) },
             typoModel = typo,
             bigrams = { bigrams },
+            exactReplacementProvider = { word, b ->
+                it.palsoftware.pastiera.inputmethod.AutoCorrector.processText(word + (b ?: ' '), "en", context) { repository.isKnownWord(it) }
+                    ?.takeIf { (o, r) -> o == word && r != word }?.second
+            },
             realWordFixer = RealWordFixer(repository, Locale.ENGLISH, { bigrams }, TypoModel(repository, Locale.ENGLISH, RealWordFixer.SLIP_TUNING) { bigrams })
         )
     }
@@ -42,26 +48,28 @@ class RealWordFixTest {
     }
 
     @Test
-    fun slipIsFixedOnceTheNextWordIsTypedAndBackspaceUndoesIt() {
+    fun numbersAreLeftAlone() {
+        it.palsoftware.pastiera.inputmethod.AutoCorrector.loadCorrections(context.assets, context)
         val controller = controller()
-        val connection = space(controller, "we where going", "going")
-        assertEquals("we were going ", connection.text)
-        assertTrue(controller.handleBackspaceUndo(KeyEvent.KEYCODE_DEL, connection))
-        assertEquals("we where going ", connection.text)
+        val out = listOf("4th", "7th", "4oz", "2pm", "1st", "3rd", "10k").map { w ->
+            val t = "the weekend of Nov $w"
+            w to space(controller, t, w).text.removePrefix("the weekend of Nov ")
+        }
+        out.forEach { (w, got) -> assertEquals(w + " ", got) }
     }
 
     @Test
-    fun slippedContractionEndingIsFixed() {
+    fun everydayWordsMissingFromTheDictionaryAreLeftAlone() {
         val controller = controller()
-        assertEquals("quick or there's gonna ", space(controller, "quick or there'd gonna", "gonna").text)
+        assertEquals("be poop water ", space(controller, "be poop water", "water").text)
+        for (w in listOf("poop", "grandma", "faucet")) assertEquals("the $w ", space(controller, "the $w", w).text)
     }
 
     @Test
-    fun correctTextIsLeftAlone() {
-        val controller = controller()
-        for (sentence in listOf("I want to go", "the show must go", "we are in the", "I feel ill today", "I said there'd be cake", "she'd like that", "we'll see you")) {
-            val words = sentence.split(' ')
-            assertEquals(sentence + " ", space(controller, sentence, words.last()).text)
+    fun barOffersNothingForNumbers() {
+        for (w in listOf("4th", "7th", "4oz")) {
+            assertTrue(SuggestionEngine(repository, Locale.ENGLISH).suggest(w, 3).isEmpty())
+            assertTrue(WordBarRanker(repository, Locale.ENGLISH, { bigrams }, null).suggest(w, "Nov").isEmpty())
         }
     }
 

@@ -45,12 +45,11 @@ class AutoReplaceController(
     )
 
     companion object {
-        // "...lead middle last " with single spaces, at the cursor.
-        private val RETRO_RUN = Regex("^(.*?)(?<=^|\\s)(\\p{L}+) (\\p{L}+(?:['’]\\p{L}+)*) $", RegexOption.DOT_MATCHES_ALL)
+        // "...lead middle last " with single spaces, at the cursor. The middle
+        // word may carry one apostrophe: a contraction the keyboard wrote can
+        // be taken back, and one with a slipped ending ("there'd gonna") fixed.
+        private val RETRO_RUN = Regex("^(.*?)(?<=^|\\s)(\\p{L}+(?:['’]\\p{L}+)?) (\\p{L}+(?:['’]\\p{L}+)*) $", RegexOption.DOT_MATCHES_ALL)
         private val PREVIOUS_WORD = Regex("[\\p{L}]+(?:['’][\\p{L}]+)*$")
-        // RETRO_RUN, but the middle word may carry one apostrophe: a
-        // contraction the keyboard wrote can be taken back.
-        private val CONTRACTION_RUN = Regex("^(.*?)(?<=^|\\s)(\\p{L}+(?:['’]\\p{L}+)?) (\\p{L}+(?:['’]\\p{L}+)*) $", RegexOption.DOT_MATCHES_ALL)
 
         internal data class ApostropheSplit(val prefix: String, val root: String)
 
@@ -197,8 +196,17 @@ class AutoReplaceController(
     // Track last replacement for undo
     private data class LastReplacement(
         val originalWord: String,
-        val replacedWord: String
+        val replacedWord: String,
+        val source: String = ""
     )
+
+    // Mutterboard: sets the undo target and writes the correction to the audit
+    // log. Called after the replacement is committed, so the word before it is
+    // read from the field.
+    private fun rememberReplacement(inputConnection: InputConnection, original: String, replaced: String, source: String) {
+        lastReplacement = LastReplacement(original, replaced, source)
+        CorrectionAudit.corrected(source, previousWord(inputConnection, replaced), original, replaced)
+    }
     private var lastReplacement: LastReplacement? = null
     private var lastUndoOriginalWord: String? = null
     
@@ -238,7 +246,7 @@ class AutoReplaceController(
 
     // Mutterboard: a real-word slip fixed one word late, kept so an immediate
     // backspace can put it back.
-    private data class RetroFix(val original: String, val fixed: String, val tail: String)
+    private data class RetroFix(val original: String, val fixed: String, val tail: String, val source: String)
     private var lastRetroFix: RetroFix? = null
 
     /**
@@ -262,7 +270,8 @@ class AutoReplaceController(
         inputConnection.deleteSurroundingText(middle.length + tail.length, 0)
         inputConnection.commitText(replacement + tail, 1)
         inputConnection.endBatchEdit()
-        lastRetroFix = RetroFix(middle, replacement, tail)
+        lastRetroFix = RetroFix(middle, replacement, tail, "real-word")
+        CorrectionAudit.corrected("real-word", previous, middle, replacement, last)
         Log.d("AutoReplaceController", "Real-word fix '$middle' -> '$replacement' before '$last'")
     }
 
@@ -282,7 +291,7 @@ class AutoReplaceController(
         val table = bigrams() ?: return false
         val provider = exactReplacementProvider ?: return false
         val before = inputConnection.getTextBeforeCursor(96, 0)?.toString() ?: return false
-        val match = CONTRACTION_RUN.find(before) ?: return false
+        val match = RETRO_RUN.find(before) ?: return false
         val (lead, middle, last) = match.destructured
         val hasApostrophe = middle.any { it == '\'' || it == '’' }
         val (bare, contraction) = if (hasApostrophe) {
@@ -311,7 +320,8 @@ class AutoReplaceController(
         inputConnection.deleteSurroundingText(middle.length + tail.length, 0)
         inputConnection.commitText(replacement + tail, 1)
         inputConnection.endBatchEdit()
-        lastRetroFix = RetroFix(middle, replacement, tail)
+        lastRetroFix = RetroFix(middle, replacement, tail, "contraction")
+        CorrectionAudit.corrected("contraction", previous, middle, replacement, last)
         Log.d("AutoReplaceController", "Contraction reconsidered '$middle' -> '$replacement' before '$last'")
         return true
     }
@@ -451,10 +461,7 @@ class AutoReplaceController(
                     autoContractions.addLast(replacement)
                     while (autoContractions.size > 2) autoContractions.removeFirst()
                 }
-                lastReplacement = LastReplacement(
-                    originalWord = word,
-                    replacedWord = replacement
-                )
+                rememberReplacement(inputConnection, word, replacement, "replacement")
                 tracker.reset()
                 inputConnection.endBatchEdit()
                 var boundaryCommitted = false
@@ -493,10 +500,7 @@ class AutoReplaceController(
                     !(boundaryChar == ' ' && caseReplacement.endsWith("'"))
                 inputConnection.commitText(caseReplacement, 1)
                 repository.markUsed(caseReplacement)
-                lastReplacement = LastReplacement(
-                    originalWord = word,
-                    replacedWord = caseReplacement
-                )
+                rememberReplacement(inputConnection, word, caseReplacement, "case")
                 tracker.reset()
                 inputConnection.endBatchEdit()
                 var boundaryCommitted = false
@@ -545,7 +549,7 @@ class AutoReplaceController(
             inputConnection.deleteSurroundingText(word.length, 0)
             inputConnection.commitText(replacement, 1)
             repository.markUsed(replacement)
-            lastReplacement = LastReplacement(originalWord = word, replacedWord = replacement)
+            rememberReplacement(inputConnection, word, replacement, "typo")
             tracker.reset()
             inputConnection.endBatchEdit()
             val boundaryCommitted = boundaryChar != null && commitBoundary(inputConnection, boundaryChar, settings)
@@ -635,10 +639,7 @@ class AutoReplaceController(
             repository.markUsed(replacement)
             
             // Store last replacement for undo
-            lastReplacement = LastReplacement(
-                originalWord = word,
-                replacedWord = replacement
-            )
+            rememberReplacement(inputConnection, word, replacement, "pastiera")
             
             tracker.reset()
             inputConnection.endBatchEdit()
@@ -709,6 +710,7 @@ class AutoReplaceController(
                 inputConnection.commitText(retro.original + retro.tail, 1)
                 inputConnection.endBatchEdit()
                 rejectedWords.add(retro.original.lowercase())
+                CorrectionAudit.undone(retro.source, retro.original, retro.fixed)
                 return true
             }
         }
@@ -765,6 +767,7 @@ class AutoReplaceController(
         rejectedWords.add(replacement.originalWord.lowercase())
         splitApostropheWord(replacement.originalWord)?.root?.lowercase()?.let { rejectedWords.add(it) }
         lastUndoOriginalWord = replacement.originalWord
+        CorrectionAudit.undone(replacement.source, replacement.originalWord, replacement.replacedWord)
         
         // Clear last replacement after undo
         lastReplacement = null

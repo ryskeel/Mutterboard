@@ -39,6 +39,7 @@ class SuggestionController(
 ) {
 
     private val appContext = context.applicationContext
+    init { CorrectionAudit.init(appContext) }
     private val debugLogging: Boolean = debugLogging
     private val userDictionaryStore = UserDictionaryStore()
     private val dictionaryRepositoryCache = mutableMapOf<String, DictionaryRepository>()
@@ -301,6 +302,9 @@ class SuggestionController(
     private fun addWordCandidateFor(word: String?, repository: DictionaryRepository = dictionaryRepository): String? {
         val candidate = word?.trim() ?: return null
         if (candidate.isEmpty() || candidate.none { it.isLetterOrDigit() }) return null
+        // Mutterboard: "7th", "4oz", "2pm" are numbers, not words; no dictionary
+        // is going to hold every one of them, so offering to add them is noise.
+        if (candidate.any { it.isDigit() }) return null
         if (!repository.isReady) return null
         return if (repository.isKnownWord(candidate)) null else candidate
     }

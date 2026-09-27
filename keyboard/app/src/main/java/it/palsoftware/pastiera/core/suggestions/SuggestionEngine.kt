@@ -316,6 +316,9 @@ class SuggestionEngine(
     ): List<SuggestionResult> {
         if (currentWord.isBlank()) return emptyList()
         if (!repository.isReady) return emptyList()
+        // Mutterboard: normalizing drops digits, so "7th" was looked up as "th"
+        // and filled the bar with "this" and "that".
+        if (currentWord.any { it.isDigit() }) return emptyList()
 
         // Apostrophe branch: split and suggest on the root to avoid over-corrections.
         val apostropheSplit = splitApostropheWord(currentWord)
