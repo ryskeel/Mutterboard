@@ -24,7 +24,8 @@ class WordBarRanker(
     private val typoModel: TypoModel?
 ) {
     fun suggest(typed: String, previousWord: String?, limit: Int = 3): List<SuggestionResult> {
-        if (typed.isBlank() || !repository.isReady) return emptyList()
+        // Normalizing drops digits, so "7th" would be ranked as "th".
+        if (typed.isBlank() || typed.any { it.isDigit() } || !repository.isReady) return emptyList()
         val table = bigrams()
         val prefix = WordNormalization.normalizeForSuggestion(typed, locale)
         if (prefix.isEmpty()) return emptyList()

@@ -69,6 +69,9 @@ class TypoModel(
         // Share of a word's commonness taken from the everyday table rather
         // than the prose dictionary, where "wired" outranks "weird".
         val everydayWeight: Double = 0.75,
+        // Seen this many times in the everyday table, a word is a word: 3 costs
+        // a point of fixes on held-out text and saves a point of wrong ones.
+        val everydayKnownCount: Int = 3,
     )
 
     data class Correction(val word: String, val score: Double, val runnerUpScore: Double?)
@@ -85,9 +88,17 @@ class TypoModel(
      */
     fun correct(typed: String, previousWord: String? = null): Correction? {
         if (!repository.isReady) return null
+        // Normalizing drops digits, so "4th" would be judged as "th" and fixed
+        // to "the". A word with a number in it is never a typo of a dictionary word.
+        if (typed.any { it.isDigit() }) return null
         val input = WordNormalization.normalizeForSuggestion(typed, locale)
         if (input.length < MIN_LENGTH || input.any { !it.isLetter() && it != '\'' }) return null
 
+        // The dictionary is written prose and lacks thousands of everyday words
+        // ("poop" became "pop", "grandma", "faucet"); the everyday table has them.
+        if (tuning.everydayKnownCount > 0 &&
+            (bigrams()?.everydayWordCount(input) ?: 0) >= tuning.everydayKnownCount
+        ) return null
         val context = if (tuning.contextWeight > 0.0) bigrams() else null
         val scored = repository.symSpellLookup(input, maxSuggestions = 64)
             .asSequence()
