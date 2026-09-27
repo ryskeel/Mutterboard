@@ -423,8 +423,29 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   The bar is set by clean text, not by catches: 0.6 correct words changed per
   thousand for 42% of slips. Loosening it catches more and changes up to
   fifteen per thousand; do not.
+- **The everyday table vetoes the typo fixer** (2026-09-27): a lowercase word
+  of three letters or more seen 3+ times in it is a word, whatever the prose
+  dictionary says. The dictionary lacked ~6,800 of them ("poop" became "pop";
+  "grandma", "faucet", "jam"). `everydayKnownCount`; 3 cost a point of fixes
+  on held-out text and saved a point of wrong ones.
+- **Words with a digit are never corrected or looked up** ("4th", "4oz").
+  Normalizing strips digits, so "4th" was judged as "th" and became "the",
+  and the bar offered "this"/"that". Guarded in `TypoModel`, `WordBarRanker`,
+  Pastiera's `SuggestionEngine` and the add-word offer.
+- **A contraction's ending can be a slip** ("there'd gonna" -> there's),
+  fixed one word late by `RealWordFixer.fixEnding`. Contractions' own pairs
+  are thin, so the next word is judged against the family's pooled pairs
+  ('d gets its own family there). Clean words changed stayed 0.6/1000; the
+  catch rate is not measured, only Ry's sentence.
 - **All of these numbers are measured on Tatoeba**, the same kind of text the
   table is built from, so Ry's own typing will score lower.
+- **Ry's own typing is logged, so it can be the scorecard** (2026-09-27).
+  `CorrectionAudit` appends every correction and every immediate-backspace
+  undo to the keyboard's private files, debug builds only (releases are debug
+  builds). `scripts/autocorrect-audit.sh` pulls it and sums undo rates per
+  kind. Start any autocorrect work from its undone list, not from a
+  screenshot, and turn what it shows into scorecard cases. Only a backspace
+  straight after counts; a word fixed by hand later is invisible to it.
 
 ## The refiners are the heart of this app
 

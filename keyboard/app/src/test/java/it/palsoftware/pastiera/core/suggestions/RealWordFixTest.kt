@@ -51,9 +51,15 @@ class RealWordFixTest {
     }
 
     @Test
+    fun slippedContractionEndingIsFixed() {
+        val controller = controller()
+        assertEquals("quick or there's gonna ", space(controller, "quick or there'd gonna", "gonna").text)
+    }
+
+    @Test
     fun correctTextIsLeftAlone() {
         val controller = controller()
-        for (sentence in listOf("I want to go", "the show must go", "we are in the", "I feel ill today")) {
+        for (sentence in listOf("I want to go", "the show must go", "we are in the", "I feel ill today", "I said there'd be cake", "she'd like that", "we'll see you")) {
             val words = sentence.split(' ')
             assertEquals(sentence + " ", space(controller, sentence, words.last()).text)
         }
