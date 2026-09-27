@@ -3524,6 +3524,7 @@ object SettingsManager {
     private const val KEY_QUICK_LAUNCHER_TEXT_FIELD_SHORTCUTS = "quick_launcher_text_field_shortcuts"
     private const val KEY_QUICK_LAUNCHER_ALT_SPACE_IN_TEXT_FIELDS = "quick_launcher_alt_space_in_text_fields"
     private const val KEY_QUICK_LAUNCHER_ALT_SHORTCUTS_OUTSIDE_TEXT_FIELDS = "quick_launcher_alt_shortcuts_outside_text_fields"
+    private const val KEY_QUICK_LAUNCHER_CTRL_SHORTCUT = "quick_launcher_ctrl_shortcut"
     private const val KEY_QUICK_LAUNCHER_RESPECT_KEYBOARD_LAYOUT = "quick_launcher_respect_keyboard_layout"
     private const val KEY_QUICK_LAUNCHER_TYPO_TOLERANT_RANKING = "quick_launcher_typo_tolerant_ranking"
     private const val KEY_QUICK_LAUNCHER_WIDTH_PERCENT = "quick_launcher_width_percent"
@@ -3544,6 +3545,7 @@ object SettingsManager {
     private const val DEFAULT_QUICK_LAUNCHER_TEXT_FIELD_SHORTCUTS = true
     private const val DEFAULT_QUICK_LAUNCHER_ALT_SPACE_IN_TEXT_FIELDS = false
     private const val DEFAULT_QUICK_LAUNCHER_ALT_SHORTCUTS_OUTSIDE_TEXT_FIELDS = false
+    private const val DEFAULT_QUICK_LAUNCHER_CTRL_SHORTCUT = false
     private const val DEFAULT_QUICK_LAUNCHER_RESPECT_KEYBOARD_LAYOUT = true
     private const val DEFAULT_QUICK_LAUNCHER_TYPO_TOLERANT_RANKING = true
     private const val DEFAULT_QUICK_LAUNCHER_WIDTH_PERCENT = 100
@@ -4100,6 +4102,29 @@ object SettingsManager {
         getPreferences(context).edit()
             .putBoolean(KEY_QUICK_LAUNCHER_ALT_SHORTCUTS_OUTSIDE_TEXT_FIELDS, enabled)
             .apply()
+    }
+
+    // Mutterboard: Ctrl in place of SYM for the QuickLauncher key only. On the
+    // Titan 2 Elite, Ctrl is the Fn key beside Space, so Fn+Space reads like
+    // Cmd+Space. Off by default because it takes Ctrl+Space from Android's
+    // keyboard layout switcher.
+    fun getQuickLauncherCtrlShortcut(context: Context): Boolean {
+        return getPreferences(context).getBoolean(
+            KEY_QUICK_LAUNCHER_CTRL_SHORTCUT,
+            DEFAULT_QUICK_LAUNCHER_CTRL_SHORTCUT
+        )
+    }
+
+    fun setQuickLauncherCtrlShortcut(context: Context, enabled: Boolean) {
+        getPreferences(context).edit()
+            .putBoolean(KEY_QUICK_LAUNCHER_CTRL_SHORTCUT, enabled)
+            .apply()
+    }
+
+    fun isQuickLauncherCtrlShortcut(context: Context, keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        return event?.isCtrlPressed == true &&
+            getQuickLauncherCtrlShortcut(context) &&
+            isQuickLauncherShortcut(context, keyCode)
     }
 
     fun getQuickLauncherRespectKeyboardLayout(context: Context): Boolean {

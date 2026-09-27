@@ -105,6 +105,9 @@ fun CustomizationSettingsScreen(
     var quickLauncherAltShortcutsOutsideTextFields by remember {
         mutableStateOf(SettingsManager.getQuickLauncherAltShortcutsOutsideTextFields(context))
     }
+    var quickLauncherCtrlShortcut by remember {
+        mutableStateOf(SettingsManager.getQuickLauncherCtrlShortcut(context))
+    }
     var quickLauncherRespectKeyboardLayout by remember {
         mutableStateOf(SettingsManager.getQuickLauncherRespectKeyboardLayout(context))
     }
@@ -182,6 +185,9 @@ fun CustomizationSettingsScreen(
                 "quick_launcher_alt_shortcuts_outside_text_fields" -> {
                     quickLauncherAltShortcutsOutsideTextFields =
                         SettingsManager.getQuickLauncherAltShortcutsOutsideTextFields(context)
+                }
+                "quick_launcher_ctrl_shortcut" -> {
+                    quickLauncherCtrlShortcut = SettingsManager.getQuickLauncherCtrlShortcut(context)
                 }
                 "quick_launcher_respect_keyboard_layout" -> {
                     quickLauncherRespectKeyboardLayout = SettingsManager.getQuickLauncherRespectKeyboardLayout(context)
@@ -412,6 +418,11 @@ fun CustomizationSettingsScreen(
                         quickLauncherAltSpaceInTextFields = enabled
                         SettingsManager.setQuickLauncherAltSpaceInTextFields(context, enabled)
                     },
+                    ctrlQuickLauncher = quickLauncherCtrlShortcut,
+                    onCtrlQuickLauncherChanged = { enabled ->
+                        quickLauncherCtrlShortcut = enabled
+                        SettingsManager.setQuickLauncherCtrlShortcut(context, enabled)
+                    },
                     quickLauncherDefaultBlocked = quickLauncherDefaultBlocked,
                     quickLauncherShortcutKey = quickLauncherShortcutKey,
                     onOpenBehavior = { navigateTo(CustomizationDestination.LauncherShortcutBehavior) },
@@ -572,6 +583,8 @@ private fun StarterLauncherShortcutsSettingsScreen(
     onAltKeyShortcutsEnabledChanged: (Boolean) -> Unit,
     altShortcutsInTextFields: Boolean,
     onAltShortcutsInTextFieldsChanged: (Boolean) -> Unit,
+    ctrlQuickLauncher: Boolean,
+    onCtrlQuickLauncherChanged: (Boolean) -> Unit,
     quickLauncherDefaultBlocked: Boolean,
     quickLauncherShortcutKey: Int?,
     onOpenBehavior: () -> Unit,
@@ -706,6 +719,22 @@ private fun StarterLauncherShortcutsSettingsScreen(
                     indent = true
                 )
             }
+
+            LauncherShortcutTriggerRow(
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.keyboard_control_key_24),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                },
+                linkId = "quick_launcher.ctrl_shortcut",
+                title = stringResource(R.string.ctrl_quick_launcher_title),
+                description = stringResource(R.string.ctrl_quick_launcher_description),
+                checked = ctrlQuickLauncher,
+                onCheckedChange = onCtrlQuickLauncherChanged
+            )
 
             StarterLauncherNavigationRow(
                 icon = {

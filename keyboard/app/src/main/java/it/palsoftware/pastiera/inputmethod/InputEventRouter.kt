@@ -134,6 +134,14 @@ class InputEventRouter(
             return true // Consumiamo l'evento
         }
 
+        if (
+            event?.repeatCount == 0 &&
+            SettingsManager.isQuickLauncherCtrlShortcut(context, keyCode, event) &&
+            callbacks.handleLauncherShortcut(keyCode)
+        ) {
+            return true
+        }
+
         if (navModeController.isNavModeKey(keyCode)) {
             return navModeController.handleNavModeKey(
                 keyCode,
