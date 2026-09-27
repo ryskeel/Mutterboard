@@ -14,10 +14,6 @@
     <string name="notification_update_channel_description">Уведомления о новых версиях Mutterboard</string>
     <string name="notification_successor_release_text">%1$s доступен как преемник Mutterboard.</string>
     <string name="successor_dialog_title">У Mutterboard есть преемник</string>
-    <string name="successor_dialog_message">Plektra сменяет Mutterboard. %1$s доступен на GitHub.</string>
-    <string name="auto_correct_ricette_pastiera_name">Рецепты Mutterboard</string>
-    <string name="tutorial_page_welcome_title">Добро пожаловать в Mutterboard</string>
-    <string name="tutorial_page_welcome_description">Mutterboard - это расширенный метод ввода для Android-устройств с портативными клавиатурами (PKB) с поддержкой режима навигации, сочетаниями клавиш, пользовательскими раскладками клавиатуры и многим другим.</string>
     <string name="tutorial_page_enable_title">Включить Mutterboard</string>
     <string name="tutorial_page_enable_description">Для начала вам нужно включить Mutterboard как метод ввода в настройках Android. Нажмите кнопку ниже, чтобы открыть настройки.</string>
     <string name="tutorial_page_select_title">Выбрать Mutterboard</string>
@@ -33,10 +29,10 @@
     <string name="tutorial_selected_message">Mutterboard выбрана!</string>
     <string name="trackpad_tutorial_shizuku_required_description">Эта функция требует Shizuku для доступа к событиям тачпада.\n\n1. Установите Shizuku из релизов GitHub\n2. Включите опции разработчика в настройках Android\n3. Подключите устройство к ПК с установленным ADB\n4. Запустите команду, которую Shizuku показывает в своём приложении\n5. Предоставьте разрешение Mutterboard в Shizuku\n\nФункция будет работать автоматически, как только Shizuku запущен.</string>
     <string name="tutorial_page_software_keyboard_description">Выберите, какую клавиатурную поверхность Mutterboard должна использовать.</string>
-    <string name="starter_launcher_shortcuts_title">Mutterboard-QuickLauncher</string>
+    <string name="starter_launcher_shortcuts_title">QuickLauncher</string>
     <string name="starter_launcher_shortcuts_intro">Эти настройки используют общий список назначений приложение-клавиша. Выберите, где Mutterboard должна слушать назначенные клавиши.</string>
     <string name="quick_launcher_default_blocked_hint">Новое: SYM может открывать QuickLauncher. Mutterboard обычно назначила бы его на Пробел, но у Пробела уже есть ярлык. Откройте страницу назначений и выберите «Открыть QuickLauncher» на любой клавише, чтобы попробовать.</string>
-    <string name="quick_launcher_title">Mutterboard-QuickLauncher</string>
+    <string name="quick_launcher_title">QuickLauncher</string>
     <string name="quick_launcher_respect_keyboard_layout_description">Если включено, поисковый ввод следует текущей раскладке Mutterboard вместо сырого QWERTY-вывода Android.</string>
     <string name="nav_mode_guide_text">Nav Mode превращает буквенные клавиши в клавиши навигации и ярлыков. Результат может различаться по приложениям: одни приложения понимают действия редактора Android, а другие реагируют только на настоящие сочетания Ctrl.
 

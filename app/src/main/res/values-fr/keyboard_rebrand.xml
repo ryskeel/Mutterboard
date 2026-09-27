@@ -12,9 +12,6 @@
     <string name="about_build_info">Physical keyboard based on Pastiera by Palsoftware (GPL-3.0)</string>
     <string name="notification_nav_mode_channel_name">Mutterboard Nav Mode</string>
     <string name="notification_nav_mode_channel_description">Notifications pour le mode nav de Mutterboard</string>
-    <string name="auto_correct_ricette_pastiera_name">Ricette Mutterboard</string>
-    <string name="tutorial_page_welcome_title">Bienvenue dans Mutterboard</string>
-    <string name="tutorial_page_welcome_description">Mutterboard est une méthode de saisie avancée pour les appareils Android à clavier physique, avec support du mode Nav, des raccourcis, des mappings clavier personnalisés et bien plus.</string>
     <string name="tutorial_page_enable_title">Activer Mutterboard</string>
     <string name="tutorial_page_enable_description">Pour commencer, vous devez activer Mutterboard comme méthode de saisie dans les Paramètres Android. Appuyez sur le bouton ci-dessous pour ouvrir les paramètres.</string>
     <string name="tutorial_page_select_title">Sélectionner Mutterboard</string>
@@ -30,16 +27,15 @@
     <string name="tutorial_selected_message">Mutterboard est sélectionné!</string>
     <string name="restore_from_file_description">Importer un fichier ZIP de sauvegarde Mutterboard</string>
     <string name="successor_dialog_title">Mutterboard a un successeur</string>
-    <string name="successor_dialog_message">Plektra succède à Mutterboard. %1$s est disponible sur GitHub.</string>
     <string name="trackpad_tutorial_shizuku_required_description">Cette fonctionnalité nécessite Shizuku pour accéder aux événements du trackpad.\n\n1. Installez Shizuku depuis les versions GitHub\n2. Activez les options développeur dans les paramètres Android\n3. Branchez votre appareil à un PC avec ADB installé\n4. Exécutez la commande que Shizuku affiche dans son app\n5. Accordez la permission à Mutterboard dans Shizuku\n\nLa fonctionnalité fonctionnera automatiquement une fois Shizuku en cours d\'exécution.</string>
     <string name="notification_update_channel_name">Mises à jour Mutterboard</string>
     <string name="notification_update_channel_description">Notifications des nouvelles versions de Mutterboard</string>
     <string name="notification_successor_release_text">%1$s est disponible comme successeur de Mutterboard.</string>
     <string name="tutorial_page_software_keyboard_description">Choisissez la surface clavier que Mutterboard doit utiliser ici.</string>
-    <string name="starter_launcher_shortcuts_title">Mutterboard-QuickLauncher</string>
+    <string name="starter_launcher_shortcuts_title">QuickLauncher</string>
     <string name="starter_launcher_shortcuts_intro">Ces paramètres partagent une seule liste d’affectations app-touche. Choisissez où Mutterboard doit écouter ces touches affectées.</string>
     <string name="quick_launcher_default_blocked_hint">Nouveau : SYM peut ouvrir QuickLauncher. Mutterboard l’affecterait normalement à Espace, mais Espace possède déjà un raccourci. Ouvrez la page des affectations et choisissez « Ouvrir QuickLauncher » sur n’importe quelle touche pour l’essayer.</string>
-    <string name="quick_launcher_title">Mutterboard-QuickLauncher</string>
+    <string name="quick_launcher_title">QuickLauncher</string>
     <string name="quick_launcher_respect_keyboard_layout_description">Si activé, la saisie de recherche suit la disposition Mutterboard actuelle au lieu de la sortie QWERTY brute d’Android.</string>
     <string name="nav_mode_guide_text">Nav Mode transforme les touches de lettres en touches de navigation et de raccourci. Le résultat peut varier selon l’app, car certaines apps comprennent les actions d’éditeur Android, tandis que d’autres ne réagissent qu’aux vrais raccourcis Ctrl.
 

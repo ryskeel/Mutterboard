@@ -12,11 +12,11 @@
     <string name="pastiera_not_selected">Mutterboard ist nicht ausgewählt</string>
     <string name="auto_correct_manage_user_dict_description">Wörter, die Mutterboard kennen und vorschlagen soll, ohne daraus Ersetzungsregeln zu machen.</string>
     <string name="about_build_info">Physical keyboard based on Pastiera by Palsoftware (GPL-3.0)</string>
-    <string name="starter_launcher_shortcuts_title">Mutterboard-QuickLauncher</string>
+    <string name="starter_launcher_shortcuts_title">QuickLauncher</string>
     <string name="starter_launcher_shortcuts_intro">Diese Einstellungen nutzen dieselbe Liste von Launcher-Tastenzuweisungen. Hier legst du fest, wo Mutterboard auf diese Tasten reagieren soll.</string>
     <string name="quick_launcher_default_blocked_hint">Neu: SYM kann den Schnellstarter öffnen. Normalerweise würde Mutterboard ihn auf Space legen, aber Space hat bereits eine Zuweisung. Öffne die Zuweisungsseite und wähle „Schnellstarter öffnen“ auf einer Taste, um es auszuprobieren.</string>
-    <string name="launcher_shortcuts_screen_title">Mutterboard-QuickLauncher</string>
-    <string name="quick_launcher_title">Mutterboard-QuickLauncher</string>
+    <string name="launcher_shortcuts_screen_title">QuickLauncher</string>
+    <string name="quick_launcher_title">QuickLauncher</string>
     <string name="notification_nav_mode_channel_name">Mutterboard Nav Mode</string>
     <string name="notification_nav_mode_channel_description">Benachrichtigungen für Mutterboard Nav-Modus</string>
     <string name="nav_mode_guide_text">Der Nav-Modus macht Buchstabentasten zeitweise zu Navigations- und Shortcut-Tasten. Das Ergebnis kann je nach App unterschiedlich sein, weil manche Apps Android-Editor-Aktionen verstehen und andere nur auf echte Ctrl-Shortcuts reagieren.
@@ -74,10 +74,7 @@ Jede Taste kann als Keycode, Aktion, Native Ctrl oder Keine konfiguriert werden.
     <string name="alt_key_editor_mappings_description">Zeichen, Modifier, Shortcuts und Mutterboard-Aktionen zuweisen.</string>
     <string name="alt_key_editor_transfer_description">Eigene Profile teilen und über Mutterboard-Backups wiederherstellen.</string>
     <string name="tutorial_feature_status_description">Mutterboard kennzeichnet laufende Arbeiten direkt in der App. Du musst dafür nicht sämtliche GitHub-Issues durchsuchen.</string>
-    <string name="auto_correct_ricette_pastiera_name">Ricette Mutterboard</string>
     <string name="settings_group_pastiera">Über Mutterboard</string>
-    <string name="tutorial_page_welcome_title">Willkommen bei Mutterboard</string>
-    <string name="tutorial_page_welcome_description">Mutterboard ist eine fortschrittliche Eingabemethode für Android-Geräte mit physischer Tastatur (PKB) und unterstützt Nav-Modus, Shortcuts, benutzerdefinierte Tastenbelegungen und mehr.</string>
     <string name="tutorial_page_enable_title">Mutterboard aktivieren</string>
     <string name="tutorial_page_enable_description">Um zu beginnen, müssen Sie Mutterboard als Eingabemethode in den Android-Einstellungen aktivieren. Tippen Sie auf die Schaltfläche unten, um die Einstellungen zu öffnen.</string>
     <string name="tutorial_page_select_title">Mutterboard auswählen</string>
@@ -94,7 +91,9 @@ Jede Taste kann als Keycode, Aktion, Native Ctrl oder Keine konfiguriert werden.
     <string name="tutorial_selected_message">Mutterboard ist ausgewählt!</string>
     <string name="restore_from_file_description">Eine Mutterboard-Sicherungsdatei ZIP importieren</string>
     <string name="successor_dialog_title">Mutterboard hat einen Nachfolger</string>
-    <string name="successor_dialog_message">Plektra folgt auf Mutterboard. %1$s ist auf GitHub verfügbar.</string>
+    <string name="pastiera_stable_update_title">Mutterboard-Sicherheitsupdate verfügbar</string>
+    <string name="pastiera_stable_update_message">%1$s ist für Mutterboard verfügbar. Installiere es, um die neuesten Sicherheitskorrekturen zu erhalten.</string>
+    <string name="pastiera_stable_update_open">Mutterboard-Veröffentlichung ansehen</string>
     <string name="trackpad_tutorial_shizuku_required_description">Diese Funktion erfordert Shizuku, um auf Trackpad-Ereignisse zuzugreifen.\n\n1. Installieren Sie Shizuku von GitHub-Releases\n2. Aktivieren Sie Entwickleroptionen in den Android-Einstellungen\n3. Schließen Sie Ihr Gerät an einen PC mit installiertem ADB an\n4. Führen Sie den Befehl aus, den Shizuku in seiner App anzeigt\n5. Erteilen Sie Mutterboard die Berechtigung in Shizuku\n\nDie Funktion funktioniert automatisch, sobald Shizuku läuft.</string>
     <string name="modifier_indicators_bottom_strip_description">Farbige Modifier-LEDs im Streifen unter Mutterboard.</string>
     <string name="modifier_indicators_status_bar_description">Kompakte Symbole links am Rand der Mutterboard-Statusbar.</string>
@@ -102,6 +101,8 @@ Jede Taste kann als Keycode, Aktion, Native Ctrl oder Keine konfiguriert werden.
     <string name="notification_update_channel_name">Mutterboard-Updates</string>
     <string name="notification_update_channel_description">Benachrichtigungen über neue Mutterboard-Versionen</string>
     <string name="notification_successor_release_text">%1$s ist als Nachfolger von Mutterboard verfügbar.</string>
+    <string name="notification_pastiera_stable_update_title">Mutterboard-Sicherheitsupdate verfügbar</string>
+    <string name="notification_pastiera_stable_update_text">%1$s ist für Mutterboard verfügbar.</string>
     <string name="tutorial_page_software_keyboard_description">Wähle, welche Tastaturfläche Mutterboard hier nutzen soll.</string>
     <string name="tutorial_android16_ime_caption_description">Titan 2-Geräte können unter Mutterboard eine zusätzliche IME-Beschriftungsleiste anzeigen. Diese OEM-Einstellung blendet sie aus und hält Mutterboard kompakt.</string>
     <string name="tutorial_android16_ime_caption_after">Nachher: kompakte Mutterboard</string>
