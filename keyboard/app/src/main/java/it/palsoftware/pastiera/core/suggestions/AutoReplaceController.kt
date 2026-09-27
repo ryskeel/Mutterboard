@@ -48,6 +48,9 @@ class AutoReplaceController(
         // "...lead middle last " with single spaces, at the cursor.
         private val RETRO_RUN = Regex("^(.*?)(?<=^|\\s)(\\p{L}+) (\\p{L}+(?:['’]\\p{L}+)*) $", RegexOption.DOT_MATCHES_ALL)
         private val PREVIOUS_WORD = Regex("[\\p{L}]+(?:['’][\\p{L}]+)*$")
+        // RETRO_RUN, but the middle word may carry one apostrophe: a
+        // contraction the keyboard wrote can be taken back.
+        private val CONTRACTION_RUN = Regex("^(.*?)(?<=^|\\s)(\\p{L}+(?:['’]\\p{L}+)?) (\\p{L}+(?:['’]\\p{L}+)*) $", RegexOption.DOT_MATCHES_ALL)
 
         internal data class ApostropheSplit(val prefix: String, val root: String)
 
@@ -244,6 +247,7 @@ class AutoReplaceController(
      * comma, a line break or a cursor jump leaves the text alone.
      */
     private fun fixWordBeforeLast(inputConnection: InputConnection) {
+        if (reconsiderContraction(inputConnection)) return
         val fixer = realWordFixer ?: return
         val before = inputConnection.getTextBeforeCursor(96, 0)?.toString() ?: return
         val match = RETRO_RUN.find(before) ?: return
@@ -261,6 +265,59 @@ class AutoReplaceController(
         lastRetroFix = RetroFix(middle, replacement, tail)
         Log.d("AutoReplaceController", "Real-word fix '$middle' -> '$replacement' before '$last'")
     }
+
+    // Contractions the keyboard wrote itself from a bare word ("were" ->
+    // "we're"), newest last. Two, because by the time a word is reconsidered
+    // the word after it may have been contracted too.
+    private val autoContractions = ArrayDeque<String>()
+
+    /**
+     * "were" or "we're", "its" or "it's": the space bar decides from the word
+     * before, and this decides again once the word after is typed, which
+     * settles most of what the first look could not ("so were going").
+     * Measured in ContractionScorecardTest. It only ever takes back an
+     * apostrophe the keyboard added; one the user typed is theirs.
+     */
+    private fun reconsiderContraction(inputConnection: InputConnection): Boolean {
+        val table = bigrams() ?: return false
+        val provider = exactReplacementProvider ?: return false
+        val before = inputConnection.getTextBeforeCursor(96, 0)?.toString() ?: return false
+        val match = CONTRACTION_RUN.find(before) ?: return false
+        val (lead, middle, last) = match.destructured
+        val hasApostrophe = middle.any { it == '\'' || it == '’' }
+        val (bare, contraction) = if (hasApostrophe) {
+            if (autoContractions.none { it.equals(middle, ignoreCase = true) }) return false
+            middle.filterNot { it == '\'' || it == '’' } to middle
+        } else {
+            val rule = provider(middle.lowercase(), ' ') ?: return false
+            if (!rule.contains('\'') || !isKnownWord(middle)) return false
+            middle to rule
+        }
+        autoContractions.removeAll { it.equals(middle, ignoreCase = true) }
+        if (bare.lowercase() in rejectedWords || isUserWord(bare)) return false
+        val trimmed = lead.trimEnd()
+        val previous = if (trimmed.isEmpty() || trimmed.last() in ".!?\n") null else PREVIOUS_WORD.find(trimmed)?.value
+        fun after(word: String): Double {
+            val family = if (word == contraction) BigramModel.contractionFamily(word) else null
+            return if (family != null && table.pairCount(word, last) == 0) table.pooledLikelihood(family, last)
+                else table.likelihood(word, last)
+        }
+        fun fit(word: String) = table.likelihood(previous, word) * after(word)
+        val choice = if (fit(bare) >= fit(contraction)) bare else contraction
+        if (choice.equals(middle, ignoreCase = true)) return false
+        val replacement = applyCasing(choice, middle)
+        val tail = " $last "
+        inputConnection.beginBatchEdit()
+        inputConnection.deleteSurroundingText(middle.length + tail.length, 0)
+        inputConnection.commitText(replacement + tail, 1)
+        inputConnection.endBatchEdit()
+        lastRetroFix = RetroFix(middle, replacement, tail)
+        Log.d("AutoReplaceController", "Contraction reconsidered '$middle' -> '$replacement' before '$last'")
+        return true
+    }
+
+    private fun isKnownWord(word: String): Boolean =
+        knownWordProvider?.invoke(word) ?: repository.isKnownWord(word)
 
     private fun handleWordBoundary(
         keyCode: Int,
@@ -382,7 +439,7 @@ class AutoReplaceController(
         }
         exactReplacement?.let { replacement ->
             if (!rejectedWords.contains(wordLower) && !isUserWord(word) &&
-                !contextPrefersTypedWord(inputConnection, word, replacement)
+                !contextPrefersTypedWord(inputConnection, word, replacement, boundaryChar)
             ) {
                 inputConnection.beginBatchEdit()
                 inputConnection.deleteSurroundingText(word.length, 0)
@@ -390,6 +447,10 @@ class AutoReplaceController(
                     !(boundaryChar == ' ' && replacement.endsWith("'"))
                 inputConnection.commitText(replacement, 1)
                 repository.markUsed(replacement)
+                if (!word.contains('\'') && replacement.contains('\'') && isKnownWord(word)) {
+                    autoContractions.addLast(replacement)
+                    while (autoContractions.size > 2) autoContractions.removeFirst()
+                }
                 lastReplacement = LastReplacement(
                     originalWord = word,
                     replacedWord = replacement
@@ -713,6 +774,7 @@ class AutoReplaceController(
     fun clearLastReplacement() {
         lastReplacement = null
         lastRetroFix = null
+        autoContractions.clear()
     }
     
     fun clearRejectedWords() {
@@ -726,9 +788,12 @@ class AutoReplaceController(
      * "I'll", "feel ill" stays. Without a bundled table the rule applies as it
      * always did.
      */
-    private fun contextPrefersTypedWord(inputConnection: InputConnection, word: String, replacement: String): Boolean {
+    private fun contextPrefersTypedWord(inputConnection: InputConnection, word: String, replacement: String, boundaryChar: Char?): Boolean {
         if (word.contains('\'') || !replacement.contains('\'')) return false
-        if (!(knownWordProvider?.invoke(word) ?: repository.isKnownWord(word))) return false
+        if (!isKnownWord(word)) return false
+        // "Well, ..." and "...its." are the word; a contraction is almost never
+        // followed by a comma or a full stop, and the table cannot see either.
+        if (boundaryChar != null && boundaryChar != ' ') return true
         val table = bigrams() ?: return false
         val previous = previousWord(inputConnection, word)
         return table.likelihood(previous, word) > table.likelihood(previous, replacement)

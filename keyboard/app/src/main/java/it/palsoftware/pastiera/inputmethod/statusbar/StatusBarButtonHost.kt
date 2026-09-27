@@ -1,7 +1,5 @@
 package it.palsoftware.pastiera.inputmethod.statusbar
 
-import android.graphics.Color
-import it.palsoftware.pastiera.inputmethod.mutterboard.PillBar
 import android.content.Context
 import android.widget.ImageView
 import android.widget.TextView
@@ -256,19 +254,14 @@ class StatusBarButtonHost(
             ?: fallbackHeight?.takeIf { it > 0 }
         if (height != null) {
             val active = state is ButtonState.MinimalUiState && state.isActive
-            // Mutterboard: in the pill a button is its icon, like Gboard's; the
-            // round fill only shows while pressed, active or recording.
-            val bare = PillBar.isEnabled(context)
-            val normalColor = recordingColors[view] ?: if (active) theme.pressedColor
-                else if (bare) Color.TRANSPARENT else theme.normalColor
+            val normalColor = recordingColors[view] ?: if (active) theme.pressedColor else theme.normalColor
             val background = StatusBarButtonStyles.createButtonDrawable(
                 heightPx = height,
                 normalColor = normalColor,
                 pressedColor = theme.pressedColor,
-                // Mutterboard: round buttons inside the round pill.
-                cornerRadiusRatio = if (PillBar.isEnabled(context)) 0.5f else theme.cornerRadiusRatio,
+                cornerRadiusRatio = theme.cornerRadiusRatio,
                 borderColor = theme.borderColor,
-                borderWidthPx = if (bare) 0 else theme.borderWidthPx
+                borderWidthPx = theme.borderWidthPx
             )
             view.background = if (
                 outerEdges[view] != null &&

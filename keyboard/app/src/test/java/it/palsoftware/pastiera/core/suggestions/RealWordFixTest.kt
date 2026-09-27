@@ -29,7 +29,7 @@ class RealWordFixTest {
             settingsProvider = { SuggestionSettings(autoReplaceOnSpaceEnter = true) },
             typoModel = typo,
             bigrams = { bigrams },
-            realWordFixer = RealWordFixer(repository, Locale.ENGLISH, { bigrams }, typo)
+            realWordFixer = RealWordFixer(repository, Locale.ENGLISH, { bigrams }, TypoModel(repository, Locale.ENGLISH, RealWordFixer.SLIP_TUNING) { bigrams })
         )
     }
 

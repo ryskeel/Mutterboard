@@ -180,6 +180,7 @@ object SettingsManager {
     const val KEY_TITAN2_ELITE_MAX_ICON_SHRINK = "titan2_elite_max_icon_shrink"
     const val KEY_TITAN2_ELITE_TOP_CORNER_MULTIPLIER = "titan2_elite_top_corner_multiplier"
     const val KEY_TITAN2_ELITE_ROUNDED_CORNER_INSETS = "titan2_elite_rounded_corner_insets"
+    const val KEY_TITAN2_ELITE_FILL_BOTTOM_CORNERS = "titan2_elite_fill_bottom_corners"
     private const val KEY_ACCESSIBILITY_LIVE_ANNOUNCEMENTS_ENABLED = "accessibility_live_announcements_enabled" // Whether status bar accessibility live announcements are enabled
     private const val KEY_ACCESSIBILITY_READ_SECOND_ROW_ENABLED = "accessibility_read_second_row_enabled" // Whether TalkBack should read quick settings/variations row
     private const val KEY_ACCESSIBILITY_SUGGESTIONS_ANNOUNCEMENT_DELAY_MS = "accessibility_suggestions_announcement_delay_ms" // Delay before suggestions become accessible again while typing
@@ -394,6 +395,7 @@ object SettingsManager {
     private const val KEY_EXPERIMENTAL_SUGGESTIONS_ENABLED = "experimental_suggestions_enabled"
     private const val KEY_SUGGESTION_DEBUG_LOGGING = "suggestion_debug_logging"
     private const val KEY_IME_OVERLAY_DEBUG_LOGGING = "ime_overlay_debug_logging"
+    private const val KEY_EXPERIMENTAL_CANDIDATES_VIEW_ENABLED = "experimental_candidates_view_enabled"
     private const val KEY_USE_KEYBOARD_PROXIMITY = "use_keyboard_proximity"
     private const val KEY_USE_EDIT_TYPE_RANKING = "use_edit_type_ranking"
 
@@ -1446,12 +1448,19 @@ object SettingsManager {
     }
 
     fun getTitan2EliteRoundedCornerInsetsEnabled(context: Context): Boolean =
-        // Mutterboard: the pill replaces the traced corners. See mutterboard/PillBar.
-        !it.palsoftware.pastiera.inputmethod.mutterboard.PillBar.isEnabled(context) &&
         getPreferences(context).getBoolean(
             KEY_TITAN2_ELITE_ROUNDED_CORNER_INSETS,
             DeviceSpecific.isTitan2EliteDevice()
         )
+
+    fun getTitan2EliteFillBottomCorners(context: Context): Boolean =
+        getPreferences(context).getBoolean(KEY_TITAN2_ELITE_FILL_BOTTOM_CORNERS, true)
+
+    fun setTitan2EliteFillBottomCorners(context: Context, enabled: Boolean) {
+        getPreferences(context).edit()
+            .putBoolean(KEY_TITAN2_ELITE_FILL_BOTTOM_CORNERS, enabled)
+            .apply()
+    }
 
     fun getTitan2EliteTopCornerMultiplier(context: Context): Int =
         getPreferences(context).getInt(KEY_TITAN2_ELITE_TOP_CORNER_MULTIPLIER, 2).let {
@@ -3026,6 +3035,17 @@ object SettingsManager {
     fun setExperimentalSuggestionsEnabled(context: Context, enabled: Boolean) {
         getPreferences(context).edit()
             .putBoolean(KEY_EXPERIMENTAL_SUGGESTIONS_ENABLED, enabled)
+            .apply()
+    }
+
+    /** Opt-in candidates lifecycle for the hardware keyboard; existing installs keep the input view. */
+    fun getExperimentalCandidatesViewEnabled(context: Context): Boolean {
+        return getPreferences(context).getBoolean(KEY_EXPERIMENTAL_CANDIDATES_VIEW_ENABLED, false)
+    }
+
+    fun setExperimentalCandidatesViewEnabled(context: Context, enabled: Boolean) {
+        getPreferences(context).edit()
+            .putBoolean(KEY_EXPERIMENTAL_CANDIDATES_VIEW_ENABLED, enabled)
             .apply()
     }
 

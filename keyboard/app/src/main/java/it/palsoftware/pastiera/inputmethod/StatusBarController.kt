@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
+import android.inputmethodservice.InputMethodService
 import android.graphics.Color
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -288,6 +289,7 @@ class StatusBarController(
         val altPhysicallyPressed: Boolean,
         val altOneShot: Boolean,
         val symPage: Int, // 0=disattivato, 1=pagina1 emoji, 2=pagina2 caratteri
+        val symPhysicallyPressed: Boolean = false,
         val clipboardOverlay: Boolean = false, // mostra la clipboard come view dedicata
         val clipboardCount: Int = 0, // numero di elementi in clipboard
         val variations: List<String> = emptyList(),
@@ -451,6 +453,12 @@ class StatusBarController(
         activeThemeSettings(isFullSoftwareKeyboardMode).toKeyboardThemeColors()
 
     private fun applyKeyboardThemeOverrides(activeColors: KeyboardThemeColors) {
+        (context as? InputMethodService)?.window?.window?.let { imeWindow ->
+            imeWindow.navigationBarColor = activeColors.background
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                imeWindow.isNavigationBarContrastEnforced = false
+            }
+        }
         statusBarLayout?.setBackgroundColor(activeColors.background)
         val roundedCorners = SettingsManager.getTitan2EliteRoundedCornerInsetsEnabled(context)
         val surfaceBackground = if (roundedCorners) Color.TRANSPARENT else activeColors.background
@@ -463,8 +471,6 @@ class StatusBarController(
             chrome.bottomFillColors = activeColors.background to activeColors.background
             chrome.expandedCloseColor = activeColors.background
             chrome.expandedKeyHeightPx = hardwareSymKeyHeightPx(activeColors)
-            chrome.pillRimColor = activeColors.divider
-            chrome.pillBackdropColor = activeColors.specialKey
             chrome.invalidate()
         }
         emojiKeyboardContainer?.setBackgroundColor(activeColors.background)
@@ -669,32 +675,14 @@ class StatusBarController(
                         } else {
                             null
                         }
+                    (view as? ImeChromeLayout)?.fillDisplayCorners =
+                        SettingsManager.getTitan2EliteFillBottomCorners(context)
                     ledStatusView.bottomCornerRadiiPx = (view as? ImeChromeLayout)?.bottomCornerRadiiPx
-                    // Mutterboard: see mutterboard/PillBar.
-                    val pill = it.palsoftware.pastiera.inputmethod.mutterboard.PillBar
-                    if (pill.isEnabled(context)) {
-                        val side = pill.dp(context, pill.SIDE_GAP_DP)
-                        val bottom = max(pill.dp(context, pill.BOTTOM_GAP_DP), bottomInset)
-                        val inner = pill.dp(context, pill.INNER_PAD_DP)
-                        val top = pill.dp(context, pill.TOP_GAP_DP)
-                        (view as? ImeChromeLayout)?.pillInsetsPx = android.graphics.Rect(side, top, side, bottom)
-                        val ledInset = pill.dp(context, pill.LED_SIDE_INSET_DP)
-                        ledStatusView.getView()?.let { it.setPadding(ledInset, it.paddingTop, ledInset, it.paddingBottom) }
-                        view.updatePadding(
-                            left = baseLeftPadding + side + inner,
-                            top = top + inner,
-                            right = baseRightPadding + side + inner,
-                            bottom = baseBottomPadding + bottom + inner
-                        )
-                    } else {
-                        (view as? ImeChromeLayout)?.pillInsetsPx = null
-                        ledStatusView.getView()?.let { it.setPadding(0, it.paddingTop, 0, it.paddingBottom) }
-                        view.updatePadding(
-                            left = baseLeftPadding,
-                            right = baseRightPadding,
-                            bottom = appliedBottomPadding
-                        )
-                    }
+                    view.updatePadding(
+                        left = baseLeftPadding,
+                        right = baseRightPadding,
+                        bottom = appliedBottomPadding
+                    )
                     logImeOverlayInsetsIfEnabled(
                         navBottom = navAndGestures.bottom,
                         imeBottom = 0,
@@ -817,6 +805,9 @@ class StatusBarController(
                 expandedSurfaceView = emojiKeyboardContainer
                 compactStatusRow = fullSuggestionsBar?.ensureView()
                 expandedCloseButton = symSurfaceCloseButton
+                onContourGeometryChanged = { geometry ->
+                    ledStatusView.contourGeometry = geometry
+                }
             }
             applyChromeZOrder()
             applyAccessibilitySecondRowReadPreference()
@@ -1129,7 +1120,7 @@ class StatusBarController(
             )
         }
 
-        if (snapshot.symPage > 0) {
+        if (snapshot.symPage > 0 || snapshot.symPhysicallyPressed) {
             indicators.add(
                 MenuBarModifierIndicator.Text(
                     label = "SYM",
@@ -1375,7 +1366,8 @@ class StatusBarController(
         // Restore default padding for emoji/symbols pages.
         val roundedCorners = SettingsManager.getTitan2EliteRoundedCornerInsetsEnabled(context)
         val sidePadding = emojiKeyboardHorizontalPaddingPx
-        container.setPadding(sidePadding, 0, sidePadding, 0)
+        val bottomPadding = if (roundedCorners) dpToPx(3f) else 0
+        container.setPadding(sidePadding, 0, sidePadding, bottomPadding)
         val inputConnectionChanged = lastInputConnectionUsed != inputConnection
         val inputConnectionBecameAvailable = lastInputConnectionUsed == null && inputConnection != null
         if (lastSymPageRendered == page && lastSymMappingsRendered == symMappings && !inputConnectionChanged && !inputConnectionBecameAvailable) {
@@ -3117,12 +3109,23 @@ class StatusBarController(
             theme = activeColors
         )
 
-        ledStatusView.layout = modifierLedLayout()
-        val showLedStrip = if (isFullSoftwareKeyboardMode) {
+        val activeLedLayout = modifierLedLayout()
+        ledStatusView.layout = activeLedLayout
+        val ledStripEnabled = if (isFullSoftwareKeyboardMode) {
             softwareThemeSettings.showLeds
         } else {
             showHardwareBottomIndicators
         }
+        val showLedStrip = ledStripEnabled && snapshot.symPage == 0 && !snapshot.clipboardOverlay
+        val contourIntegratedIndicators =
+            showLedStrip &&
+                !pastierinaModeActive &&
+                !isFullSoftwareKeyboardMode &&
+                activeLedLayout == ModifierLedLayouts.TITAN_2_ELITE &&
+                (statusBarLayout as? ImeChromeLayout)?.bottomCornerRadiiPx != null
+        ledStatusView.contourIntegrated = contourIntegratedIndicators
+        (statusBarLayout as? ImeChromeLayout)?.contourIntegratedIndicators =
+            contourIntegratedIndicators
         ledStatusView.getView()?.visibility = if (showLedStrip) View.VISIBLE else View.GONE
         if (showLedStrip) {
             ledStatusView.update(snapshot)
@@ -3196,7 +3199,13 @@ class StatusBarController(
             emojiKeyboardView.visibility = View.VISIBLE
             val surfaceHeight = resolveSurfaceHeightWithOptionalLed(animationHeight, showLedStrip)
             setSurfaceCloseVisible(SettingsManager.getTitan2EliteRoundedCornerInsetsEnabled(context))
-            applySymSurfaceLayout(symSurfaceView, symSurfaceStackView, emojiKeyboardView, surfaceHeight, reserveLedSpace = showLedStrip)
+            applySymSurfaceLayout(
+                symSurfaceView,
+                symSurfaceStackView,
+                emojiKeyboardView,
+                surfaceHeight,
+                reserveLedSpace = showLedStrip
+            )
             if (!symShown && !wasSymActive) {
                 emojiKeyboardView.alpha = 1f
                 emojiKeyboardView.translationY = surfaceHeight.toFloat()
@@ -3307,7 +3316,13 @@ class StatusBarController(
             lastSymHeight = surfaceHeight
             emojiKeyboardView.setBackgroundColor(activeColors.background)
             emojiKeyboardView.visibility = View.VISIBLE
-            applySymSurfaceLayout(symSurfaceView, symSurfaceStackView, emojiKeyboardView, surfaceHeight, reserveLedSpace = showLedStrip)
+            applySymSurfaceLayout(
+                symSurfaceView,
+                symSurfaceStackView,
+                emojiKeyboardView,
+                surfaceHeight,
+                reserveLedSpace = showLedStrip
+            )
             setSurfaceCloseVisible(snapshot.symPage in listOf(1, 2, 5) ||
                 (snapshot.symPage == 3 && SettingsManager.getTitan2EliteRoundedCornerInsetsEnabled(context)) ||
                 (snapshot.symPage == 4 && (layout as? ImeChromeLayout)?.expandedPickerButtons != null))
@@ -3543,7 +3558,9 @@ class StatusBarController(
     }
 
     private fun reservedExpandedLedHeight(): Int =
-        if (SettingsManager.getTitan2EliteRoundedCornerInsetsEnabled(context)) dpToPx(3.1f)
+        if (SettingsManager.getTitan2EliteRoundedCornerInsetsEnabled(context)) {
+            dpToPx(LedStatusView.LED_ZONE_HEIGHT_DP)
+        }
         else measureLedStripHeight()
 
     private fun measureLedStripHeight(): Int {
@@ -3580,7 +3597,12 @@ class StatusBarController(
             // All hardware SYM pages use the same three key rows. Do not let
             // measurement under the previous page's weighted layout resize them.
             val gap = dpToPx(4f)
-            return 3 * hardwareSymKeyHeightPx() + 2 * gap
+            val bottomPadding = if (SettingsManager.getTitan2EliteRoundedCornerInsetsEnabled(context)) {
+                dpToPx(3f)
+            } else {
+                0
+            }
+            return 3 * hardwareSymKeyHeightPx() + 2 * gap + bottomPadding
         }
         if (snapshot.symPage == 4 && measuredHeight > 0) {
             return measuredHeight
@@ -3626,6 +3648,63 @@ class StatusBarController(
             it.palsoftware.pastiera.T2eCornerCalibration.addPreviewListener(calibrationPreviewListener)
         }
 
+        override fun draw(canvas: Canvas) {
+            val radii = bottomCornerRadiiPx
+            if (radii != null) {
+                drawStatusRowSideFill(canvas, radii)
+            }
+            if (fillDisplayCorners || radii == null || radii.first <= 0 && radii.second <= 0) {
+                super.draw(canvas)
+                return
+            }
+            val calibration = it.palsoftware.pastiera.T2eCornerCalibration.read(context)
+            val path = it.palsoftware.pastiera.T2eCornerGeometry.path(
+                width.toFloat(), height.toFloat(), radii.first.toFloat(), radii.second.toFloat(),
+                calibration
+            ).apply {
+                // Preserve the calibrated physical corners, but do not carry their
+                // inward bottom offset across the straight center of the display.
+                addRect(
+                    radii.first.toFloat(),
+                    0f,
+                    width.toFloat() - radii.second,
+                    height.toFloat(),
+                    Path.Direction.CW
+                )
+            }
+            val bottomContour = it.palsoftware.pastiera.T2eCornerGeometry.bottomContourPath(
+                width.toFloat(), height.toFloat(), radii.first.toFloat(), radii.second.toFloat(),
+                calibration
+            )
+            cornerFillPaint.color = bottomFillColors.first
+            cornerFillPaint.style = Paint.Style.STROKE
+            cornerFillPaint.strokeWidth = 2f * resources.displayMetrics.density
+            cornerFillPaint.strokeCap = Paint.Cap.ROUND
+            canvas.drawPath(bottomContour, cornerFillPaint)
+            cornerFillPaint.style = Paint.Style.FILL
+
+            val contentSave = canvas.save()
+            canvas.clipPath(path)
+            super.draw(canvas)
+            canvas.restoreToCount(contentSave)
+        }
+
+        private fun drawStatusRowSideFill(canvas: Canvas, radii: Pair<Int, Int>) {
+            val row = nestedRow ?: return
+            val colors = if (row === compactStatusRow) compactCornerColors else regularCornerColors
+            cornerFillPaint.style = Paint.Style.FILL
+            cornerFillPaint.color = colors.first
+            canvas.drawRect(0f, row.top.toFloat(), radii.first.toFloat(), row.bottom.toFloat(), cornerFillPaint)
+            cornerFillPaint.color = colors.second
+            canvas.drawRect(
+                (width - radii.second).toFloat(),
+                row.top.toFloat(),
+                width.toFloat(),
+                row.bottom.toFloat(),
+                cornerFillPaint
+            )
+        }
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             if (bottomCornerRadiiPx != null && expandedSurfaceView?.visibility == View.VISIBLE) {
@@ -3659,12 +3738,6 @@ class StatusBarController(
             val row = nestedRow ?: return
             val radii = bottomCornerRadiiPx ?: return
             val colors = if (row === compactStatusRow) compactCornerColors else regularCornerColors
-            // Fill only the corner cutouts beside this row. Never paint across
-            // the suggestion/variation boundary or extend a button below its row.
-            cornerFillPaint.color = colors.first
-            canvas.drawRect(0f, row.top.toFloat(), radii.first.toFloat(), row.bottom.toFloat(), cornerFillPaint)
-            cornerFillPaint.color = colors.second
-            canvas.drawRect((width - radii.second).toFloat(), row.top.toFloat(), width.toFloat(), row.bottom.toFloat(), cornerFillPaint)
             // Continue the row's themed surface to the bottom of the display.
             // Children draw afterward, keeping the modifier lights above the fill.
             cornerFillPaint.color = if (row === compactStatusRow) bottomFillColors.second else bottomFillColors.first
@@ -3675,6 +3748,14 @@ class StatusBarController(
         var indicatorView: View? = null
         var expandedSurfaceView: View? = null
         var compactStatusRow: View? = null
+        var contourIntegratedIndicators: Boolean = false
+            set(value) {
+                if (field == value) return
+                field = value
+                requestLayout()
+                invalidate()
+            }
+        var onContourGeometryChanged: ((LedStatusView.ContourGeometry?) -> Unit)? = null
         private var nestedRow: View? = null
         private var originalRowMargins = intArrayOf(0, 0, 0)
         private var originalRowOutline: ViewOutlineProvider? = null
@@ -3701,7 +3782,7 @@ class StatusBarController(
             if (expandedSurfaceView?.visibility == View.VISIBLE && indicatorView?.visibility == View.VISIBLE) {
                 val density = resources.displayMetrics.density
                 val radius = maxOf(radii.first, radii.second)
-                val stripHeight = (3.1f * density).toInt()
+                val stripHeight = (LedStatusView.LED_ZONE_HEIGHT_DP * density).toInt()
                 val ledHeight = maxOf(radius + density.toInt(), expandedKeyHeightPx + stripHeight)
                 (indicatorView?.layoutParams as? LayoutParams)?.apply {
                     height = ledHeight
@@ -3710,15 +3791,14 @@ class StatusBarController(
                 expandedSurfaceView?.apply {
                     outlineProvider = object : ViewOutlineProvider() {
                         override fun getOutline(view: View, outline: Outline) {
-                            val left = (radii.first - stripHeight).coerceAtLeast(0).toFloat()
-                            val right = (radii.second - stripHeight).coerceAtLeast(0).toFloat()
-                            val path = Path().apply {
-                                addRoundRect(
-                                    RectF(stripHeight.toFloat(), -2f * radius, view.width.toFloat() - stripHeight, view.height.toFloat()),
-                                    floatArrayOf(0f, 0f, 0f, 0f, right, right, left, left),
-                                    Path.Direction.CW
-                                )
-                            }
+                            val path = it.palsoftware.pastiera.T2eCornerGeometry.path(
+                                view.width.toFloat(),
+                                view.height.toFloat(),
+                                radii.first.toFloat(),
+                                radii.second.toFloat(),
+                                it.palsoftware.pastiera.T2eCornerCalibration.read(context),
+                                stripHeight.toFloat()
+                            )
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) outline.setPath(path)
                             else {
                                 @Suppress("DEPRECATION")
@@ -3743,13 +3823,14 @@ class StatusBarController(
             originalRowOutline = row.outlineProvider
             originalRowClip = row.clipToOutline
             originalRowMinHeight = row.minimumHeight
-            // Both LED rows occupy 5.5 dp, with 1 dp of edge spacing.
-            val inset = (6.5f * resources.displayMetrics.density).toInt()
+            // Reserve a dedicated band so both LED rows remain visibly separate.
+            val inset = if (contourIntegratedIndicators) 0 else
+                (LedStatusView.LED_ZONE_HEIGHT_DP * resources.displayMetrics.density).toInt()
             val radius = maxOf(radii.first, radii.second)
             val stripTop = (resources.displayMetrics.density).toInt()
             // The LED surface draws first; overlap its empty center with the row.
             val requestedRowHeight = params.height.coerceAtLeast(0)
-            val bottomInset = (3.1f * resources.displayMetrics.density).toInt()
+            val bottomInset = inset
             indicatorView?.layoutParams?.height = maxOf(radius + stripTop, requestedRowHeight + bottomInset)
             // A fixed-height row does not honor minimumHeight during measurement.
             // Overlapping more than that height puts the LED surface above the
@@ -3759,26 +3840,8 @@ class StatusBarController(
                 else (radius + stripTop - inset).coerceAtLeast(0)
             params.bottomMargin -= overlap
             row.minimumHeight = maxOf(originalRowMinHeight, overlap)
-            row.outlineProvider = object : ViewOutlineProvider() {
-                override fun getOutline(view: View, outline: Outline) {
-                    val left = (radii.first - inset).coerceAtLeast(0).toFloat()
-                    val right = (radii.second - inset).coerceAtLeast(0).toFloat()
-                    val bottomExtension = inset - (3.1f * resources.displayMetrics.density).toInt()
-                    val path = Path().apply {
-                        addRoundRect(
-                            RectF(0f, -2f * radius, view.width.toFloat(), view.height.toFloat()),
-                            floatArrayOf(0f, 0f, 0f, 0f, right, right + bottomExtension, left, left + bottomExtension),
-                            Path.Direction.CW
-                        )
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) outline.setPath(path)
-                    else {
-                        @Suppress("DEPRECATION")
-                        outline.setConvexPath(path)
-                    }
-                }
-            }
-            // Each outer button draws its own inset contour; the chrome clips the display edge.
+            // Each outer button draws against the calibrated contour; the chrome clips the display edge.
+            row.outlineProvider = originalRowOutline
             row.clipToOutline = false
             row.invalidateOutline()
         }
@@ -3796,7 +3859,8 @@ class StatusBarController(
             // Anchor its actual bottom to the inner LED contour after layout.
             // The straight lower indicators occupy only the lower LED row;
             // their top edge is closer to the bottom than the two-row side arcs.
-            val bottomInset = (3.1f * resources.displayMetrics.density).toInt()
+            val bottomInset = if (contourIntegratedIndicators) 0 else
+                (LedStatusView.LED_ZONE_HEIGHT_DP * resources.displayMetrics.density).toInt()
             surfaceView?.let { surface ->
                 val targetBottom = surface.bottom - bottomInset
                 val extraHeight = (targetBottom - row.bottom).coerceAtLeast(0)
@@ -3826,13 +3890,89 @@ class StatusBarController(
                 }
                 if (extraHeight > 0) extendContent(row)
             }
-            // Fixed-height button containers otherwise leave unused space beneath
-            // their contents when the corner geometry makes the row taller.
-            for (index in 0 until row.childCount) {
-                val child = row.getChildAt(index)
-                if (child.visibility == View.VISIBLE && child.height < row.height) {
-                    child.offsetTopAndBottom(row.height - row.paddingBottom - child.bottom)
+            val curvedButtons = mutableListOf<View>()
+            fun collectCurvedButtons(view: View) {
+                if (view.background is it.palsoftware.pastiera.inputmethod.statusbar.CurvedCornerButtonDrawable) {
+                    curvedButtons.add(view)
                 }
+                if (view is ViewGroup) {
+                    for (index in 0 until view.childCount) collectCurvedButtons(view.getChildAt(index))
+                }
+            }
+            collectCurvedButtons(row)
+
+            if (contourIntegratedIndicators) {
+                fun containsExtendableButton(view: View): Boolean {
+                    if (view.visibility != View.VISIBLE) return false
+                    if (view.isClickable && view.background != null) return true
+                    if (view is ViewGroup) {
+                        for (index in 0 until view.childCount) {
+                            if (containsExtendableButton(view.getChildAt(index))) return true
+                        }
+                    }
+                    return false
+                }
+                fun extendButtonBranches(view: ViewGroup, offsetY: Int) {
+                    val borderInset = kotlin.math.ceil(3f * resources.displayMetrics.density).toInt()
+                    val visibleBottom = (row.height - this@ImeChromeLayout.paddingBottom).coerceAtLeast(0)
+                    for (index in 0 until view.childCount) {
+                        val child = view.getChildAt(index)
+                        if (!containsExtendableButton(child)) continue
+                        val absoluteBottom = offsetY + child.bottom
+                        val isButton = child.isClickable && child.background != null
+                        val targetBottom = visibleBottom - if (isButton) borderInset else 0
+                        val adjustment = targetBottom - absoluteBottom
+                        if (adjustment != 0 && child.bottom + adjustment > child.top) {
+                            child.layout(child.left, child.top, child.right, child.bottom + adjustment)
+                        }
+                        if (child is ViewGroup) extendButtonBranches(child, offsetY + child.top)
+                    }
+                }
+                extendButtonBranches(row, 0)
+                val surface = surfaceView
+                if (surface != null && curvedButtons.size >= 2) {
+                    val buttons = curvedButtons.map { button ->
+                        button to android.graphics.Rect(0, 0, button.width, button.height).also { rect ->
+                            offsetDescendantRectToMyCoords(button, rect)
+                        }
+                    }.sortedBy { it.second.left }
+                    val surfaceTop = surface.top.toFloat()
+                    val surfaceLeft = surface.left.toFloat()
+                    val (leftButtonView, leftButton) = buttons.first()
+                    val (rightButtonView, rightButton) = buttons.last()
+                    fun contourFor(button: View): LedStatusView.ButtonContour? {
+                        val drawable = button.background as?
+                            it.palsoftware.pastiera.inputmethod.statusbar.CurvedCornerButtonDrawable
+                            ?: return null
+                        val contour = drawable.outerContourCenterline() ?: return null
+                        return LedStatusView.ButtonContour(
+                            points = contour.points.map { point ->
+                                android.graphics.PointF(point.x - surfaceLeft, point.y - surfaceTop)
+                            },
+                            borderHalfWidthPx = contour.borderHalfWidthPx
+                        )
+                    }
+                    onContourGeometryChanged?.invoke(
+                        LedStatusView.ContourGeometry(
+                            buttonTopPx = minOf(leftButton.top, rightButton.top) - surfaceTop,
+                            leftButtonEndPx = leftButton.right.toFloat(),
+                            rightButtonStartPx = rightButton.left.toFloat(),
+                            leftButtonContour = contourFor(leftButtonView),
+                            rightButtonContour = contourFor(rightButtonView)
+                        )
+                    )
+                } else {
+                    onContourGeometryChanged?.invoke(null)
+                }
+            } else {
+                // Keep the existing vertical alignment when the contour LEDs are not active.
+                for (index in 0 until row.childCount) {
+                    val child = row.getChildAt(index)
+                    if (child.visibility == View.VISIBLE && child.height < row.height) {
+                        child.offsetTopAndBottom(row.height - row.paddingBottom - child.bottom)
+                    }
+                }
+                onContourGeometryChanged?.invoke(null)
             }
             val radii = bottomCornerRadiiPx ?: return
             fun fitIcons(view: View, offsetX: Int) {
@@ -3889,6 +4029,13 @@ class StatusBarController(
                 requestLayout()
             }
 
+        var fillDisplayCorners: Boolean = false
+            set(value) {
+                if (field == value) return
+                field = value
+                invalidate()
+            }
+
         var surfaceView: View? = null
             set(value) {
                 field = value
@@ -3903,9 +4050,6 @@ class StatusBarController(
 
         init {
             setChildrenDrawingOrderEnabled(true)
-            // Without a background a ViewGroup skips draw(), which is where the
-            // pill's backdrop and clip live.
-            setWillNotDraw(false)
         }
 
         override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -3915,98 +4059,7 @@ class StatusBarController(
 
         // Extend the shape above the view so even a bar shorter than the display
         // radius follows the original arc, rather than shrinking it to fit the bar.
-        // Mutterboard: the pill's gaps from the display edges; null when off.
-        var pillInsetsPx: android.graphics.Rect? = null
-            set(value) {
-                if (field == value) return
-                field = value
-                applyBottomCornerClip()
-                requestLayout()
-            }
-
-        /**
-         * Hairline round the pill. Light themes paint it near-white, which on a
-         * light app (Claude, Messages) left the bar with no edge at all: the
-         * words floated over the app with nothing marking them as a keyboard.
-         */
-        var pillRimColor: Int? = null
-            set(value) {
-                if (field == value) return
-                field = value
-                invalidate()
-            }
-        private val pillRimPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            style = android.graphics.Paint.Style.STROKE
-        }
-
-        /**
-         * Painted across the whole bar, outside the pill. The gaps round the
-         * pill used to be see-through, which is fine over an app that draws
-         * behind the keyboard (Claude) and showed a slab of the app's own
-         * window colour over one that does not (Messages). A strip in the
-         * theme's key grey looks the same everywhere, and is Gboard's
-         * arrangement: a light bar sitting on a darker keyboard surface.
-         */
-        var pillBackdropColor: Int? = null
-            set(value) {
-                if (field == value) return
-                field = value
-                invalidate()
-            }
-
-        private fun pillPath(insets: android.graphics.Rect, inset: Float): android.graphics.Path {
-            val top = insets.top.toFloat()
-            val bottom = (height - insets.bottom).toFloat()
-            val radius = it.palsoftware.pastiera.inputmethod.mutterboard.PillBar.radiusFor(context, (bottom - top).toInt())
-            return android.graphics.Path().apply {
-                addRoundRect(
-                    insets.left + inset, top + inset, width - insets.right - inset, bottom - inset,
-                    radius - inset, radius - inset, android.graphics.Path.Direction.CW
-                )
-            }
-        }
-
-        override fun draw(canvas: android.graphics.Canvas) {
-            val insets = pillInsetsPx
-            if (insets == null) {
-                super.draw(canvas)
-                return
-            }
-            pillBackdropColor?.let { canvas.drawColor(it) }
-            val save = canvas.save()
-            canvas.clipPath(pillPath(insets, 0f))
-            super.draw(canvas)
-            canvas.restoreToCount(save)
-            // The rim also hides the clip's unsmoothed edge.
-            val color = pillRimColor ?: return
-            val stroke = resources.displayMetrics.density
-            pillRimPaint.color = color
-            pillRimPaint.strokeWidth = stroke
-            canvas.drawPath(pillPath(insets, stroke / 2f), pillRimPaint)
-        }
-
-        private fun applyPillClip(insets: android.graphics.Rect) {
-            outlineProvider = object : ViewOutlineProvider() {
-                override fun getOutline(view: View, outline: Outline) {
-                    val right = view.width - insets.right
-                    val bottom = view.height - insets.bottom
-                    val radius = it.palsoftware.pastiera.inputmethod.mutterboard.PillBar.radiusFor(context, bottom - insets.top)
-                    outline.setRoundRect(insets.left, insets.top, right, bottom, radius)
-                }
-            }
-            // draw() clips to the pill itself; an outline clip would also cut
-            // away the backdrop around it.
-            clipToOutline = false
-            invalidateOutline()
-        }
-
-        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-            super.onSizeChanged(w, h, oldw, oldh)
-            if (pillInsetsPx != null) invalidateOutline()
-        }
-
         private fun applyBottomCornerClip() {
-            pillInsetsPx?.let { applyPillClip(it); return }
             val radii = bottomCornerRadiiPx
             val radius = radii?.let { maxOf(it.first, it.second) } ?: 0
             if (radius <= 0) {
@@ -4030,7 +4083,8 @@ class StatusBarController(
                     }
                 }
             }
-            clipToOutline = true
+            // draw() clips the content and paints the bottom extension behind it.
+            clipToOutline = false
             invalidateOutline()
         }
 
@@ -4077,6 +4131,16 @@ class StatusBarController(
                 ?.let(::indexOfChild)
                 ?.takeIf { it in 0 until childCount }
                 ?: return super.getChildDrawingOrder(childCount, drawingPosition)
+
+            if (contourIntegratedIndicators) {
+                return if (drawingPosition == childCount - 1) {
+                    surfaceIndex
+                } else if (drawingPosition < surfaceIndex) {
+                    drawingPosition
+                } else {
+                    drawingPosition + 1
+                }
+            }
 
             return if (drawingPosition == 0) {
                 surfaceIndex

@@ -262,63 +262,48 @@ on-screen keyboard entirely, and on any other phone it is still just
 dictation. The stock Kika keyboard is bad, Gboard misbehaves on hardware
 keyboards (phantom Alt shortcuts, double-space-period then backspace wiping all
 the text), and Pastiera nightly has quirks like staying up over Niagara after
-going home. The goal is a keyboard Ry owns: nightly's features, simplified
-down, with Gboard's look and the quirks fixed.
+going home. The goal is a keyboard Ry owns: Pastiera with Mutterboard's
+dictation and the quirks fixed.
 
-**The base is nightly, not stable, since 2026-09-25.** It started on stable
-v0.85 with nightly features to be ported one at a time; the first real port
-(themes) showed every later nightly feature sits on nightly's on-screen
-keyboard rework, so porting meant dragging that in piecemeal. Our changes were
-~840 lines, nearly all in our own files, so moving the base was cheaper.
-Nightly is pinned at `474fa10` (2026-09-08), its last commit, which announces
-**Plektra** (`pkb-rocks/plektra`) as Pastiera's successor; that repo was empty
-at the time. Upstream is effectively frozen, so simplifying means hiding
-settings rows first and deleting code only once Ry decides we stop tracking
-upstream.
-
-"Gboard's look" means the look of Gboard's *bar* on a hardware keyboard: a slim
-white rounded pill, with the menu on the left, suggestions in the middle and
-mic/emoji on the right. It never meant building an on-screen keyboard. One
-session read it that way and wrote it into the backlog.
+**The base is Pastiera stable v0.86, since 2026-09-27.** It moved stable
+v0.85 -> nightly `474fa10` (2026-09-25, to get nightly's features) -> v0.86,
+which is that nightly plus four commits: upstream shipped the nightly features
+as the final stable release. v0.86 is upstream's last release; its successor
+is **Plektra** (`pkb-rocks/plektra`). Stay as close to stock as possible: ours
+is the dictation mic, the dictation look, the Niagara home-screen fix, the
+Material You theme and the English autocorrect. Everything else is Pastiera's,
+including its bar and its Titan 2 Elite corners.
 
 - **Pastiera is GPL-3.0, so Mutterboard is too.** Ry agreed; it is a hobby
   project and stays open source.
 - **The "Material You" keyboard theme is resolved at runtime**
   (`mutterboard/MaterialYouTheme`), not stored: a `materialYou` flag on the
   theme makes `getEffectiveKeyboardTheme` repaint it from the system palette
-  for the current light/dark mode. The strip behind the pill is the secondary
-  container, the pill the surface. Its stored colours are only a fallback.
-- **Pastiera's settings screens stay; only their canvas is ours.** They are
-  Compose screens over one `SettingsManager`, and rebuilding them would mean
-  re-porting every nightly feature's UI. `PastieraTheme` paints `background`
-  and `surface` in Mutterboard's peach/charcoal (the values are copied, since
-  the library cannot see the app module) and leaves everything else alone.
-- **Nightly's last visibility rewrite (`d0ea564`) is reverted.** It replaced
-  the show/hide logic and the insets apps use to make room for the bar, the
-  day before upstream froze, and is the suspect (not yet confirmed) for two
-  regressions: Messages and Gmail not lifting their text field above the bar,
-  and typing on Niagara's home screen sometimes stopping after one letter. If
-  either survives the revert, look elsewhere.
-- **Nightly's `PastieraApplication` does not run.** An app has one
+  for the current light/dark mode. Its stored colours are only a fallback.
+- **Pastiera's settings screens stay as they are**, colours included. The
+  peach canvas we once painted on them went with the move to v0.86.
+- **The visibility rewrite (`d0ea564`) is back in, as stock.** We reverted it
+  on nightly as the suspect for Messages and Gmail not lifting their text
+  field above the bar, and Niagara's home screen typing one letter then
+  stopping. Never confirmed; v0.86 ships it, so it is being tried again. If
+  those bugs come back, `git revert 4f738c6` takes it out again.
+- **Pastiera's `PastieraApplication` does not run.** An app has one
   Application, so `MutterboardApplication` repeats its startup calls; check it
   after moving the pin. Its software-keyboard-mode launcher shortcut is left
   out, and the Clicks launcher accessibility service is removed in the app
   manifest - a second Mutterboard accessibility service beside the paste one
   would leave people guessing which to enable.
-- **The bar is a one-row pill (`mutterboard/PillBar`).** Menu left,
-  suggestions middle, mic right: nightly's Pastierina presentation with its
-  buttons chosen, written once on first run so a later choice in settings
-  sticks. The pill is inset from the sides, top and bottom and sits on a full-width strip
-  in the theme's key grey (see-through gaps showed Messages' window colour), and it
-  switches nightly's Titan 2 Elite traced corners off entirely - they never
-  sat flush, and the app showed through slivers at the edges. Dictation covers
-  only the words, never the row: the mic in that row is the stop button.
-  Shift/Alt/Ctrl/Sym light the LED strip along the pill's bottom edge, inset
-  (`LED_SIDE_INSET_DP`) so the round ends do not clip it. Moving them into the
-  menu row instead left Ry unable to see what was armed.
+- **The bar is Pastiera's own.** A Gboard-style one-row pill
+  (`mutterboard/PillBar`) was dropped on 2026-09-27 once v0.86 made the stock
+  bar look right on the Titan 2 Elite. The pill had forced the one-row
+  Pastierina layout on once; `undoPillLayoutOnce` in `MutterboardApplication`
+  puts Pastiera's default back on those installs. Two fixes found while the
+  pill existed stay: the add-word plus uses the theme accent, and
+  `HamburgerMenuView`/`StatusBarButtonHost` skip reassigning unchanged layout
+  params (a relayout loop).
 - **Mutterboard is the host, Pastiera is the guest.** Its source sits under
   `keyboard/` (the name is ours to pick; GPL only asks that the copyright
-  notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag and then from nightly `474fa10`,
+  notices stay and Pastiera is credited in the app), subtree-merged from the `v0.85` tag, then nightly `474fa10`, then `v0.86`,
   with full history. Remotes: `pastiera` is Ry's fork,
   `pastiera-upstream` is palsoftware. Nightly is not a separate repo, it is
   upstream `main`. Pick a nightly change across with
@@ -389,6 +374,24 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   fixed rule was right 82-100% of the time and Ry noticed "Ill" at once. The
   rules are back and the previous word overrides them (`contextPrefersTypedWord`),
   which takes "its" from 82% to 93%.
+- **"were"/"we're" and "well"/"we'll" are decided twice** (2026-09-27): by
+  the word before at the space bar, then again once the next word is typed
+  (`reconsiderContraction`), which only ever takes back an apostrophe the
+  keyboard added. Before a comma or full stop the bare word stands ("Well,").
+  `ContractionScorecardTest` measures it: 88.4% -> 97.7% on held-out text,
+  plus Ry's own sentences from the phone. When the contraction's next-word
+  pair was too rare to keep ("we'll want"), the late check borrows it from
+  the family ("will want", `BigramModel.contractionFamily`), for 'll and 's
+  only: pooling 're with "are" measured worse. "hell" -> "he'll" is left out on purpose: Tatoeba is tame
+  and would turn "hell yeah" into "he'll yeah".
+- **Two slips in one word are measured too** (2026-09-27): the scorecard's
+  "first key" and "two keys" kinds, plus Ry's own misses ("jsve", "opsge").
+  A wrong first letter costs 1.0 instead of 2.0 on typed words of four
+  letters or more, an extra key before the first is not charged twice, and
+  the threshold is 3.0: first-key slips 68% -> 87%, two-key 35% -> 46%, no
+  change on single slips. Short words keep the old costs (two-letter words
+  got worse), and so does `RealWordFixer` (`SLIP_TUNING`), which otherwise
+  changed more clean words.
 - **A dropped first letter is cheap, two-letter words are allowed** (stricter
   bar). Ry types "ight", "imes", "cn"; neither kind was ever fixed before. Both
   are too ambiguous to fix well without the previous word, so judge them on the

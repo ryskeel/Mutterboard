@@ -26,6 +26,16 @@ class RealWordFixer(
     private val slipWeight: Double = 2.0,
     private val margin: Double = 8.0
 ) {
+    companion object {
+        /**
+         * The fixer's slip costs. It changes words the user has already moved
+         * past, so it keeps the strict first-letter costs the space bar gave up
+         * for long words: the cheaper ones raised clean words changed from 0.6
+         * to 0.8 per thousand.
+         */
+        val SLIP_TUNING = TypoModel.Tuning().let { it.copy(firstLetterLong = it.firstLetter, firstLetterExtra = it.firstLetter) }
+    }
+
     /** The word [typed] should have been, or null to leave it. */
     fun fix(before: String?, typed: String, after: String): String? {
         val table = bigrams() ?: return null

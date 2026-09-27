@@ -52,7 +52,7 @@ class ContextScorecardTest {
             listOf(1.0, 1.5, 2.0).flatMap { w -> listOf(3.0, 4.0, 5.0, 6.0, 8.0).map { w to it } }
         } else listOf(2.0 to 8.0)
         for ((weight, margin) in grid) {
-            val fixer = RealWordFixer(repository, Locale.ENGLISH, { bigrams }, typo, weight, margin)
+            val fixer = RealWordFixer(repository, Locale.ENGLISH, { bigrams }, TypoModel(repository, Locale.ENGLISH, RealWordFixer.SLIP_TUNING) { bigrams }, weight, margin)
             var fixed = 0; var wrong = 0
             for (s in slips) {
                 val out2 = fixer.fix(s.before, s.typed, s.after)

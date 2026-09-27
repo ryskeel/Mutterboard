@@ -22,6 +22,23 @@ object TypoGenerator {
         return word.substring(0, i) + n.random(random) + word.substring(i + 1)
     }
 
+    /** A neighbour hit for the first key, which [neighbourSwap] never touches. */
+    fun firstLetterNeighbour(word: String, random: Random): String? {
+        val n = neighbours[word[0]] ?: return null
+        return n.random(random) + word.substring(1)
+    }
+
+    /** Two neighbour hits in one word ("jsve" for "have"): typing fast, not carelessly. */
+    fun twoNeighbours(word: String, random: Random): String? {
+        if (word.length < 4) return null
+        val i = random.nextInt(word.length)
+        var j = random.nextInt(word.length - 1)
+        if (j >= i) j++
+        val chars = word.toCharArray()
+        for (k in listOf(i, j)) chars[k] = neighbours[chars[k]]?.random(random) ?: return null
+        return String(chars)
+    }
+
     fun extraNeighbour(word: String, random: Random): String? {
         val i = random.nextInt(word.length)
         val n = neighbours[word[i]] ?: return null

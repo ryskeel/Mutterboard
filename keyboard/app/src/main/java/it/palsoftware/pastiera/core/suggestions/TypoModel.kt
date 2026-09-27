@@ -39,6 +39,13 @@ class TypoModel(
         val doubledKey: Double = 1.5,
         val swap: Double = 2.5,
         val firstLetter: Double = 2.0,
+        // For typed words of four letters or more. At 2.0 "jsve" could never reach
+        // "have" (two neighbour keys, one of them the first). Short words keep
+        // the full cost: cheaper, two-letter words went wrong more often.
+        val firstLetterLong: Double = 1.0,
+        // An extra key before the first ("opage" for "page"), typed words of
+        // four letters or more: the alignment already charged for the key.
+        val firstLetterExtra: Double = 0.0,
         // A missed first key ("ight" for "right") is its own slip: the finger
         // rolling off the space bar. It is far commoner than a wrong first key.
         val firstLetterDropped: Double = 0.0,
@@ -46,7 +53,11 @@ class TypoModel(
         val twoLetterThreshold: Double = 5.0,
         val properNounPenalty: Double = 2.0,
         val maxCost: Double = 7.0,
-        val threshold: Double = 3.25,
+        // Was 3.25. With firstLetterLong, 3.0 fixes 46% of two-slip words
+        // ("jsve", "opsge"; was 35%) and 87% of first-key slips (was 68%),
+        // with no new wrong fixes among the hand-written cases. 2.75 fixed a
+        // little more and started getting hand cases wrong ("wierd" -> wired).
+        val threshold: Double = 3.0,
         val shortWordThreshold: Double = 3.9,
         // Taken off the threshold per letter past four: a long string the
         // dictionary does not know is almost always a typo ("typong").
@@ -159,7 +170,14 @@ class TypoModel(
         }
         var cost = d[n][m]
         if (typed.first() != intended.first()) {
-            cost += if (typed.first() == intended.getOrNull(1)) tuning.firstLetterDropped else tuning.firstLetter
+            cost += when {
+                typed.first() == intended.getOrNull(1) -> tuning.firstLetterDropped
+                // Charging an extra first key again as a wrong first letter
+                // counted one slip twice. Not below four letters, where it
+                // made two-letter words go wrong more often.
+                typed.length >= 4 && typed[1] == intended.first() -> tuning.firstLetterExtra
+                else -> if (typed.length >= 4) tuning.firstLetterLong else tuning.firstLetter
+            }
         }
         return cost
     }
