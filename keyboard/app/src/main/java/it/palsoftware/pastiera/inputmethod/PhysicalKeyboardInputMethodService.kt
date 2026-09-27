@@ -4571,6 +4571,15 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
 
         if (
             hasEditableField &&
+            event?.repeatCount == 0 &&
+            SettingsManager.isQuickLauncherCtrlShortcut(this, keyCode, event) &&
+            launcherShortcutController.handleLauncherShortcut(keyCode)
+        ) {
+            return true
+        }
+
+        if (
+            hasEditableField &&
             (symTogglePendingOnKeyUp || event?.isSymPressed == true) &&
             SettingsManager.getPowerShortcutsEnabled(this) &&
             SettingsManager.getQuickLauncherTextFieldShortcuts(this) &&

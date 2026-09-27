@@ -12,9 +12,6 @@
     <string name="about_build_info">Physical keyboard based on Pastiera by Palsoftware (GPL-3.0)</string>
     <string name="notification_nav_mode_channel_name">Mutterboard Nav Mode</string>
     <string name="notification_nav_mode_channel_description">Powiadomienia dla trybu nav Mutterboard</string>
-    <string name="auto_correct_ricette_pastiera_name">Ricette Mutterboard</string>
-    <string name="tutorial_page_welcome_title">Witamy w Mutterboard</string>
-    <string name="tutorial_page_welcome_description">Mutterboard to zaawansowana metoda wprowadzania dla urządzeń Android z fizyczną klawiaturą PKB, obsługująca Nav Mode, skróty, własne mapowania klawiszy i wiele więcej.</string>
     <string name="tutorial_page_enable_title">Włącz Mutterboard</string>
     <string name="tutorial_page_enable_description">Aby rozpocząć, musisz włączyć Mutterboard jako metodę wprowadzania w Ustawieniach Androida. Naciśnij przycisk poniżej, aby otworzyć ustawienia.</string>
     <string name="tutorial_page_select_title">Wybierz Mutterboard</string>
@@ -33,10 +30,10 @@
     <string name="notification_update_channel_name">Aktualizacje Mutterboard</string>
     <string name="notification_update_channel_description">Powiadomienia o nowych wersjach Mutterboard</string>
     <string name="tutorial_page_software_keyboard_description">Wybierz, której powierzchni klawiatury ma tu używać Mutterboard.</string>
-    <string name="starter_launcher_shortcuts_title">Mutterboard-QuickLauncher</string>
+    <string name="starter_launcher_shortcuts_title">QuickLauncher</string>
     <string name="starter_launcher_shortcuts_intro">Te ustawienia współdzielą jedną listę przypisań aplikacji do klawiszy. Wybierz, gdzie Mutterboard ma nasłuchiwać tych przypisanych klawiszy.</string>
     <string name="quick_launcher_default_blocked_hint">Nowość: SYM może otwierać QuickLauncher. Mutterboard normalnie przypisałaby go do Spacji, ale Spacja ma już skrót. Otwórz stronę przypisań i wybierz „Otwórz QuickLauncher” na dowolnym klawiszu, aby spróbować.</string>
-    <string name="quick_launcher_title">Mutterboard-QuickLauncher</string>
+    <string name="quick_launcher_title">QuickLauncher</string>
     <string name="quick_launcher_respect_keyboard_layout_description">Gdy włączone, wpisywanie w wyszukiwarce używa bieżącego układu Mutterboard zamiast surowego wyjścia QWERTY Androida.</string>
     <string name="nav_mode_guide_text">Nav Mode zamienia klawisze liter w klawisze nawigacji i skrótów. Wynik może zależeć od aplikacji, bo niektóre aplikacje rozumieją akcje edytora Androida, a inne reagują tylko na prawdziwe skróty Ctrl.
 

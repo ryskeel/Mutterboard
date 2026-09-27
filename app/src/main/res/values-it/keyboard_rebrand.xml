@@ -10,10 +10,10 @@
     <string name="pastiera_not_selected">Mutterboard non è selezionata</string>
     <string name="auto_correct_manage_user_dict_description">Parole che Mutterboard deve conoscere e suggerire, senza creare regole di sostituzione.</string>
     <string name="about_build_info">Physical keyboard based on Pastiera by Palsoftware (GPL-3.0)</string>
-    <string name="starter_launcher_shortcuts_title">Mutterboard-QuickLauncher</string>
+    <string name="starter_launcher_shortcuts_title">QuickLauncher</string>
     <string name="starter_launcher_shortcuts_intro">Queste impostazioni condividono un unico elenco di assegnazioni app-tasto. Scegli dove Mutterboard deve ascoltare i tasti assegnati.</string>
     <string name="quick_launcher_default_blocked_hint">Novità: SYM può aprire il QuickLauncher. Mutterboard normalmente lo assegnerebbe a Spazio, ma Spazio ha già una scorciatoia. Apri la pagina delle assegnazioni e scegli “Apri QuickLauncher” su un tasto qualsiasi per provarlo.</string>
-    <string name="quick_launcher_title">Mutterboard-QuickLauncher</string>
+    <string name="quick_launcher_title">QuickLauncher</string>
     <string name="quick_launcher_respect_keyboard_layout_description">Se attivo, l\'input di ricerca segue il layout Mutterboard corrente invece dell\'output QWERTY grezzo di Android.</string>
     <string name="notification_nav_mode_channel_name">Mutterboard Nav Mode</string>
     <string name="notification_nav_mode_channel_description">Notifiche per il nav mode di Mutterboard</string>
@@ -53,9 +53,6 @@ Ogni tasto può essere configurato come Keycode, Azione, Native Ctrl o Nessuno. 
     <string name="app_enter_behaviour_strategy_whatsapp_newline_only">Testato: Mutterboard inserisce Invio direttamente come nuova riga e non attiva l\'invio.</string>
     <string name="app_enter_behaviour_strategy_discord_app_default_detail">Testato: Discord gestisce già correttamente Invio per inviare e Shift+Invio per nuova riga. Mutterboard non interviene qui.</string>
     <string name="app_enter_behaviour_strategy_experimental_detail">Non confermato: Mutterboard sta provando l\'azione di invio dell\'app e l\'inserimento diretto di nuove righe.</string>
-    <string name="auto_correct_ricette_pastiera_name">Ricette Mutterboard</string>
-    <string name="tutorial_page_welcome_title">Benvenuto in Mutterboard</string>
-    <string name="tutorial_page_welcome_description">Mutterboard è un metodo di input avanzato per dispositivi Android con tastiera fisica, con supporto per Nav Mode, scorciatoie, mappature personalizzate e altro ancora.</string>
     <string name="tutorial_page_enable_title">Abilita Mutterboard</string>
     <string name="tutorial_page_enable_description">Per iniziare, devi abilitare Mutterboard come metodo di input nelle Impostazioni Android. Tocca il pulsante qui sotto per aprire le impostazioni.</string>
     <string name="tutorial_page_select_title">Seleziona Mutterboard</string>
@@ -74,7 +71,6 @@ Ogni tasto può essere configurato come Keycode, Azione, Native Ctrl o Nessuno. 
     <string name="tutorial_selected_message">Mutterboard è selezionata!</string>
     <string name="restore_from_file_description">Importa un backup ZIP di Mutterboard</string>
     <string name="successor_dialog_title">Mutterboard ha un successore</string>
-    <string name="successor_dialog_message">Plektra succede a Mutterboard. %1$s è disponibile su GitHub.</string>
     <string name="trackpad_tutorial_shizuku_required_description">Questa funzionalità richiede Shizuku per accedere agli eventi del trackpad.\n\n1. Installa Shizuku dalle release di GitHub\n2. Abilita le opzioni sviluppatore nelle impostazioni Android\n3. Collega il dispositivo a un PC con ADB installato\n4. Esegui il comando che Shizuku mostra nella sua app\n5. Concedi il permesso a Mutterboard in Shizuku\n\nLa funzionalità funzionerà automaticamente una volta che Shizuku è in esecuzione.</string>
     <string name="tutorial_page_software_keyboard_description">Scegli quale superficie tastiera deve usare Mutterboard qui.</string>
     <string name="kw_main_keyboard_theme">tema, temi, colori, scuro, chiaro, preset, tastiera fisica, tastiera a schermo, Mutterboard Dark, Mutterboard Light, Cloud Tap, Moon Tap, Classic Cloud, Classic Midnight</string>

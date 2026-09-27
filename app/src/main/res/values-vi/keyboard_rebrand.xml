@@ -16,10 +16,6 @@
     <string name="notification_update_channel_description">Thông báo về các phiên bản Mutterboard mới</string>
     <string name="notification_successor_release_text">%1$s hiện có với vai trò kế nhiệm Mutterboard.</string>
     <string name="successor_dialog_title">Mutterboard có ứng dụng kế nhiệm</string>
-    <string name="successor_dialog_message">Plektra kế nhiệm Mutterboard. %1$s hiện có trên GitHub.</string>
-    <string name="auto_correct_ricette_pastiera_name">Ricette Mutterboard</string>
-    <string name="tutorial_page_welcome_title">Chào mừng đến với Mutterboard</string>
-    <string name="tutorial_page_welcome_description">Mutterboard là một phương thức nhập nâng cao cho thiết bị Android PKB, hỗ trợ Nav Mode, phím tắt, ánh xạ bàn phím tùy chỉnh và nhiều hơn nữa.</string>
     <string name="tutorial_page_enable_title">Bật Mutterboard</string>
     <string name="tutorial_page_enable_description">Để bắt đầu, bạn cần bật Mutterboard làm phương thức nhập trong Cài đặt Android. Nhấn nút bên dưới để mở cài đặt.</string>
     <string name="tutorial_page_select_title">Chọn Mutterboard</string>
@@ -36,10 +32,10 @@
     <string name="restore_from_file_description">Nhập tệp sao lưu ZIP của Mutterboard</string>
     <string name="trackpad_tutorial_shizuku_required_description">Tính năng này cần Shizuku để truy cập sự kiện trackpad.\n\n1. Cài Shizuku từ GitHub releases\n2. Bật tùy chọn nhà phát triển trong cài đặt Android\n3. Kết nối thiết bị với PC có cài ADB\n4. Chạy lệnh mà Shizuku hiển thị trong ứng dụng\n5. Cấp quyền cho Mutterboard trong Shizuku\n\nTính năng sẽ hoạt động tự động khi Shizuku đang chạy.</string>
     <string name="tutorial_page_software_keyboard_description">Chọn bề mặt bàn phím Mutterboard nên dùng ở đây.</string>
-    <string name="starter_launcher_shortcuts_title">Mutterboard-QuickLauncher</string>
+    <string name="starter_launcher_shortcuts_title">QuickLauncher</string>
     <string name="starter_launcher_shortcuts_intro">Các cài đặt này dùng chung một danh sách gán ứng dụng-vào-phím. Chọn nơi Mutterboard sẽ lắng nghe các phím đã gán đó.</string>
     <string name="quick_launcher_default_blocked_hint">Mới: SYM có thể mở QuickLauncher. Mutterboard thường sẽ gán nó cho Phím cách, nhưng Phím cách đã có phím tắt. Mở trang gán phím và chọn “Mở QuickLauncher” trên bất kỳ phím nào để thử.</string>
-    <string name="quick_launcher_title">Mutterboard-QuickLauncher</string>
+    <string name="quick_launcher_title">QuickLauncher</string>
     <string name="quick_launcher_respect_keyboard_layout_description">Khi bật, nội dung tìm kiếm theo bố cục Mutterboard hiện tại thay vì đầu ra QWERTY thô của Android.</string>
     <string name="nav_mode_guide_text">Nav Mode biến các phím chữ thành phím điều hướng và phím tắt. Kết quả có thể khác nhau theo ứng dụng, vì một số ứng dụng hiểu hành động trình soạn thảo Android, còn ứng dụng khác chỉ phản hồi phím tắt Ctrl thật.
 

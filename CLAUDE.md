@@ -331,6 +331,19 @@ including its bar and its Titan 2 Elite corners.
 - **Its strings are rebranded from the app**, generated per locale by
   `scripts/rebrand-keyboard-strings.py`; rerun it after picking nightly changes.
   The About line keeps the Pastiera credit on purpose.
+  Where Pastiera put its name on a feature, the feature gets no name at all
+  ("QuickLauncher", not "Mutterboard QuickLauncher"): Ry finds stamping our
+  brand on Pastiera's work sleazy. The app names itself only where a sentence
+  is about what the app does, and strings about Pastiera's releases and
+  Plektra keep Pastiera's name, because "Mutterboard continues as Plektra" is
+  false. The script's GENERIC and ABOUT_PASTIERA rules carry this; extend them
+  rather than hand-editing the output.
+- **Fn+Space opens the QuickLauncher** (a switch under Launcher Shortcuts,
+  off by default). The Titan 2 Elite's Fn key reaches the keyboard as Left
+  Ctrl, so this is Ctrl plus the QuickLauncher key, caught ahead of Ctrl's own
+  shortcuts and of nav mode. It takes Ctrl+Space from Android's keyboard
+  layout switch, which is why it is a switch. Upstream only ever offered SYM
+  or Alt, because it expects Fn to be set up as Ctrl.
 
 ## Autocorrect (2026-09-25 to 2026-09-26, done)
 

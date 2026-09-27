@@ -12,12 +12,8 @@
     <string name="notification_update_channel_description">Ծանուցումներ Mutterboard-ի նոր տարբերակների մասին</string>
     <string name="notification_successor_release_text">%1$s-ը հասանելի է որպես Mutterboard-ի հաջորդ։</string>
     <string name="successor_dialog_title">Mutterboard-ն ունի հաջորդ</string>
-    <string name="successor_dialog_message">Plektra-ն հաջորդում է Mutterboard-ին։ %1$s-ը հասանելի է GitHub-ում։</string>
     <string name="keyboard_title">Mutterboard</string>
     <string name="about_build_info">Physical keyboard based on Pastiera by Palsoftware (GPL-3.0)</string>
-    <string name="auto_correct_ricette_pastiera_name">Ricette Mutterboard</string>
-    <string name="tutorial_page_welcome_title">Welcome to Mutterboard</string>
-    <string name="tutorial_page_welcome_description">Mutterboard is an advanced input method for PKB Android devices with support for Nav Mode, shortcuts, custom keyboard mappings, and more.</string>
     <string name="tutorial_page_enable_title">Enable Mutterboard</string>
     <string name="tutorial_page_enable_description">To get started, you need to enable Mutterboard as an input method in Android Settings. Tap the button below to open settings.</string>
     <string name="tutorial_page_select_title">Select Mutterboard</string>
@@ -33,10 +29,10 @@
     <string name="tutorial_selected_message">Mutterboard is selected!</string>
     <string name="trackpad_tutorial_shizuku_required_description">This feature requires Shizuku to access trackpad events.\n\n1. Install Shizuku from GitHub releases\n2. Enable developer options in Android settings\n3. Plug your device into a PC with ADB installed\n4. Run the command that Shizuku shows in its app\n5. Grant permission to Mutterboard in Shizuku\n\nThe feature will work automatically once Shizuku is running.</string>
     <string name="tutorial_page_software_keyboard_description">Ընտրեք, թե Mutterboard-ն այստեղ որ ստեղնաշարի մակերեսը օգտագործի։</string>
-    <string name="starter_launcher_shortcuts_title">Mutterboard-QuickLauncher</string>
+    <string name="starter_launcher_shortcuts_title">QuickLauncher</string>
     <string name="starter_launcher_shortcuts_intro">Այս կարգավորումները կիսում են հավելված-ստեղն նշանակումների մեկ ցուցակ։ Ընտրեք, թե Mutterboard-ն որտեղ պետք է լսի այդ նշանակված ստեղները։</string>
     <string name="quick_launcher_default_blocked_hint">Նոր․ SYM-ը կարող է բացել QuickLauncher-ը։ Mutterboard-ն սովորաբար այն կնշանակեր Space-ին, բայց Space-ն արդեն դյուրանցում ունի։ Բացեք նշանակումների էջը և ցանկացած ստեղնի վրա ընտրեք «Բացել QuickLauncher»-ը՝ փորձելու համար։</string>
-    <string name="quick_launcher_title">Mutterboard-QuickLauncher</string>
+    <string name="quick_launcher_title">QuickLauncher</string>
     <string name="quick_launcher_respect_keyboard_layout_description">Միացված լինելու դեպքում որոնման մուտքագրումը հետևում է ընթացիկ Mutterboard դասավորությանը՝ Android-ի հում QWERTY ելքի փոխարեն։</string>
     <string name="nav_mode_guide_text">Nav Mode-ը տառային ստեղները վերածում է նավիգացիայի և դյուրանցումների ստեղների։ Արդյունքը կարող է տարբերվել ըստ հավելվածի, քանի որ որոշ հավելվածներ հասկանում են Android խմբագրիչի գործողությունները, իսկ մյուսները արձագանքում են միայն իրական Ctrl դյուրանցումներին։
 

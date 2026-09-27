@@ -369,8 +369,9 @@ class QuickLauncherActivity : LocalizedComponentActivity() {
     }
 
     private fun isSymQuickLauncherToggle(keyCode: Int, event: KeyEvent?): Boolean {
-        return SettingsManager.isQuickLauncherShortcut(this, keyCode) &&
-            event?.isSymPressed == true
+        return (SettingsManager.isQuickLauncherShortcut(this, keyCode) &&
+            event?.isSymPressed == true) ||
+            SettingsManager.isQuickLauncherCtrlShortcut(this, keyCode, event)
     }
 
     private fun updateCommandCustomization(customization: SettingsManager.QuickLauncherCommandCustomization) {

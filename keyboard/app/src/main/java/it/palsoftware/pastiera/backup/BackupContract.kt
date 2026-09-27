@@ -328,6 +328,7 @@ internal object BackupPreferenceContract {
             "quick_launcher_text_field_shortcuts" to PreferenceValueType.BOOLEAN,
             "quick_launcher_alt_space_in_text_fields" to PreferenceValueType.BOOLEAN,
             "quick_launcher_alt_shortcuts_outside_text_fields" to PreferenceValueType.BOOLEAN,
+            "quick_launcher_ctrl_shortcut" to PreferenceValueType.BOOLEAN,
             "quick_launcher_respect_keyboard_layout" to PreferenceValueType.BOOLEAN,
             "quick_launcher_typo_tolerant_ranking" to PreferenceValueType.BOOLEAN,
             "quick_launcher_width_percent" to PreferenceValueType.INT,

@@ -853,6 +853,8 @@
     <string name="power_shortcuts_description">Use SYM with assigned keys to launch apps and actions.</string>
     <string name="alt_key_shortcuts_title">Alt Key Shortcuts</string>
     <string name="alt_key_shortcuts_description">Use Alt with assigned keys to launch apps and actions.</string>
+    <string name="ctrl_quick_launcher_title">Fn / Ctrl opens QuickLauncher</string>
+    <string name="ctrl_quick_launcher_description">Hold Fn (Ctrl) and press the QuickLauncher key, like SYM. Takes Ctrl+Space from Android\'s keyboard layout switch.</string>
     <string name="alt_key_shortcuts_modifier_link_description">Configure Alt shortcuts and text-field access.</string>
     <string name="key_shortcuts_allow_in_text_fields_title">Allow in text fields</string>
     <string name="sym_shortcuts_in_text_fields_description">Also use assigned SYM shortcuts while typing.</string>

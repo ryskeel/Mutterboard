@@ -32,6 +32,34 @@ REPLACEMENTS = [
     (re.compile(NOT_A_LINK + r"Pastiera(?!\.eu)", re.I), "Mutterboard"),
 ]
 
+# Where Pastiera put its name on a feature, the feature gets no name at all.
+# "Mutterboard QuickLauncher" stamps our name on someone else's work; it is
+# just the QuickLauncher. The app still names itself where a sentence is about
+# what the app does ("Mutterboard inserts newlines"), since that is its name.
+# Run before REPLACEMENTS. The hyphenated QuickLauncher is the same in every
+# language; the rest is English wording, so it only runs on values/.
+GENERIC_ALL = [
+    (re.compile(r"Pastiera[- ](QuickLauncher)"), r"\1"),
+]
+GENERIC_EN = [
+    (re.compile(r"(^|\. )Pastiera[’']s "), r"\1The keyboard’s "),
+    (re.compile(r"\bPastiera([’'])s "), r"the keyboard\1s "),
+    (re.compile(r"\bPastiera (Nav Mode|nav mode|Clicks button)"), r"\1"),
+    (re.compile(r"\bPastiera-side\b"), "Keyboard-side"),
+    (re.compile(r"^Pastiera (function|shortcut)"), r"Keyboard \1"),
+    (re.compile(r"\b(the|required) Pastiera (emoji picker|settings|shortcut)"), r"\1 \2"),
+    (re.compile(r"\bPastiera search\b"), "QuickLauncher search"),
+    (re.compile(r"\bfalls back to Pastiera\b"), "falls back to QuickLauncher"),
+    (re.compile(r"\bOpen Pastiera docs\b"), "Open the docs"),
+    (re.compile(r"\bPastiera (function|statusbar|layout|backups?|actions|overrides)\b"), r"keyboard \1"),
+]
+# Left in Pastiera's own words: an Italian recipe dictionary named after the
+# cake, which "Ricette Mutterboard" would turn into nonsense.
+KEEP = {"auto_correct_ricette_pastiera_name"}
+# Also left alone: anything about Pastiera's releases, its successor or its
+# security updates. "Mutterboard continues as Plektra" is not true.
+ABOUT_PASTIERA = re.compile(r"Plektra|Pastiera \d|Nightl|security update", re.I)
+
 # The one place Pastiera keeps its name: the credit GPL asks for, on the About
 # screen, where a rename would claim Palsoftware wrote Mutterboard.
 CREDIT = {"about_build_info": "Physical keyboard based on Pastiera by Palsoftware (GPL-3.0)"}
@@ -56,10 +84,16 @@ def main() -> None:
         # that must come across byte-for-byte.
         for m in re.finditer(r'<string name="([^"]+)"([^>]*)>(.*?)</string>', raw, re.S):
             name, attrs, value = m.groups()
-            if name in own or not re.search("pastiera", value, re.I):
+            if (
+                name in own
+                or name in KEEP
+                or ABOUT_PASTIERA.search(value)
+                or not re.search("pastiera", value, re.I)
+            ):
                 continue
             renamed = value
-            for pattern, repl in REPLACEMENTS:
+            generic = GENERIC_ALL + (GENERIC_EN if qualifier == "values" else [])
+            for pattern, repl in generic + REPLACEMENTS:
                 renamed = pattern.sub(repl, renamed)
             renamed = CREDIT.get(name, renamed)
             if renamed == value:
