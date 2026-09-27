@@ -378,8 +378,11 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   the word before at the space bar, then again once the next word is typed
   (`reconsiderContraction`), which only ever takes back an apostrophe the
   keyboard added. Before a comma or full stop the bare word stands ("Well,").
-  `ContractionScorecardTest` measures it: 88.4% -> 97.5% on held-out text,
-  we're 0 -> 94%. "hell" -> "he'll" is left out on purpose: Tatoeba is tame
+  `ContractionScorecardTest` measures it: 88.4% -> 97.7% on held-out text,
+  plus Ry's own sentences from the phone. When the contraction's next-word
+  pair was too rare to keep ("we'll want"), the late check borrows it from
+  the family ("will want", `BigramModel.contractionFamily`), for 'll and 's
+  only: pooling 're with "are" measured worse. "hell" -> "he'll" is left out on purpose: Tatoeba is tame
   and would turn "hell yeah" into "he'll yeah".
 - **A dropped first letter is cheap, two-letter words are allowed** (stricter
   bar). Ry types "ight", "imes", "cn"; neither kind was ever fixed before. Both

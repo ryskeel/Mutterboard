@@ -47,21 +47,50 @@ class ContractionScorecardTest {
                 val contraction = AMBIGUOUS.getValue(c.bare)
                 if (l(c.before, c.bare) > l(c.before, contraction)) c.bare else contraction
             },
-            // What ships for were/well/its/...: the space bar's call, taken
-            // again once the next word is typed (AutoReplaceController.
-            // reconsiderContraction). At the end of a sentence there is no
-            // next word and the first call stands.
+            // The space bar's call, taken again once the next word is typed.
+            // At the end of a sentence there is no next word and the first
+            // call stands. Shipped first; the pooled version below replaced it.
             "then one word late" to { c ->
                 val contraction = AMBIGUOUS.getValue(c.bare)
                 fun fit(w: String) = l(c.before, w) * (c.after?.let { l(w, it) } ?: 1.0)
                 if (fit(c.bare) >= fit(contraction)) c.bare else contraction
             },
+            "late, family on the right" to { c ->
+                val contraction = AMBIGUOUS.getValue(c.bare)
+                val fam = family(contraction)
+                fun right(w: String) = c.after?.let { a -> if (w == contraction) bigrams.pooledLikelihood(fam, a) else l(w, a) } ?: 1.0
+                if (l(c.before, c.bare) * right(c.bare) >= l(c.before, contraction) * right(contraction)) c.bare else contraction
+            },
+            "late, family when unseen" to { c ->
+                val contraction = AMBIGUOUS.getValue(c.bare)
+                val fam = family(contraction)
+                fun right(w: String) = c.after?.let { a ->
+                    if (w == contraction && bigrams.pairCount(w, a) == 0) bigrams.pooledLikelihood(fam, a) else l(w, a)
+                } ?: 1.0
+                if (l(c.before, c.bare) * right(c.bare) >= l(c.before, contraction) * right(contraction)) c.bare else contraction
+            },
+            // What ships (AutoReplaceController.reconsiderContraction).
+            "late, family when unseen, 'll 's" to { c ->
+                val contraction = AMBIGUOUS.getValue(c.bare)
+                val fam = BigramModel.contractionFamily(contraction)
+                fun right(w: String) = c.after?.let { a ->
+                    if (fam != null && w == contraction && bigrams.pairCount(w, a) == 0) bigrams.pooledLikelihood(fam, a) else l(w, a)
+                } ?: 1.0
+                if (l(c.before, c.bare) * right(c.bare) >= l(c.before, contraction) * right(contraction)) c.bare else contraction
+            },
         )
 
+        // Typed by Ry on the phone, 2026-09-27: what he meant.
+        val his = listOf(
+            Case(null, "than", "well", "want", "we'll"), Case(null, "ticket", "well", "be", "we'll"),
+            Case(null, "else", "well", "be", "we'll"), Case(null, null, "well", "want", "we'll"),
+            Case(null, null, "well", "go", "we'll"), Case(null, null, "were", "you", "were"),
+        )
         val out = StringBuilder("Contractions typed without the apostrophe (${cases.size} cases in held-out text)\n\n")
         for ((name, decide) in deciders) {
             val right = cases.count { decide(it).equals(it.written, ignoreCase = true) }
-            out.append("%-28s %5.1f%% right\n".format(name, right * 100.0 / cases.size))
+            out.append("%-34s %5.1f%% right   Ry's sentences %d/%d\n".format(name, right * 100.0 / cases.size,
+                his.count { decide(it).equals(it.written, ignoreCase = true) }, his.size))
             for ((bare, group) in cases.groupBy { it.bare }.toSortedMap()) {
                 val contraction = AMBIGUOUS.getValue(bare)
                 val asBare = group.filter { it.written == bare }
@@ -85,5 +114,14 @@ class ContractionScorecardTest {
             "id" to "I'd", "hell" to "he'll", "cant" to "can't", "wont" to "won't",
         )
         val NO_RULE_TODAY = setOf("were", "well", "hell")
+
+        /** Contractions that behave alike after them, with the word they stand for. */
+        fun family(contraction: String): List<String> = when (contraction.substringAfter('\'').lowercase()) {
+            "ll" -> listOf("I'll", "you'll", "he'll", "she'll", "it'll", "we'll", "they'll", "that'll", "will")
+            "re" -> listOf("you're", "we're", "they're", "are")
+            "d" -> listOf("I'd", "you'd", "he'd", "she'd", "we'd", "they'd", "would")
+            "s" -> if (contraction.lowercase() == "let's") listOf("let's") else listOf("it's", "he's", "she's", "that's", "there's", "what's", "is")
+            else -> listOf(contraction)
+        }
     }
 }

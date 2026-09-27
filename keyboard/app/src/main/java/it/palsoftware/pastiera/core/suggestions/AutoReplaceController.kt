@@ -297,7 +297,12 @@ class AutoReplaceController(
         if (bare.lowercase() in rejectedWords || isUserWord(bare)) return false
         val trimmed = lead.trimEnd()
         val previous = if (trimmed.isEmpty() || trimmed.last() in ".!?\n") null else PREVIOUS_WORD.find(trimmed)?.value
-        fun fit(word: String) = table.likelihood(previous, word) * table.likelihood(word, last)
+        fun after(word: String): Double {
+            val family = if (word == contraction) BigramModel.contractionFamily(word) else null
+            return if (family != null && table.pairCount(word, last) == 0) table.pooledLikelihood(family, last)
+                else table.likelihood(word, last)
+        }
+        fun fit(word: String) = table.likelihood(previous, word) * after(word)
         val choice = if (fit(bare) >= fit(contraction)) bare else contraction
         if (choice.equals(middle, ignoreCase = true)) return false
         val replacement = applyCasing(choice, middle)

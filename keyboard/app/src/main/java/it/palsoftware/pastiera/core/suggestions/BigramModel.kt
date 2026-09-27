@@ -95,6 +95,31 @@ class BigramModel private constructor(
         return (pair + SMOOTHING * overall) / (context.total + SMOOTHING)
     }
 
+    /**
+     * [likelihood] of [word] after any of [previous], as one pooled context:
+     * the counts of every context added together. For a pair too rare to
+     * have been kept ("we'll want"), the family it belongs to still knows
+     * ("will want", "you'll want").
+     */
+    fun pooledLikelihood(previous: List<String>, word: String): Double {
+        val id = ids[WordNormalization.normalizeApostrophes(word).lowercase(Locale.ROOT)]
+        val overall = ((id?.let { unigrams[it] } ?: 0) + 0.5) / totalTokens
+        var pair = 0L
+        var total = 0L
+        for (p in previous) {
+            val context = contexts[key(p)] ?: continue
+            pair += id?.let { context.count(it) } ?: 0
+            total += context.total
+        }
+        return (pair + SMOOTHING * overall) / (total + SMOOTHING)
+    }
+
+    /** Times [word] was seen right after [previous] (pairs seen under three times were pruned). */
+    fun pairCount(previous: String?, word: String): Int {
+        val id = ids[WordNormalization.normalizeApostrophes(word).lowercase(Locale.ROOT)] ?: return 0
+        return contexts[key(previous)]?.count(id) ?: 0
+    }
+
     /** How often [word] appears in everyday English overall, 0 if never seen. */
     fun unigramProbability(word: String): Double {
         val id = ids[WordNormalization.normalizeApostrophes(word).lowercase(Locale.ROOT)] ?: return 0.0
@@ -106,6 +131,24 @@ class BigramModel private constructor(
         const val SENTENCE_START = "<s>"
         private const val TAG = "BigramModel"
         private const val ASSET = "common/dictionaries/en_bigrams.tsv"
+
+        /**
+         * The words a contraction's next word can be borrowed from when its
+         * own pair was too rare to keep: "we'll want" was never seen, "will
+         * want" and "you'll want" were. Only "'ll" and "'s": pooling "'re"
+         * with "are" and "'d" with "would" measured worse
+         * (ContractionScorecardTest), because those stand-ins are looser.
+         * Null when the contraction has no family worth borrowing from.
+         */
+        fun contractionFamily(contraction: String): List<String>? {
+            val lower = WordNormalization.normalizeApostrophes(contraction).lowercase(Locale.ROOT)
+            return when {
+                lower == "let's" -> null
+                lower.endsWith("'ll") -> listOf("I'll", "you'll", "he'll", "she'll", "it'll", "we'll", "they'll", "that'll", "will")
+                lower.endsWith("'s") -> listOf("it's", "he's", "she's", "that's", "there's", "what's", "is")
+                else -> null
+            }
+        }
 
         private fun key(previous: String?): String =
             previous?.let { WordNormalization.normalizeApostrophes(it).lowercase(Locale.ROOT) } ?: SENTENCE_START
