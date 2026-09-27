@@ -51,12 +51,10 @@ class AutocorrectScorecardTest {
         val repository = englishRepository(context)
         val cases = handWritten + generateTypos(loadEnglish(), repository)
         val lines = StringBuilder("fixed%/wrong%\n")
-        for (fpl in listOf(20.0))
-        for (thr in listOf(5.0))
-        for (dropped in listOf(0.0, 0.5, 1.0, 1.5, 2.0))
-        for (two in listOf(4.0, 5.0, 6.0, 99.0)) {
-            val model = TypoModel(repository, Locale.ENGLISH, TypoModel.Tuning(
-                firstLetterDropped = dropped, twoLetterThreshold = two))
+        for (maxCost in listOf(7.0))
+        for (thr in listOf(3.25, 3.0, 2.75))
+        for (first in listOf(2.0, 1.5, 1.0)) {
+            val model = TypoModel(repository, Locale.ENGLISH, TypoModel.Tuning(maxCost = maxCost, firstLetterLong = first, threshold = thr))
             fun rate(subset: List<Case>): String {
                 var fixed = 0; var wrong = 0
                 for (c in subset) {
@@ -66,9 +64,11 @@ class AutocorrectScorecardTest {
                 return "%3d%%/%2d%%".format(fixed * 100 / subset.size.coerceAtLeast(1), wrong * 100 / subset.size.coerceAtLeast(1))
             }
             val changed = leaveAlone.filter { w -> !repository.isKnownWord(w) && model.correct(w) != null }
-            lines.append("dropped %.1f twoThr %4.1f | all %s  first %s  2-letter %s  changed %d %s\n".format(
-                dropped, two, rate(cases), rate(cases.filter { it.kind == "dropped first" }),
-                rate(cases.filter { it.typed.length == 2 }), changed.size, changed.joinToString(",")))
+            val single = cases.filter { it.kind != "two keys" && it.kind != "first key" }
+            lines.append("thr %.2f firstLong %.1f | single %s  dropped letter %s  first key %s  two keys %s  hand %s  changed %d %s\n".format(
+                thr, first, rate(single), rate(cases.filter { it.kind == "dropped letter" }), rate(cases.filter { it.kind == "first key" }),
+                rate(cases.filter { it.kind == "two keys" }), rate(cases.filter { it.kind == "hand" }),
+                changed.size, changed.joinToString(",")))
         }
         File("build/autocorrect-sweep.txt").writeText(lines.toString())
     }
@@ -185,6 +185,8 @@ class AutocorrectScorecardTest {
                 TypoGenerator.swappedPair(word, random)?.let { Case(it, word, "swapped pair") },
                 TypoGenerator.doubleLetter(word, random)?.let { Case(it, word, "double letter") },
                 TypoGenerator.droppedFirstLetter(word, random)?.let { Case(it, word, "dropped first") },
+                TypoGenerator.firstLetterNeighbour(word, random)?.let { Case(it, word, "first key") },
+                TypoGenerator.twoNeighbours(word, random)?.let { Case(it, word, "two keys") },
             )
             out += candidates.filter { !repository.isKnownWord(it.typed) }
         }
@@ -193,6 +195,10 @@ class AutocorrectScorecardTest {
 
     private val handWritten = listOf(
         Case("quyick", "quick", "hand"),
+        // Typed fast on the Titan by Ry, 2026-09-27, and missed.
+        Case("jsve", "have", "hand"),
+        Case("opsge", "page", "hand"),
+        Case("aoge", "page", "hand"),
         Case("teh", "the", "hand"),
         Case("becuase", "because", "hand"),
         Case("recieve", "receive", "hand"),

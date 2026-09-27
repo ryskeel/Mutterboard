@@ -120,7 +120,7 @@ class SuggestionController(
                     dictionaryRepository,
                     currentLocale,
                     { BigramModel.shared(appContext.assets) },
-                    TypoModel(dictionaryRepository, currentLocale) { BigramModel.shared(appContext.assets) }
+                    TypoModel(dictionaryRepository, currentLocale, RealWordFixer.SLIP_TUNING) { BigramModel.shared(appContext.assets) }
                 )
             } else {
                 null

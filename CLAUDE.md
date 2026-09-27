@@ -384,6 +384,14 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   the family ("will want", `BigramModel.contractionFamily`), for 'll and 's
   only: pooling 're with "are" measured worse. "hell" -> "he'll" is left out on purpose: Tatoeba is tame
   and would turn "hell yeah" into "he'll yeah".
+- **Two slips in one word are measured too** (2026-09-27): the scorecard's
+  "first key" and "two keys" kinds, plus Ry's own misses ("jsve", "opsge").
+  A wrong first letter costs 1.0 instead of 2.0 on typed words of four
+  letters or more, an extra key before the first is not charged twice, and
+  the threshold is 3.0: first-key slips 68% -> 87%, two-key 35% -> 46%, no
+  change on single slips. Short words keep the old costs (two-letter words
+  got worse), and so does `RealWordFixer` (`SLIP_TUNING`), which otherwise
+  changed more clean words.
 - **A dropped first letter is cheap, two-letter words are allowed** (stricter
   bar). Ry types "ight", "imes", "cn"; neither kind was ever fixed before. Both
   are too ambiguous to fix well without the previous word, so judge them on the
