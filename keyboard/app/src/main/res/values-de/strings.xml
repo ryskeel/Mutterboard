@@ -910,6 +910,8 @@ Jede Taste kann als Keycode, Aktion, Native Ctrl oder Keine konfiguriert werden.
     <string name="clipboard_unpin">Loslösen</string>
     <string name="clipboard_delete">Löschen</string>
     <string name="clipboard_retention_apply">Anwenden</string>
+    <string name="experimental_candidates_view_title">Experimentelle Kandidatenansicht</string>
+    <string name="experimental_candidates_view_description">Verwendet einen alternativen Android-Anzeigeweg für die Hardware-Tastatur. Kann Darstellungsprobleme verursachen.</string>
     <string name="clipboard_retention_time_title">Aufbewahrungszeit der Zwischenablage</string>
     <string name="clipboard_retention_time_description">0 = nie löschen</string>
     <string name="clipboard_retention_time_minutes">%1$d Minuten</string>

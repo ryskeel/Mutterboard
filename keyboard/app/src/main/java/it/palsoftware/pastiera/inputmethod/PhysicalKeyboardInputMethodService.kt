@@ -34,6 +34,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.Toast
+import it.palsoftware.pastiera.BuildConfig
 import it.palsoftware.pastiera.R
 import it.palsoftware.pastiera.inputmethod.NotificationHelper
 import it.palsoftware.pastiera.core.AutoCorrectionManager
@@ -868,8 +869,8 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
         if (override != null && override != SettingsManager.ENTER_BEHAVIOR_APP_DEFAULT) {
             return override
         }
-
         if (packageName !in MESSENGER_ENTER_BEHAVIOR_PACKAGES) return null
+
         return when (SettingsManager.getAppEnterBehaviorPreset(this)) {
             SettingsManager.ENTER_BEHAVIOR_PRESET_ENTER_SEND_SHIFT_NEWLINE ->
                 if (packageName == DISCORD_PACKAGE_NAME) {
@@ -2082,19 +2083,19 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
                     else -> KeyboardVisibilityController.RenderedSurface.HIDDEN
                 }
             },
-            requiresCandidatesSurfaceRecovery = {
-                CompatibilityWorkarounds.requiresCandidatesSurfaceRecovery(currentPackageName)
-            },
             setRequestedInputViewShown = { shown -> requestedInputViewShown = shown },
             attachInputView = { view -> setInputView(view) },
+            attachCandidatesView = { view -> setCandidatesView(view) },
             setCandidatesSurfaceActive = candidatesBarController::setCandidatesSurfaceActive,
             setCandidatesViewShown = { shown -> setCandidatesViewShown(shown) },
             synchronizeCandidatesContainerVisibility = ::synchronizeCandidatesContainerVisibility,
             postToUi = { action -> uiHandler.post(action) },
             postToUiDelayed = { delayMs, action -> uiHandler.postDelayed(action, delayMs) },
             showInputWindow = { showInput -> showWindow(showInput) },
+            hideInputWindow = { hideWindow() },
             requestHideInputView = { requestHideSelf(0) },
             requestShowInputView = ::requestKeyboardInputView,
+            trace = ::traceImeVisibility,
             refreshStatusBar = {
                 invalidateRenderedStatusSnapshot()
                 refreshStatusBar()
@@ -2298,6 +2299,7 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
                     candidatesBarController.refreshWindowInsets()
                 }
             } else if (
+                key == "experimental_candidates_view_enabled" ||
                 key == "software_keyboard_mode" ||
                 key == SettingsManager.KEY_SOFTWARE_KEYBOARD_MODE_RUNTIME_OVERRIDE
             ) {
@@ -2855,8 +2857,10 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
 
     override fun onStartCandidatesView(info: EditorInfo?, restarting: Boolean) {
         super.onStartCandidatesView(info, restarting)
+        isInputViewActive = inputContextState.isEditable
         keyboardVisibilityController.onCandidatesViewStarted()
         updateStatusBarText()
+        traceImeVisibility("onStartCandidatesView restarting=$restarting")
     }
 
     override fun onFinishCandidatesView(finishingInput: Boolean) {
@@ -2865,10 +2869,8 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
     }
 
     /**
-     * Determines whether the input view (soft keyboard) should be shown.
-     * Respects the system flag (e.g. "Mostra tastiera virtuale" off for tastiere fisiche):
-     * when the system asks for candidate-only mode we hide the main status UI and
-     * expose the slim candidates view (LED strip + SYM layout on demand).
+     * The standard backend uses the input view for both compact hardware UI and software keys.
+     * Only the experimental hardware backend uses Android's separate candidates lifecycle.
      */
     override fun onEvaluateInputViewShown(): Boolean {
         val systemShouldShowInputView = super.onEvaluateInputViewShown()
@@ -2883,25 +2885,32 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
         if (::keyboardVisibilityController.isInitialized) {
             keyboardVisibilityController.onExplicitShowRequested()
         }
-        return accepted
+        traceImeVisibility("onShowInputRequested accepted=$accepted flags=$flags")
+        return !keyboardVisibilityController.usesCandidatesView()
     }
 
     override fun onComputeInsets(outInsets: InputMethodService.Insets?) {
         super.onComputeInsets(outInsets)
-        outInsets?.let {
-            val decorView = window?.window?.decorView
-            ImeInsetsPolicy.applyCandidatesOnlyContentInsets(
-                insets = it,
-                candidatesOnly = !isFullscreenMode &&
-                    if (::keyboardVisibilityController.isInitialized) {
-                        keyboardVisibilityController.isCandidatesOnlySurface()
-                    } else {
-                        !requestedInputViewShown
-                    },
-                touchableWidth = decorView?.width ?: 0,
-                touchableHeight = decorView?.height ?: 0
+        val decor = window?.window?.decorView ?: return
+        outInsets ?: return
+        if (!isFullscreenMode && ::candidatesBarController.isInitialized) {
+            // Content and touch geometry come from the same attached, visible child. Neither
+            // a requested surface nor Android's cached candidates-started flag is sufficient.
+            ImeInsetsPolicy.applyRenderedContentInsets(
+                outInsets,
+                candidatesBarController.visibleBoundsInWindow(),
+                decor.height
             )
         }
+    }
+
+    private fun traceImeVisibility(event: String) {
+        if (!BuildConfig.DEBUG) return
+        val bounds = if (::candidatesBarController.isInitialized) {
+            candidatesBarController.visibleBoundsInWindow()
+        } else null
+        Log.i("PastieraImeVisibility", "$event editor=$currentPackageName active=$isInputViewActive " +
+            "inputShown=$isInputViewShown requestedInput=$requestedInputViewShown bounds=$bounds")
     }
 
     private fun synchronizeCandidatesContainerVisibility() {
@@ -3337,7 +3346,23 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
     }
     
 
+    override fun onUnbindInput() {
+        pendingKeyboardSurfaceTransition?.let(uiHandler::removeCallbacks)
+        pendingKeyboardSurfaceTransition = null
+        isInputViewActive = false
+        if (::keyboardVisibilityController.isInitialized) keyboardVisibilityController.onInputUnbound()
+        traceImeVisibility("onUnbindInput")
+        super.onUnbindInput()
+    }
+
+    override fun onBindInput() {
+        super.onBindInput()
+        traceImeVisibility("onBindInput")
+    }
+
     override fun onStartInput(info: EditorInfo?, restarting: Boolean) {
+        pendingKeyboardSurfaceTransition?.let(uiHandler::removeCallbacks)
+        pendingKeyboardSurfaceTransition = null
         super.onStartInput(info, restarting)
         if (::textExpansionController.isInitialized) textExpansionController.clear()
         if (
@@ -3367,6 +3392,7 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
         val isReallyEditable = state.isReallyEditable
         isInputViewActive = isEditable
         keyboardVisibilityController.onInputStarted(restarting)
+        traceImeVisibility("onStartInput restarting=$restarting")
         
         if (restarting) {
             enforceSmartFeatureDisabledState()
@@ -3381,7 +3407,7 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
                 autoShowKeyboardEnabled = SettingsManager.getAutoShowKeyboard(this)
             )
             if (
-                shouldShowSurface && !isInputViewShown &&
+                shouldShowSurface &&
                 // Mutterboard: see mutterboard/HomeScreen.
                 !it.palsoftware.pastiera.inputmethod.mutterboard.HomeScreen.isHomeApp(this, info?.packageName)
             ) {
@@ -3444,6 +3470,8 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
         attachTrackpadDecorViewMotionHook("onStartInputView")
 
         updateInputContextState(info)
+        isInputViewActive = inputContextState.isEditable
+        traceImeVisibility("onStartInputView restarting=$restarting")
         initializeInputContext(restarting)
         suggestionController.onContextReset()
         
@@ -3506,6 +3534,8 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
     }
 
     override fun onFinishInput() {
+        pendingKeyboardSurfaceTransition?.let(uiHandler::removeCallbacks)
+        pendingKeyboardSurfaceTransition = null
         super.onFinishInput()
         if (::textExpansionController.isInitialized) textExpansionController.clear()
         keyboardVisibilityController.cancelPendingSurfaceTransition()
@@ -3531,7 +3561,9 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
         if (::textExpansionController.isInitialized) textExpansionController.clear()
-        isInputViewActive = false
+        // Finishing a view does not finish the editor session (Back and backend transitions).
+        isInputViewActive = !finishingInput && inputContextState.isEditable
+        traceImeVisibility("onFinishInputView finishing=$finishingInput")
         if (::candidatesBarController.isInitialized) {
             candidatesBarController.resetSuggestionActionMode()
         }
@@ -4024,6 +4056,8 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
     }
     
     override fun onWindowHidden() {
+        pendingKeyboardSurfaceTransition?.let(uiHandler::removeCallbacks)
+        pendingKeyboardSurfaceTransition = null
         super.onWindowHidden()
         externalDictation.onHidden()
         if (::candidatesBarController.isInitialized) {
@@ -4589,6 +4623,10 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
                     return true
                 }
             }
+            // A user dismissal wins over an in-flight backend switch or queued recovery.
+            pendingKeyboardSurfaceTransition?.let(uiHandler::removeCallbacks)
+            pendingKeyboardSurfaceTransition = null
+            keyboardVisibilityController.cancelPendingSurfaceTransition()
         }
 
         val navModeBefore = navModeController.isNavModeActive()
