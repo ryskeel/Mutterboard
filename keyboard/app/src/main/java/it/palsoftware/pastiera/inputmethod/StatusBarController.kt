@@ -463,8 +463,6 @@ class StatusBarController(
             chrome.bottomFillColors = activeColors.background to activeColors.background
             chrome.expandedCloseColor = activeColors.background
             chrome.expandedKeyHeightPx = hardwareSymKeyHeightPx(activeColors)
-            chrome.pillRimColor = activeColors.divider
-            chrome.pillBackdropColor = activeColors.specialKey
             chrome.invalidate()
         }
         emojiKeyboardContainer?.setBackgroundColor(activeColors.background)
@@ -670,31 +668,11 @@ class StatusBarController(
                             null
                         }
                     ledStatusView.bottomCornerRadiiPx = (view as? ImeChromeLayout)?.bottomCornerRadiiPx
-                    // Mutterboard: see mutterboard/PillBar.
-                    val pill = it.palsoftware.pastiera.inputmethod.mutterboard.PillBar
-                    if (pill.isEnabled(context)) {
-                        val side = pill.dp(context, pill.SIDE_GAP_DP)
-                        val bottom = max(pill.dp(context, pill.BOTTOM_GAP_DP), bottomInset)
-                        val inner = pill.dp(context, pill.INNER_PAD_DP)
-                        val top = pill.dp(context, pill.TOP_GAP_DP)
-                        (view as? ImeChromeLayout)?.pillInsetsPx = android.graphics.Rect(side, top, side, bottom)
-                        val ledInset = pill.dp(context, pill.LED_SIDE_INSET_DP)
-                        ledStatusView.getView()?.let { it.setPadding(ledInset, it.paddingTop, ledInset, it.paddingBottom) }
-                        view.updatePadding(
-                            left = baseLeftPadding + side + inner,
-                            top = top + inner,
-                            right = baseRightPadding + side + inner,
-                            bottom = baseBottomPadding + bottom + inner
-                        )
-                    } else {
-                        (view as? ImeChromeLayout)?.pillInsetsPx = null
-                        ledStatusView.getView()?.let { it.setPadding(0, it.paddingTop, 0, it.paddingBottom) }
-                        view.updatePadding(
-                            left = baseLeftPadding,
-                            right = baseRightPadding,
-                            bottom = appliedBottomPadding
-                        )
-                    }
+                    view.updatePadding(
+                        left = baseLeftPadding,
+                        right = baseRightPadding,
+                        bottom = appliedBottomPadding
+                    )
                     logImeOverlayInsetsIfEnabled(
                         navBottom = navAndGestures.bottom,
                         imeBottom = 0,
@@ -3903,9 +3881,6 @@ class StatusBarController(
 
         init {
             setChildrenDrawingOrderEnabled(true)
-            // Without a background a ViewGroup skips draw(), which is where the
-            // pill's backdrop and clip live.
-            setWillNotDraw(false)
         }
 
         override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -3915,98 +3890,7 @@ class StatusBarController(
 
         // Extend the shape above the view so even a bar shorter than the display
         // radius follows the original arc, rather than shrinking it to fit the bar.
-        // Mutterboard: the pill's gaps from the display edges; null when off.
-        var pillInsetsPx: android.graphics.Rect? = null
-            set(value) {
-                if (field == value) return
-                field = value
-                applyBottomCornerClip()
-                requestLayout()
-            }
-
-        /**
-         * Hairline round the pill. Light themes paint it near-white, which on a
-         * light app (Claude, Messages) left the bar with no edge at all: the
-         * words floated over the app with nothing marking them as a keyboard.
-         */
-        var pillRimColor: Int? = null
-            set(value) {
-                if (field == value) return
-                field = value
-                invalidate()
-            }
-        private val pillRimPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            style = android.graphics.Paint.Style.STROKE
-        }
-
-        /**
-         * Painted across the whole bar, outside the pill. The gaps round the
-         * pill used to be see-through, which is fine over an app that draws
-         * behind the keyboard (Claude) and showed a slab of the app's own
-         * window colour over one that does not (Messages). A strip in the
-         * theme's key grey looks the same everywhere, and is Gboard's
-         * arrangement: a light bar sitting on a darker keyboard surface.
-         */
-        var pillBackdropColor: Int? = null
-            set(value) {
-                if (field == value) return
-                field = value
-                invalidate()
-            }
-
-        private fun pillPath(insets: android.graphics.Rect, inset: Float): android.graphics.Path {
-            val top = insets.top.toFloat()
-            val bottom = (height - insets.bottom).toFloat()
-            val radius = it.palsoftware.pastiera.inputmethod.mutterboard.PillBar.radiusFor(context, (bottom - top).toInt())
-            return android.graphics.Path().apply {
-                addRoundRect(
-                    insets.left + inset, top + inset, width - insets.right - inset, bottom - inset,
-                    radius - inset, radius - inset, android.graphics.Path.Direction.CW
-                )
-            }
-        }
-
-        override fun draw(canvas: android.graphics.Canvas) {
-            val insets = pillInsetsPx
-            if (insets == null) {
-                super.draw(canvas)
-                return
-            }
-            pillBackdropColor?.let { canvas.drawColor(it) }
-            val save = canvas.save()
-            canvas.clipPath(pillPath(insets, 0f))
-            super.draw(canvas)
-            canvas.restoreToCount(save)
-            // The rim also hides the clip's unsmoothed edge.
-            val color = pillRimColor ?: return
-            val stroke = resources.displayMetrics.density
-            pillRimPaint.color = color
-            pillRimPaint.strokeWidth = stroke
-            canvas.drawPath(pillPath(insets, stroke / 2f), pillRimPaint)
-        }
-
-        private fun applyPillClip(insets: android.graphics.Rect) {
-            outlineProvider = object : ViewOutlineProvider() {
-                override fun getOutline(view: View, outline: Outline) {
-                    val right = view.width - insets.right
-                    val bottom = view.height - insets.bottom
-                    val radius = it.palsoftware.pastiera.inputmethod.mutterboard.PillBar.radiusFor(context, bottom - insets.top)
-                    outline.setRoundRect(insets.left, insets.top, right, bottom, radius)
-                }
-            }
-            // draw() clips to the pill itself; an outline clip would also cut
-            // away the backdrop around it.
-            clipToOutline = false
-            invalidateOutline()
-        }
-
-        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-            super.onSizeChanged(w, h, oldw, oldh)
-            if (pillInsetsPx != null) invalidateOutline()
-        }
-
         private fun applyBottomCornerClip() {
-            pillInsetsPx?.let { applyPillClip(it); return }
             val radii = bottomCornerRadiiPx
             val radius = radii?.let { maxOf(it.first, it.second) } ?: 0
             if (radius <= 0) {
