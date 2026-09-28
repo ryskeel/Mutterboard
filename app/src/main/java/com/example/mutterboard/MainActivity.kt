@@ -87,8 +87,8 @@ private val successColor: Color
 private val onSuccessColor: Color
     @Composable get() = if (isSystemInDarkTheme()) OnSuccessDark else OnSuccessLight
 
-// Theme-aware peach "accent pill" (saved-key / model-ready chips, vocab badges):
-// peach with dark content on light, warm brown with light content on dark.
+// Theme-aware grey "accent pill" (saved-key / model-ready chips, vocab badges):
+// light grey with dark content on light, mid grey with light content on dark.
 private val accentContainerColor: Color
     @Composable get() = if (isSystemInDarkTheme()) AccentContainerDark else AccentContainerLight
 
@@ -779,7 +779,7 @@ private fun AddApiKeyDialog(
 
 /**
  * Inline saved-key chip on the Cloud option, mirroring the on-device "model
- * ready" row: a peach pill confirming the key is saved, with an edit icon (to
+ * ready" row: a grey pill confirming the key is saved, with an edit icon (to
  * change the key via the dialog) and a trailing delete icon. The raw key is
  * never shown here — masking it added no value since it couldn't be copied.
  */
@@ -838,7 +838,7 @@ private fun SavedKeyRow(onRequestEdit: () -> Unit, onRequestRemove: () -> Unit) 
  * Whisper as a prompt on Cloud and fuzzy-matched against output on-device), so it
  * lives in its own section rather than under either engine. Rather than editing
  * inline — where it was too easy to tap a word and delete it by accident — the
- * card shows a compact peach summary pill (matching the saved-key / model-ready
+ * card shows a compact grey summary pill (matching the saved-key / model-ready
  * rows) with an edit icon; tapping it opens [VocabularyEditSheet] to make changes.
  */
 @Composable
@@ -905,7 +905,7 @@ private fun vocabSummary(words: List<String>): String {
     return shown.joinToString(", ") + if (rest > 0) ", +$rest more" else ""
 }
 
-/** A single custom word as a peach badge with a × to remove it. */
+/** A single custom word as a grey badge with a × to remove it. */
 @Composable
 private fun WordBadge(word: String, onRemove: () -> Unit) {
     Row(

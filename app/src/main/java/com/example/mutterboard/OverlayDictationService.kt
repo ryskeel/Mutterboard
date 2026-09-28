@@ -645,7 +645,7 @@ class OverlayDictationService : Service(), DictationSession.Host {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Mutterboard is listening")
             .setContentText("Tap Stop in the overlay when you're done")
-            .setSmallIcon(R.drawable.ic_mutterboard_mark)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .build()

@@ -77,7 +77,7 @@ fun MutterboardTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    // Brand-themed, not Material-You dynamic: the app keeps its peach/coral
+    // Brand-themed, not Material-You dynamic: the app keeps its black-and-grey
     // identity regardless of the device wallpaper.
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
