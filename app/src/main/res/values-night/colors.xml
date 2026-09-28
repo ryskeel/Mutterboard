@@ -2,9 +2,14 @@
 <resources>
     <!-- Dark equivalents of the keyboard brand fallback (see values/colors.xml).
          Mirrors the settings screen's dark monochrome chrome from
-         ui/theme/Color.kt: light-neutral primary on dark, warm tonal container. -->
+         ui/theme/Color.kt: light-neutral primary on dark, grey tonal container. -->
     <color name="brand_kb_primary">#FFE6E6E6</color>
     <color name="brand_kb_on_primary">#FF1A1A1A</color>
-    <color name="brand_kb_secondary_container">#FF5D4033</color>
-    <color name="brand_kb_on_secondary_container">#FFFFDBCF</color>
+    <color name="brand_kb_secondary_container">#FF3A3A3A</color>
+    <color name="brand_kb_on_secondary_container">#FFE6E6E6</color>
+
+    <!-- The header keycap mark flipped: a light key on dark. -->
+    <color name="mark_cap">#FFD4D4D4</color>
+    <color name="mark_face">#FFF4F4F4</color>
+    <color name="mark_ink">#FF1A1A1A</color>
 </resources>

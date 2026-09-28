@@ -57,9 +57,9 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
         // Inset from the cancel button's side too, so the wave is centred on
         // the bar rather than on what is left of it.
         addView(View(context), LayoutParams(heightPx, heightPx))
-        // Kept off the buttons at either end: full width, its tips all but
-        // touched them.
-        val waveInset = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 12f, resources.displayMetrics).toInt()
+        // Kept well off the buttons at either end: at 12dp its tips still
+        // read as touching them.
+        val waveInset = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 28f, resources.displayMetrics).toInt()
         addView(middle, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply {
             marginStart = waveInset
             marginEnd = waveInset
@@ -145,7 +145,10 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
             val tau = if (target > peak) 0.10f else 0.22f
             peak += (target - peak) * (1f - exp(-dt / tau))
 
-            val w = width.toFloat()
+            // The round caps reach half a stroke past the path's ends, and the
+            // view clips them square if the path runs edge to edge.
+            val capInset = paint.strokeWidth / 2f
+            val w = width - 2f * capInset
             val h = height.toFloat()
             val centreY = h / 2f
             val reach = peak * (h - paint.strokeWidth) / 2f
@@ -154,7 +157,8 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
                 val f = i / SAMPLES.toFloat()
                 val envelope = sin(PI * f).pow(0.75).toFloat()
                 val y = centreY + reach * envelope * sin(f * CYCLES * 2f * PI.toFloat() - phase)
-                if (i == 0) path.moveTo(f * w, y) else path.lineTo(f * w, y)
+                val x = capInset + f * w
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
             canvas.drawPath(path, paint)
             if (isShown) postInvalidateOnAnimation()

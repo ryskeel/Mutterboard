@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Header logo mark: the brand coral waveform bars (same bars as the launcher
-     foreground) on a transparent background, so the mark sits directly on the
-     page. Used left of the "Mutterboard" wordmark on the settings screen. -->
+<!-- Header logo mark: the launcher keycap, filling its box, on a transparent
+     background. Colours flip with the theme (values-night) so the cap stays
+     a dark key on light and a light key on dark. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
     android:height="48dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#80F4533E" android:pathData="M17.68,40.86 A5.41,5.41 0 0 1 28.50,40.86 L28.50,67.14 A5.41,5.41 0 0 1 17.68,67.14 Z" />
-    <path android:fillColor="#BDF4533E" android:pathData="M33.14,26.96 A5.41,5.41 0 0 1 43.95,26.96 L43.95,81.04 A5.41,5.41 0 0 1 33.14,81.04 Z" />
-    <path android:fillColor="#FFF4533E" android:pathData="M48.59,14.59 A5.41,5.41 0 0 1 59.41,14.59 L59.41,93.41 A5.41,5.41 0 0 1 48.59,93.41 Z" />
-    <path android:fillColor="#BDF4533E" android:pathData="M64.05,26.96 A5.41,5.41 0 0 1 74.86,26.96 L74.86,81.04 A5.41,5.41 0 0 1 64.05,81.04 Z" />
-    <path android:fillColor="#80F4533E" android:pathData="M79.50,40.86 A5.41,5.41 0 0 1 90.32,40.86 L90.32,67.14 A5.41,5.41 0 0 1 79.50,67.14 Z" />
+    <path android:fillColor="@color/mark_cap" android:pathData="M22.8,3.3 H85.2 A21.45,21.45 0 0 1 106.65,24.75 V87.14999999999999 A21.45,21.45 0 0 1 85.2,108.6 H22.8 A21.45,21.45 0 0 1 1.35,87.14999999999999 V24.75 A21.45,21.45 0 0 1 22.8,3.3 Z" />
+    <path android:fillColor="@color/mark_face" android:pathData="M26.7,9.15 H81.30000000000001 A15.6,15.6 0 0 1 96.9,24.75 V77.4 A15.6,15.6 0 0 1 81.30000000000001,93.0 H26.7 A15.6,15.6 0 0 1 11.1,77.4 V24.75 A15.6,15.6 0 0 1 26.7,9.15 Z" />
+    <path android:strokeColor="@color/mark_ink" android:strokeWidth="7.02" android:strokeLineCap="round"
+        android:strokeLineJoin="round" android:pathData="M20.85,51.08 L21.40,52.35 L21.96,53.60 L22.51,54.81 L23.06,55.95 L23.61,57.01 L24.17,57.97 L24.72,58.81 L25.27,59.52 L25.82,60.08 L26.38,60.49 L26.93,60.74 L27.48,60.83 L28.03,60.74 L28.59,60.49 L29.14,60.08 L29.69,59.52 L30.24,58.81 L30.80,57.97 L31.35,57.01 L31.90,55.95 L32.45,54.81 L33.01,53.60 L33.56,52.35 L34.11,51.08 L34.66,49.80 L35.22,48.55 L35.77,47.34 L36.32,46.20 L36.87,45.14 L37.43,44.18 L37.98,43.34 L38.53,42.63 L39.08,42.07 L39.64,41.66 L40.19,41.41 L40.74,41.33 L41.29,41.41 L41.84,41.66 L42.40,42.07 L42.95,42.63 L43.50,43.34 L44.06,44.18 L44.61,45.14 L45.16,46.20 L45.71,47.34 L46.27,48.55 L46.82,49.80 L47.37,51.08 L47.92,52.35 L48.48,53.60 L49.03,54.81 L49.58,55.95 L50.13,57.01 L50.69,57.97 L51.24,58.81 L51.79,59.52 L52.34,60.08 L52.90,60.49 L53.45,60.74 L54.00,60.83 L54.55,60.74 L55.11,60.49 L55.66,60.08 L56.21,59.52 L56.76,58.81 L57.32,57.97 L57.87,57.01 L58.42,55.95 L58.97,54.81 L59.53,53.60 L60.08,52.35 L60.63,51.08 L61.18,49.80 L61.74,48.55 L62.29,47.34 L62.84,46.20 L63.39,45.14 L63.95,44.18 L64.50,43.34 L65.05,42.63 L65.60,42.07 L66.16,41.66 L66.71,41.41 L67.26,41.33 L67.81,41.41 L68.37,41.66 L68.92,42.07 L69.47,42.63 L70.02,43.34 L70.58,44.18 L71.13,45.14 L71.68,46.20 L72.23,47.34 L72.79,48.55 L73.34,49.80 L73.89,51.08 L74.44,52.35 L75.00,53.60 L75.55,54.81 L76.10,55.95 L76.65,57.01 L77.21,57.97 L77.76,58.81 L78.31,59.52 L78.86,60.08 L79.42,60.49 L79.97,60.74 L80.52,60.83 L81.07,60.74 L81.62,60.49 L82.18,60.08 L82.73,59.52 L83.28,58.81 L83.84,57.97 L84.39,57.01 L84.94,55.95 L85.49,54.81 L86.05,53.60 L86.60,52.35 L87.15,51.08" />
 </vector>
