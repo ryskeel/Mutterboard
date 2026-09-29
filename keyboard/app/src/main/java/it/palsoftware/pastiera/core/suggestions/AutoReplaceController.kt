@@ -710,7 +710,8 @@ class AutoReplaceController(
                 inputConnection.commitText(retro.original + retro.tail, 1)
                 inputConnection.endBatchEdit()
                 rejectedWords.add(retro.original.lowercase())
-                CorrectionAudit.undone(retro.source, retro.original, retro.fixed)
+                val previous = previousWord(inputConnection, retro.original + retro.tail)
+                CorrectionAudit.undone(retro.source, previous, retro.original, retro.fixed, retro.tail.trim())
                 return true
             }
         }
@@ -767,7 +768,7 @@ class AutoReplaceController(
         rejectedWords.add(replacement.originalWord.lowercase())
         splitApostropheWord(replacement.originalWord)?.root?.lowercase()?.let { rejectedWords.add(it) }
         lastUndoOriginalWord = replacement.originalWord
-        CorrectionAudit.undone(replacement.source, replacement.originalWord, replacement.replacedWord)
+        CorrectionAudit.undone(replacement.source, previousWord(inputConnection, replacement.originalWord), replacement.originalWord, replacement.replacedWord)
         
         // Clear last replacement after undo
         lastReplacement = null

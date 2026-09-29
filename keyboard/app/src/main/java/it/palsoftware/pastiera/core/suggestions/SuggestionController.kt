@@ -371,6 +371,7 @@ class SuggestionController(
 
         val boundaryChar = boundaryCharOverride ?: boundaryCharFor(keyCode, event)
         val wordBeforeBoundary = tracker.currentWord.takeIf { it.isNotBlank() }
+        CorrectionAudit.boundaryReached(wordBeforeBoundary, boundaryChar)
         val result = autoReplaceController.handleBoundary(
             keyCode,
             event,
@@ -451,6 +452,7 @@ class SuggestionController(
     fun onContextReset() {
         if (!isEnabled()) return
         tracker.onContextChanged()
+        CorrectionAudit.contextChanged()
         pendingAddUserWord = null
         previousCompletedWord = null
         sentenceStartPending = true
@@ -466,6 +468,7 @@ class SuggestionController(
 
     fun addUserWord(word: String) {
         if (!isEnabled()) return
+        CorrectionAudit.added(word)
         dictionaryRepositoryCache.values
             .ifEmpty { listOf(dictionaryRepository) }
             .forEach { repository -> repository.addUserEntryQuick(word) }
