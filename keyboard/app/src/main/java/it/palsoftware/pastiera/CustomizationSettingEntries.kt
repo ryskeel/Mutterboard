@@ -84,6 +84,15 @@ internal fun customizationSettingEntries(): List<SettingEntry> = listOf(
         unavailableFallbackId = "quick_launcher.alt_shortcuts"
     ),
     SettingEntry(
+        id = "quick_launcher.ctrl_shortcut",
+        titleRes = R.string.ctrl_quick_launcher_title,
+        summaryRes = R.string.ctrl_quick_launcher_description,
+        route = SettingRoute(
+            destination = SettingsDestination.Customization,
+            customizationDestination = "launcher_shortcuts"
+        )
+    ),
+    SettingEntry(
         id = "quick_launcher.behavior",
         titleRes = R.string.quick_launcher_behaviour_title,
         summaryRes = R.string.quick_launcher_behaviour_description,
