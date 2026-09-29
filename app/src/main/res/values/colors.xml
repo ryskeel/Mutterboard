@@ -17,8 +17,7 @@
     <color name="brand_kb_secondary_container">#FFE6E6E6</color>
     <color name="brand_kb_on_secondary_container">#FF1A1A1A</color>
 
-    <!-- The header keycap mark (ic_mutterboard_mark): a dark key on light. -->
+    <!-- The header mark (ic_mutterboard_mark): a dark square on light. -->
     <color name="mark_cap">#FF1A1A1A</color>
-    <color name="mark_face">#FF333333</color>
     <color name="mark_ink">#FFFFFFFF</color>
 </resources>
