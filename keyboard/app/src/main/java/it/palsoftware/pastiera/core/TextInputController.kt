@@ -99,6 +99,7 @@ class TextInputController(
         val spacesToReplace = if (endsWithDoubleSpaceAfterAutoSpace) 2 else 1
         inputConnection.deleteSurroundingText(spacesToReplace, 0)
         inputConnection.commitText(". ", 1)
+        it.palsoftware.pastiera.core.suggestions.CorrectionAudit.doubleSpacePeriod()
         AutoSpaceTracker.clear()
         AutoCapitalizeHelper.enableAfterPunctuation(
             context = context,
