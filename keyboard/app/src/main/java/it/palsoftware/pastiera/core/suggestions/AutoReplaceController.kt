@@ -241,6 +241,12 @@ class AutoReplaceController(
         if (inputConnection != null && settingsProvider().autoReplaceOnSpaceEnter) {
             fixWordBeforeLast(inputConnection)
         }
+        // Mutterboard: an undo protects the word through the boundary that
+        // follows it and no further. Pastiera cleared the list on the next
+        // letter, but hardware keys never reach onCharacterCommitted, so one
+        // undone "i" stopped every later "i" becoming "I" until Android
+        // restarted the keyboard.
+        rejectedWords.clear()
         return result
     }
 
