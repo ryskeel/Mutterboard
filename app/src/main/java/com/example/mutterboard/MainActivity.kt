@@ -1194,7 +1194,9 @@ private fun StepRow(
     onAction: () -> Unit,
     required: Boolean = true,
     step: Int? = null,
-    note: String? = null
+    note: String? = null,
+    doneActionLabel: String? = null,
+    onDoneAction: () -> Unit = {}
 ) {
     val haptic = rememberTapHaptic()
     Row(
@@ -1230,6 +1232,9 @@ private fun StepRow(
         if (!done) {
             Spacer(Modifier.width(12.dp))
             Button(onClick = { haptic(); onAction() }) { Text(actionLabel) }
+        } else if (doneActionLabel != null) {
+            Spacer(Modifier.width(12.dp))
+            OutlinedButton(onClick = { haptic(); onDoneAction() }) { Text(doneActionLabel) }
         }
     }
 }
@@ -1368,22 +1373,18 @@ private fun KeyboardCard(
             onSelect = { onChoose(true) }
         )
         HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+        // The keyboard's own settings take the enable button's place once it is
+        // done, rather than a step of their own: a step badge there never gets
+        // its checkmark, because there is nothing to finish.
         StepRow(
             label = "Enable keyboard",
             done = imeEnabled,
             actionLabel = "Enable",
             onAction = onOpenImeSettings,
-            step = 1
+            step = 1,
+            doneActionLabel = "Open keyboard settings".takeIf { physicalKeyboard },
+            onDoneAction = onOpenKeyboardSettings
         )
-        if (physicalKeyboard) {
-            StepRow(
-                label = "Layout, suggestions and shortcuts",
-                done = false,
-                actionLabel = "Open",
-                onAction = onOpenKeyboardSettings,
-                required = false
-            )
-        }
     }
 }
 
