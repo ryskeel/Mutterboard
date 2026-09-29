@@ -519,7 +519,7 @@ private fun SetupScreen(
             )
             Spacer(Modifier.height(40.dp))
 
-            SectionHeader("Vocabulary")
+            SectionHeader("Dictation vocabulary")
             Spacer(Modifier.height(12.dp))
             VocabularyCard(
                 words = customWords,
@@ -856,7 +856,7 @@ private fun VocabularyCard(
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Text(
-                "Add words that Mutterboard should remember.",
+                "Names and terms for dictation to get right. Typing keeps its own dictionary in the keyboard settings.",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

@@ -8,8 +8,7 @@
     <color name="brand_kb_secondary_container">#FF3A3A3A</color>
     <color name="brand_kb_on_secondary_container">#FFE6E6E6</color>
 
-    <!-- The header keycap mark flipped: a light key on dark. -->
+    <!-- The header mark flipped: a light square on dark. -->
     <color name="mark_cap">#FFD4D4D4</color>
-    <color name="mark_face">#FFF4F4F4</color>
     <color name="mark_ink">#FF1A1A1A</color>
 </resources>
