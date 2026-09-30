@@ -1057,8 +1057,7 @@ object SettingLinkRegistry {
         SettingLinkIds.MODIFIERS_INDICATOR_BOTTOM_STRIP,
         SettingLinkIds.MODIFIERS_INDICATOR_MENU_BAR,
         SettingLinkIds.MODIFIERS_INDICATOR_STATUS_BAR,
-        SettingLinkIds.MODIFIERS_ALT_KEY_SHORTCUTS,
-        "status_bar.presentation"
+        SettingLinkIds.MODIFIERS_ALT_KEY_SHORTCUTS
     )
 
     private fun isHiddenInMutterboard(entry: SettingEntry): Boolean =
