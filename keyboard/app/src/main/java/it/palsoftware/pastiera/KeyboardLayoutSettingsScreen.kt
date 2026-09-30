@@ -429,7 +429,6 @@ fun KeyboardLayoutSettingsScreen(
                                         text = metadata?.description ?: getLayoutDescription(context, layout),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2
                                     )
                                 }
                                 if (canDelete) {

@@ -237,13 +237,11 @@ fun VariationCustomizationScreen(
                             text = stringResource(R.string.static_variation_preset_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.static_variation_bar_mode_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
                         )
 
                         ExposedDropdownMenuBox(

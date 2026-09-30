@@ -333,13 +333,11 @@ fun AdvancedSettingsScreen(
                                             text = stringResource(R.string.trackpad_gestures_title),
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Medium,
-                                            maxLines = 1
                                         )
                                         Text(
                                             text = stringResource(R.string.trackpad_gestures_description),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1
                                         )
                                     }
                                     FeatureStatusIcon(FeatureStatus.Experimental)
@@ -560,7 +558,6 @@ fun AdvancedSettingsScreen(
                                         text = stringResource(R.string.clipboard_retention_time_description),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
                                     )
                                 }
                                 OutlinedTextField(
