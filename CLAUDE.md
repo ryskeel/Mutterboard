@@ -285,8 +285,11 @@ including its bar and its Titan 2 Elite corners.
   hidden, modifier indicators are the bottom strip LEDs only, and the bar is
   always Pastierina (`getStatusBarPresentationMode` and
   `getModifierIndicators` are pinned in `SettingsManager`, so no stored
-  preference can bring the others back). Search skips all of it
-  (`isHiddenInMutterboard`). Setting rows grow with their text instead of
+  preference can bring the others back). **To cut a setting, add its link id
+  to `HiddenSettings` and wrap the row in `if (!HiddenSettings.hides(id))`;
+  never delete it.** Pastiera's link tests read the source and fail on a
+  registered row that is gone, a wrap is a smaller diff across upstream
+  merges, and search reads the same list. Setting rows grow with their text instead of
   clipping it: upstream gave them fixed heights, now minimums. The peach
   canvas we once painted on them went with the move to v0.86.
 - **The visibility rewrite (`d0ea564`) is back in, as stock.** We reverted it
