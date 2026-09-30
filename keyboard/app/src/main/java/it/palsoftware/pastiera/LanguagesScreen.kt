@@ -106,12 +106,12 @@ fun LanguagesScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .heightIn(min = 56.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     Text(
@@ -127,12 +127,12 @@ fun LanguagesScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp)
+                        .heightIn(min = 64.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 16.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -175,12 +175,12 @@ private fun LanguageSubtypeItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .heightIn(min = 64.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -197,13 +197,11 @@ private fun LanguageSubtypeItem(
                     text = languageName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium,
-                    maxLines = 1
                 )
                 Text(
                     text = languageCode.uppercase(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
                 )
             }
             Switch(

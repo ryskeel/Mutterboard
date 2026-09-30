@@ -280,8 +280,15 @@ including its bar and its Titan 2 Elite corners.
   (`mutterboard/MaterialYouTheme`), not stored: a `materialYou` flag on the
   theme makes `getEffectiveKeyboardTheme` repaint it from the system palette
   for the current light/dark mode. Its stored colours are only a fallback.
-- **Pastiera's settings screens stay as they are**, colours included. The
-  peach canvas we once painted on them went with the move to v0.86.
+- **Pastiera's settings screens stay as they are**, colours included, apart
+  from what Ry has cut as too heavy (2026-09-29): Keyboards & Devices is
+  hidden, modifier indicators are the bottom strip LEDs only, and the bar is
+  always Pastierina (`getStatusBarPresentationMode` and
+  `getModifierIndicators` are pinned in `SettingsManager`, so no stored
+  preference can bring the others back). Search skips all of it
+  (`isHiddenInMutterboard`). Setting rows grow with their text instead of
+  clipping it: upstream gave them fixed heights, now minimums. The peach
+  canvas we once painted on them went with the move to v0.86.
 - **The visibility rewrite (`d0ea564`) is back in, as stock.** We reverted it
   on nightly as the suspect for Messages and Gmail not lifting their text
   field above the bar, and Niagara's home screen typing one letter then
@@ -295,9 +302,7 @@ including its bar and its Titan 2 Elite corners.
   would leave people guessing which to enable.
 - **The bar is Pastiera's own.** A Gboard-style one-row pill
   (`mutterboard/PillBar`) was dropped on 2026-09-27 once v0.86 made the stock
-  bar look right on the Titan 2 Elite. The pill had forced the one-row
-  Pastierina layout on once; `undoPillLayoutOnce` in `MutterboardApplication`
-  puts Pastiera's default back on those installs. Two fixes found while the
+  bar look right on the Titan 2 Elite. Two fixes found while the
   pill existed stay: the add-word plus uses the theme accent, and
   `HamburgerMenuView`/`StatusBarButtonHost` skip reassigning unchanged layout
   params (a relayout loop).

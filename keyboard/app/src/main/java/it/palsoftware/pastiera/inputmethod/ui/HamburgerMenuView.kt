@@ -36,7 +36,6 @@ class HamburgerMenuView(
         StatusBarButtonId.Undo,
         StatusBarButtonId.Redo,
         StatusBarButtonId.Language,
-        StatusBarButtonId.MinimalUi,
         StatusBarButtonId.SoftwareKeyboardMode,
         StatusBarButtonId.Settings
     )

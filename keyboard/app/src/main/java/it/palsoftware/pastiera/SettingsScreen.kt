@@ -447,12 +447,6 @@ private fun SettingsMainScreen(
             SettingsGroupDivider(stringResource(R.string.settings_group_typing))
 
             SettingsCategoryRow(
-                icon = Icons.Filled.Keyboard,
-                title = stringResource(R.string.keyboards_devices_title),
-                linkId = SettingLinkIds.MAIN_KEYBOARDS_DEVICES,
-                onClick = onKeyboardsDevicesClick
-            )
-            SettingsCategoryRow(
                 iconRes = R.drawable.modifier_keys_24,
                 title = stringResource(R.string.modifiers_title),
                 description = stringResource(R.string.modifiers_description),
@@ -694,14 +688,12 @@ private fun SettingsCategoryRow(
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
-                    maxLines = 1
                 )
                 if (description != null) {
                     Text(
                         text = description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
                     )
                 }
             }

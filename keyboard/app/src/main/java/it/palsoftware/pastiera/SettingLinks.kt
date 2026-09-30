@@ -1050,13 +1050,27 @@ object SettingLinkRegistry {
      * diacritics-insensitive on the localized title, summary, and invisible
      * keywords.
      */
+    // Mutterboard hides these screens and rows, so search must not lead to them.
+    private val mutterboardHiddenIds = setOf(
+        SettingLinkIds.MAIN_KEYBOARDS_DEVICES,
+        SettingLinkIds.MODIFIERS_INDICATORS,
+        SettingLinkIds.MODIFIERS_INDICATOR_BOTTOM_STRIP,
+        SettingLinkIds.MODIFIERS_INDICATOR_MENU_BAR,
+        SettingLinkIds.MODIFIERS_INDICATOR_STATUS_BAR,
+        SettingLinkIds.MODIFIERS_ALT_KEY_SHORTCUTS
+    )
+
+    private fun isHiddenInMutterboard(entry: SettingEntry): Boolean =
+        entry.id in mutterboardHiddenIds ||
+            entry.route.destination == SettingsDestination.KeyboardsDevices
+
     fun search(context: Context, query: String): List<SettingEntry> {
         val tokens = tokenizeForSearch(query)
         if (tokens.isEmpty()) return emptyList()
         data class Scored(val entry: SettingEntry, val score: Int, val sortKey: String)
 
         return entries.asSequence()
-            .filter { entry -> entry.isAvailable(context) }
+            .filter { entry -> entry.isAvailable(context) && !isHiddenInMutterboard(entry) }
             .mapNotNull { entry ->
             val title = normalizeForSearch(context.getString(entry.titleRes))
             val summary = entry.summaryRes?.let { normalizeForSearch(context.getString(it)) }

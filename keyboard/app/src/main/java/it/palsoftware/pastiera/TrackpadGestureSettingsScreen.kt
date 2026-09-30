@@ -181,13 +181,13 @@ fun TrackpadGestureSettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
+                    .heightIn(min = 64.dp)
                     .settingRow(SettingLinkIds.TRACKPAD_GESTURES_ENABLED)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -202,13 +202,11 @@ fun TrackpadGestureSettingsScreen(
                             text = stringResource(R.string.trackpad_gestures_enabled_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.trackpad_gestures_enabled_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
                         )
                     }
                     FeatureStatusIcon(FeatureStatus.Experimental)
@@ -225,13 +223,13 @@ fun TrackpadGestureSettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
+                    .heightIn(min = 64.dp)
                     .settingRow("trackpad.add_word")
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -241,13 +239,11 @@ fun TrackpadGestureSettingsScreen(
                             text = stringResource(R.string.trackpad_gesture_add_word_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.trackpad_gesture_add_word_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
                         )
                     }
                     Switch(
@@ -264,13 +260,13 @@ fun TrackpadGestureSettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
+                    .heightIn(min = 64.dp)
                     .settingRow("trackpad.add_word_full_width")
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -280,13 +276,11 @@ fun TrackpadGestureSettingsScreen(
                             text = stringResource(R.string.trackpad_gesture_add_word_full_width_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.trackpad_gesture_add_word_full_width_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
                         )
                     }
                     Switch(
@@ -534,13 +528,13 @@ fun TrackpadGestureSettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp)
+                    .heightIn(min = 72.dp)
                     .settingRow("trackpad.swipe_to_delete")
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -555,13 +549,11 @@ fun TrackpadGestureSettingsScreen(
                             text = stringResource(R.string.swipe_to_delete_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.swipe_to_delete_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
                         )
                     }
                     Switch(
@@ -577,7 +569,7 @@ fun TrackpadGestureSettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp)
+                    .heightIn(min = 72.dp)
                     .settingRow(SettingLinkIds.TRACKPAD_SENSITIVITY) {
                         openSettingsChild(context, "trackpad", "sensitivity")
                     }
@@ -585,7 +577,7 @@ fun TrackpadGestureSettingsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -600,13 +592,11 @@ fun TrackpadGestureSettingsScreen(
                             text = stringResource(R.string.trackpad_sensitivity_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.trackpad_sensitivity_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
                         )
                     }
                     Text(
@@ -625,7 +615,7 @@ fun TrackpadGestureSettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp)
+                    .heightIn(min = 72.dp)
                     .settingRow(SettingLinkIds.TRACKPAD_DEBUG) {
                         context.startActivity(Intent(context, TrackpadDebugActivity::class.java))
                     }
@@ -633,7 +623,7 @@ fun TrackpadGestureSettingsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -648,13 +638,11 @@ fun TrackpadGestureSettingsScreen(
                             text = stringResource(R.string.trackpad_debug_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.trackpad_debug_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
                         )
                     }
                     Icon(
@@ -669,13 +657,13 @@ fun TrackpadGestureSettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
+                    .heightIn(min = 64.dp)
                     .clickable { showTutorialDialog = true }
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -690,13 +678,11 @@ fun TrackpadGestureSettingsScreen(
                             text = stringResource(R.string.trackpad_gestures_show_tutorial),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.trackpad_gestures_tutorial_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
                         )
                     }
                     Icon(
@@ -711,7 +697,7 @@ fun TrackpadGestureSettingsScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp)
+                        .heightIn(min = 64.dp)
                         .clickable {
                             val url = context.getString(R.string.trackpad_gestures_shizuku_url)
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
@@ -721,7 +707,7 @@ fun TrackpadGestureSettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -736,13 +722,11 @@ fun TrackpadGestureSettingsScreen(
                                 text = stringResource(R.string.trackpad_gestures_install_shizuku),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Medium,
-                                maxLines = 1
                             )
                             Text(
                                 text = stringResource(R.string.trackpad_gestures_install_shizuku_description),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
                             )
                         }
                         Icon(
@@ -829,13 +813,11 @@ private fun TrackpadSensitivitySlider(
                         text = title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
-                        maxLines = 1
                     )
                     Text(
                         text = description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
                     )
                 }
                 Text(

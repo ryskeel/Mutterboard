@@ -3,6 +3,7 @@ package it.palsoftware.pastiera
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -141,32 +142,6 @@ fun ModifierSettingsScreen(
                 }
             )
 
-            SettingsSectionDivider(stringResource(R.string.modifiers_section_indicators))
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .settingRow(SettingLinkIds.MODIFIERS_INDICATORS)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.modifier_indicators_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    ModifierIndicatorMultiSelect(
-                        modifier = Modifier.fillMaxWidth(),
-                        selectedIndicators = modifierIndicators,
-                        onIndicatorsSelected = { indicators ->
-                            modifierIndicators = indicators
-                            SettingsManager.setModifierIndicators(context, indicators)
-                        }
-                    )
-                }
-            }
-
             SettingsSectionDivider(stringResource(R.string.modifiers_section_sym))
             ModifierNavigationRow(
                 iconRes = R.drawable.ic_emoji_symbols_24,
@@ -201,14 +176,6 @@ fun ModifierSettingsScreen(
                     altBindingExpanded = false
                 }
             )
-            ModifierNavigationRow(
-                iconRes = R.drawable.keyboard_option_key_24,
-                title = stringResource(R.string.alt_key_shortcuts_title),
-                description = stringResource(R.string.alt_key_shortcuts_modifier_link_description),
-                linkId = SettingLinkIds.MODIFIERS_ALT_KEY_SHORTCUTS,
-                onClick = onOpenSymShortcuts
-            )
-
             SettingsSectionDivider(stringResource(R.string.modifiers_section_control))
             ModifierNavigationRow(
                 iconRes = R.drawable.navigation_24,
@@ -428,9 +395,9 @@ private fun ModifierSwitchRow(
     linkId: String? = null,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Surface(modifier = Modifier.fillMaxWidth().height(64.dp).settingRow(linkId)) {
+    Surface(modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).settingRow(linkId)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = if (indent) 52.dp else 16.dp, end = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = if (indent) 52.dp else 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -438,8 +405,8 @@ private fun ModifierSwitchRow(
                 Icon(Icons.Filled.Keyboard, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, maxLines = 1)
-                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Switch(checked = checked, onCheckedChange = onCheckedChange)
         }

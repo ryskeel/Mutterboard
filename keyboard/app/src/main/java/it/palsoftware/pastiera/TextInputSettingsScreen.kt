@@ -699,14 +699,12 @@ private fun SettingsSwitchRow(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium,
-                maxLines = 2
             )
             if (description != null) {
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2
                 )
             }
         }
@@ -741,13 +739,11 @@ private fun SettingsNavigationRow(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium,
-                maxLines = 2
             )
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2
             )
         }
         Icon(
@@ -788,7 +784,6 @@ private fun SettingsDropdownSwitchRow(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium,
-                maxLines = 2
             )
             ExposedDropdownMenuBox(
                 expanded = expanded,

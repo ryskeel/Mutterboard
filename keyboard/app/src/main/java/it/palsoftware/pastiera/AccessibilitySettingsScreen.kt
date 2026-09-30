@@ -122,13 +122,13 @@ fun AccessibilitySettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(96.dp)
+                    .heightIn(min = 96.dp)
                     .settingRow(SettingLinkIds.ACCESSIBILITY_LIVE_READ)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -143,7 +143,6 @@ fun AccessibilitySettingsScreen(
                             text = stringResource(R.string.settings_accessibility_live_read_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.settings_accessibility_live_read_description),
@@ -164,13 +163,13 @@ fun AccessibilitySettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(84.dp)
+                    .heightIn(min = 84.dp)
                     .settingRow(SettingLinkIds.ACCESSIBILITY_READ_SECOND_ROW)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -185,7 +184,6 @@ fun AccessibilitySettingsScreen(
                             text = stringResource(R.string.settings_accessibility_second_row_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.settings_accessibility_second_row_description),
@@ -206,13 +204,13 @@ fun AccessibilitySettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(84.dp)
+                    .heightIn(min = 84.dp)
                     .settingRow(SettingLinkIds.ACCESSIBILITY_SUGGESTIONS_DELAY)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -227,7 +225,6 @@ fun AccessibilitySettingsScreen(
                             text = stringResource(R.string.settings_accessibility_suggestions_delay_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(
@@ -284,13 +281,13 @@ fun AccessibilitySettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(96.dp)
+                    .heightIn(min = 96.dp)
                     .settingRow(SettingLinkIds.ACCESSIBILITY_BOUNCE_KEYS)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -305,7 +302,6 @@ fun AccessibilitySettingsScreen(
                             text = stringResource(R.string.settings_accessibility_bounce_keys_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.settings_accessibility_bounce_keys_description),
@@ -326,7 +322,7 @@ fun AccessibilitySettingsScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(116.dp)
+                    .heightIn(min = 116.dp)
                     .settingRow("accessibility.bounce_keys_delay")
             ) {
                 Column(
@@ -485,13 +481,13 @@ private fun BounceKeyToggleRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(76.dp)
+            .heightIn(min = 76.dp)
             .settingRow(linkId)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -500,7 +496,6 @@ private fun BounceKeyToggleRow(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium,
-                    maxLines = 1,
                     color = if (enabled) {
                         MaterialTheme.colorScheme.onSurface
                     } else {

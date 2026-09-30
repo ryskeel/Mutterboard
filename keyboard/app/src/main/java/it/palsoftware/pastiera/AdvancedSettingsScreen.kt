@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -332,13 +333,11 @@ fun AdvancedSettingsScreen(
                                             text = stringResource(R.string.trackpad_gestures_title),
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Medium,
-                                            maxLines = 1
                                         )
                                         Text(
                                             text = stringResource(R.string.trackpad_gestures_description),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1
                                         )
                                     }
                                     FeatureStatusIcon(FeatureStatus.Experimental)
@@ -395,7 +394,7 @@ fun AdvancedSettingsScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp)
+                                .heightIn(min = 64.dp)
                                 .settingRow(SettingLinkIds.ADVANCED_BACKUP) {
                                     backupLauncher.launch(defaultBackupName())
                                 }
@@ -403,7 +402,7 @@ fun AdvancedSettingsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
@@ -418,13 +417,11 @@ fun AdvancedSettingsScreen(
                                         text = stringResource(R.string.backup_now),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Medium,
-                                        maxLines = 1
                                     )
                                     Text(
                                         text = stringResource(R.string.backup_now_description),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2
                                     )
                                 }
                                 Icon(
@@ -439,7 +436,7 @@ fun AdvancedSettingsScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp)
+                                .heightIn(min = 64.dp)
                                 .settingRow(SettingLinkIds.ADVANCED_RESTORE) {
                                     restoreLauncher.launch(arrayOf("application/zip"))
                                 }
@@ -447,7 +444,7 @@ fun AdvancedSettingsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
@@ -462,13 +459,11 @@ fun AdvancedSettingsScreen(
                                         text = stringResource(R.string.restore_from_file),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Medium,
-                                        maxLines = 1
                                     )
                                     Text(
                                         text = stringResource(R.string.restore_from_file_description),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2
                                     )
                                 }
                                 Icon(
@@ -483,13 +478,13 @@ fun AdvancedSettingsScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp)
+                                .heightIn(min = 64.dp)
                                 .settingRow(SettingLinkIds.ADVANCED_SWIPE_INCREMENTAL_THRESHOLD)
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
@@ -504,13 +499,11 @@ fun AdvancedSettingsScreen(
                                         text = stringResource(R.string.swipe_incremental_threshold_title),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Medium,
-                                        maxLines = 1
                                     )
                                     Text(
                                         text = "${String.format("%.1f", swipeIncrementalThreshold)} ${stringResource(R.string.dip_unit)}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
                                     )
                                 }
                                 Slider(
@@ -560,13 +553,11 @@ fun AdvancedSettingsScreen(
                                         text = stringResource(R.string.clipboard_retention_time_title),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Medium,
-                                        maxLines = 1
                                     )
                                     Text(
                                         text = stringResource(R.string.clipboard_retention_time_description),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
                                     )
                                 }
                                 OutlinedTextField(
@@ -655,13 +646,13 @@ fun AdvancedSettingsScreen(
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(64.dp)
+                                    .heightIn(min = 64.dp)
                                     .clickable { navigateTo(AdvancedDestination.ImeTest) }
                             ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 16.dp),
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
@@ -676,13 +667,11 @@ fun AdvancedSettingsScreen(
                                             text = "IME Test Screen",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Medium,
-                                            maxLines = 1
                                         )
                                         Text(
                                             text = "Test all input field types and IME actions",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1
                                         )
                                     }
                                     Icon(
@@ -698,7 +687,7 @@ fun AdvancedSettingsScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp)
+                                .heightIn(min = 64.dp)
                                 .settingRow(SettingLinkIds.ADVANCED_SHOW_TUTORIAL) {
                                     SettingsManager.resetTutorialCompleted(context)
                                     val intent = Intent(context, TutorialActivity::class.java)
@@ -708,7 +697,7 @@ fun AdvancedSettingsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
@@ -723,13 +712,11 @@ fun AdvancedSettingsScreen(
                                         text = stringResource(R.string.tutorial_show),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Medium,
-                                        maxLines = 1
                                     )
                                     Text(
                                         text = stringResource(R.string.tutorial_review_description),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
                                     )
                                 }
                                 Icon(
@@ -743,7 +730,7 @@ fun AdvancedSettingsScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp)
+                                .heightIn(min = 64.dp)
                                 .settingRow(SettingLinkIds.ADVANCED_SHOW_RELEASE_NOTES_TUTORIAL) {
                                     val intent = Intent(context, TutorialActivity::class.java).apply {
                                         putExtra(TutorialActivity.EXTRA_UPDATE_TUTORIAL, true)
@@ -756,7 +743,7 @@ fun AdvancedSettingsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
@@ -771,13 +758,11 @@ fun AdvancedSettingsScreen(
                                         text = stringResource(R.string.tutorial_show_release_notes),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Medium,
-                                        maxLines = 1
                                     )
                                     Text(
                                         text = stringResource(R.string.tutorial_show_release_notes_description),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
                                     )
                                 }
                                 Icon(

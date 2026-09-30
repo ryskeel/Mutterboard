@@ -39,7 +39,8 @@ class InputDeviceSettingLinkTest {
         SettingsManager.setSoftwareKeyboardLongPressLayerPopupEnabled(context, true)
         assertTrue(position.isAvailable(context))
         assertEquals(position.id, SettingLinkRegistry.visibleTarget(context, position).id)
-        assertTrue(SettingLinkRegistry.search(context, "on screen layer popup below").any { it.id == position.id })
+        // Mutterboard hides Keyboards & Devices, so even an available entry stays out of search.
+        assertFalse(SettingLinkRegistry.search(context, "on screen layer popup below").any { it.id == position.id })
     }
 
     @Test
