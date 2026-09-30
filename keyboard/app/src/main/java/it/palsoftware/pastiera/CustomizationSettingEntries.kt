@@ -379,6 +379,14 @@ internal fun customizationSettingEntries(): List<SettingEntry> = listOf(
         )
     ),
     SettingEntry(
+        id = "status_bar.presentation",
+        titleRes = R.string.status_bar_style_section,
+        route = SettingRoute(
+            destination = SettingsDestination.Customization,
+            customizationDestination = "status_bar_buttons"
+        )
+    ),
+    SettingEntry(
         id = "status_bar.rounded_corners",
         titleRes = R.string.titan2_elite_rounded_corners_title,
         summaryRes = R.string.titan2_elite_rounded_corners_description,
@@ -407,7 +415,7 @@ internal fun customizationSettingEntries(): List<SettingEntry> = listOf(
             customizationDestination = "status_bar_buttons"
         ),
         availabilityCheck = { SettingsManager.getStatusBarPresentationMode(it) != SettingsManager.StatusBarPresentationMode.PASTIERINA },
-        unavailableFallbackId = "status_bar.pastierina_left"
+        unavailableFallbackId = "status_bar.presentation"
     ),
     SettingEntry(
         id = "status_bar.variation_slots",
@@ -459,7 +467,7 @@ internal fun customizationSettingEntries(): List<SettingEntry> = listOf(
             customizationDestination = "status_bar_buttons"
         ),
         availabilityCheck = { SettingsManager.getStatusBarPresentationMode(it) != SettingsManager.StatusBarPresentationMode.PASTIERINA },
-        unavailableFallbackId = "status_bar.pastierina_left"
+        unavailableFallbackId = "status_bar.presentation"
     ),
     SettingEntry(
         id = "status_bar.extended_right",
@@ -469,7 +477,7 @@ internal fun customizationSettingEntries(): List<SettingEntry> = listOf(
             customizationDestination = "status_bar_buttons"
         ),
         availabilityCheck = { SettingsManager.getStatusBarPresentationMode(it) != SettingsManager.StatusBarPresentationMode.PASTIERINA },
-        unavailableFallbackId = "status_bar.pastierina_left"
+        unavailableFallbackId = "status_bar.presentation"
     ),
     SettingEntry(
         id = "status_bar.pastierina_left",
@@ -477,7 +485,9 @@ internal fun customizationSettingEntries(): List<SettingEntry> = listOf(
         route = SettingRoute(
             destination = SettingsDestination.Customization,
             customizationDestination = "status_bar_buttons"
-        )
+        ),
+        availabilityCheck = { !(SettingsManager.getStatusBarPresentationMode(it) != SettingsManager.StatusBarPresentationMode.PASTIERINA) },
+        unavailableFallbackId = "status_bar.presentation"
     ),
     SettingEntry(
         id = "status_bar.pastierina_right",
@@ -485,7 +495,9 @@ internal fun customizationSettingEntries(): List<SettingEntry> = listOf(
         route = SettingRoute(
             destination = SettingsDestination.Customization,
             customizationDestination = "status_bar_buttons"
-        )
+        ),
+        availabilityCheck = { !(SettingsManager.getStatusBarPresentationMode(it) != SettingsManager.StatusBarPresentationMode.PASTIERINA) },
+        unavailableFallbackId = "status_bar.presentation"
     ),
     SettingEntry(
         id = "keyboard_theme.software.key_rounding",

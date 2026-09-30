@@ -1,5 +1,6 @@
 package it.palsoftware.pastiera
 
+import it.palsoftware.pastiera.inputmethod.mutterboard.HiddenSettings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
@@ -182,6 +183,84 @@ fun StatusBarButtonsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
             )
+        }
+
+        if (!HiddenSettings.hides(SettingLinkIds.MODIFIERS_INDICATORS)) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .settingRow(SettingLinkIds.MODIFIERS_INDICATORS, onOpenModifiers)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.modifier_keys_24),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.modifier_indicators_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = stringResource(R.string.modifier_indicators_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        if (!HiddenSettings.hides(HiddenSettings.STATUS_BAR_STYLE)) {
+            SettingsSectionDivider(stringResource(R.string.status_bar_style_section))
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth().settingRow("status_bar.presentation")
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+                StatusBarEditorMode.entries.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = editorMode == mode,
+                        onClick = {
+                            editorMode = mode
+                            SettingsManager.setStatusBarPresentationMode(
+                                context,
+                                if (mode == StatusBarEditorMode.Pastierina) {
+                                    SettingsManager.StatusBarPresentationMode.PASTIERINA
+                                } else {
+                                    SettingsManager.StatusBarPresentationMode.FULL_STATUS_BAR
+                                }
+                            )
+                        },
+                        shape = SegmentedButtonDefaults.itemShape(index, StatusBarEditorMode.entries.size)
+                    ) {
+                        Text(
+                            text = stringResource(
+                                if (mode == StatusBarEditorMode.Extended) {
+                                    R.string.extended_status_bar_title
+                                } else {
+                                    R.string.pastierina_status_bar_buttons_title
+                                }
+                            ),
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
         }
 
         StatusBarLayoutPreview(

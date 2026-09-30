@@ -1,5 +1,6 @@
 package it.palsoftware.pastiera
 
+import it.palsoftware.pastiera.inputmethod.mutterboard.HiddenSettings
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.clickable
@@ -446,6 +447,14 @@ private fun SettingsMainScreen(
                 ) {
             SettingsGroupDivider(stringResource(R.string.settings_group_typing))
 
+            if (!HiddenSettings.hides(SettingLinkIds.MAIN_KEYBOARDS_DEVICES)) {
+                SettingsCategoryRow(
+                    icon = Icons.Filled.Keyboard,
+                    title = stringResource(R.string.keyboards_devices_title),
+                    linkId = SettingLinkIds.MAIN_KEYBOARDS_DEVICES,
+                    onClick = onKeyboardsDevicesClick
+                )
+            }
             SettingsCategoryRow(
                 iconRes = R.drawable.modifier_keys_24,
                 title = stringResource(R.string.modifiers_title),
