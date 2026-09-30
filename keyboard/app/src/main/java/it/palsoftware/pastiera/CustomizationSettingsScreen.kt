@@ -294,13 +294,13 @@ fun CustomizationSettingsScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp)
+                                .heightIn(min = 64.dp)
                                 .settingRow("customization.variations") { navigateTo(CustomizationDestination.Variations) }
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
@@ -315,7 +315,6 @@ fun CustomizationSettingsScreen(
                                         text = stringResource(R.string.variation_customize_title),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Medium,
-                                        maxLines = 1
                                     )
                                 }
                                 Icon(
@@ -330,13 +329,13 @@ fun CustomizationSettingsScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp)
+                                .heightIn(min = 64.dp)
                                 .settingRow("customization.sounds") { navigateTo(CustomizationDestination.Sounds) }
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
@@ -351,13 +350,11 @@ fun CustomizationSettingsScreen(
                                         text = stringResource(R.string.settings_category_sounds),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Medium,
-                                        maxLines = 1
                                     )
                                     Text(
                                         text = stringResource(R.string.settings_sounds_description),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
                                     )
                                 }
                                 Icon(

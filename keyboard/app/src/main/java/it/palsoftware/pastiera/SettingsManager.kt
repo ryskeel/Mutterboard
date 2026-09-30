@@ -561,17 +561,9 @@ object SettingsManager {
             .apply()
     }
 
-    fun getStatusBarPresentationMode(context: Context): StatusBarPresentationMode {
-        val value = getPreferences(context).getString(
-            KEY_PASTIERINA_MODE_OVERRIDE,
-            StatusBarPresentationMode.FULL_STATUS_BAR.storageValue
-        )
-        return when (value) {
-            StatusBarPresentationMode.PASTIERINA.storageValue,
-            "force_minimal" -> StatusBarPresentationMode.PASTIERINA
-            else -> StatusBarPresentationMode.FULL_STATUS_BAR
-        }
-    }
+    // Mutterboard ships Pastierina as the only bar style; the picker is gone.
+    fun getStatusBarPresentationMode(context: Context): StatusBarPresentationMode =
+        StatusBarPresentationMode.PASTIERINA
 
     fun setStatusBarPresentationMode(context: Context, mode: StatusBarPresentationMode) {
         getPreferences(context).edit()
@@ -6085,14 +6077,8 @@ object SettingsManager {
             .apply()
     }
 
-    fun getModifierIndicators(context: Context): Set<String> {
-        return normalizeModifierIndicators(
-            getPreferences(context).getString(
-                KEY_MODIFIER_INDICATOR_MODE,
-                encodeModifierIndicators(DEFAULT_MODIFIER_INDICATORS)
-            )
-        )
-    }
+    // Mutterboard shows modifiers on the bottom strip LEDs only; the picker is gone.
+    fun getModifierIndicators(context: Context): Set<String> = DEFAULT_MODIFIER_INDICATORS
 
     fun setModifierIndicators(context: Context, indicators: Set<String>) {
         getPreferences(context).edit()

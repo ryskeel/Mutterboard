@@ -312,7 +312,7 @@ fun KeyboardLayoutSettingsScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(72.dp)
+                        .heightIn(min = 72.dp)
                         .clickable {
                             selectedLayout = "qwerty"
                         }
@@ -320,7 +320,7 @@ fun KeyboardLayoutSettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -335,13 +335,11 @@ fun KeyboardLayoutSettingsScreen(
                                 text = stringResource(R.string.keyboard_layout_no_conversion),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Medium,
-                                maxLines = 1
                             )
                             Text(
                                 text = stringResource(R.string.keyboard_layout_no_conversion_description),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2
                             )
                         }
                         Row(

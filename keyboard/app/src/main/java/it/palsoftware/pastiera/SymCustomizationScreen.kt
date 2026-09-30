@@ -478,40 +478,6 @@ fun SymCustomizationScreen(
             }
         }
 
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    context.startActivity(
-                        Intent(context, SettingsActivity::class.java).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                            putExtra(SettingsActivity.EXTRA_DESTINATION, SettingsActivity.DESTINATION_MODIFIERS)
-                        }
-                    )
-                }
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(Icons.Filled.Keyboard, null, tint = MaterialTheme.colorScheme.primary)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.alt_binding_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        stringResource(R.string.sym_modifiers_deeplink_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, null)
-            }
-        }
-
         SettingsSectionDivider(stringResource(R.string.sym_behavior_section_title))
 
 
@@ -519,12 +485,12 @@ fun SymCustomizationScreen(
         Surface(
             modifier = Modifier.settingRow("sym.auto_close")
                 .fillMaxWidth()
-                .height(64.dp)
+                .heightIn(min = 64.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -539,13 +505,11 @@ fun SymCustomizationScreen(
                         text = stringResource(R.string.sym_auto_close_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
-                        maxLines = 1
                     )
                     Text(
                         text = stringResource(R.string.sym_auto_close_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
                     )
                 }
                 Switch(
@@ -561,12 +525,12 @@ fun SymCustomizationScreen(
         Surface(
             modifier = Modifier.settingRow("sym.auto_close_touch")
                 .fillMaxWidth()
-                .height(64.dp)
+                .heightIn(min = 64.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 52.dp, end = 16.dp),
+                    .padding(start = 52.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -580,13 +544,11 @@ fun SymCustomizationScreen(
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
-                        maxLines = 1
                     )
                     Text(
                         text = stringResource(R.string.sym_auto_close_touch_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
                     )
                 }
                 Switch(
@@ -675,12 +637,12 @@ fun SymCustomizationScreen(
         Surface(
             modifier = Modifier.settingRow("sym.emoji_height")
                 .fillMaxWidth()
-                .height(64.dp)
+                .heightIn(min = 64.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -695,13 +657,11 @@ fun SymCustomizationScreen(
                         text = stringResource(R.string.emoji_picker_expanded_height_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
-                        maxLines = 1
                     )
                     Text(
                         text = stringResource(R.string.emoji_picker_expanded_height_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
                     )
                 }
                 Switch(

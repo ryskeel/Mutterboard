@@ -1007,7 +1007,7 @@ private fun KeyboardThemePresetCard(
     Surface(
         modifier = Modifier
             .width(176.dp)
-            .height(88.dp)
+            .heightIn(min = 88.dp)
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (selected) 0.9f else 0.45f),
@@ -1027,14 +1027,12 @@ private fun KeyboardThemePresetCard(
                     text = preset.name,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 2
                 )
                 if (selected) {
                     Text(
                         text = stringResource(R.string.keyboard_theme_selected),
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(preset.accent),
-                        maxLines = 1
                     )
                 }
             }
@@ -1052,7 +1050,7 @@ private fun KeyboardThemeDraftCard(
     Surface(
         modifier = Modifier
             .width(176.dp)
-            .height(88.dp)
+            .heightIn(min = 88.dp)
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -1069,7 +1067,6 @@ private fun KeyboardThemeDraftCard(
                     text = draft.name,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 2
                 )
                 Text(
                     text = if (editing) {
@@ -1082,7 +1079,6 @@ private fun KeyboardThemeDraftCard(
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1
                 )
             }
         }

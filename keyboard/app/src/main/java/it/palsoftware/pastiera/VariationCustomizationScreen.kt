@@ -317,12 +317,12 @@ fun VariationCustomizationScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth().settingRow("variations.sticky_layer")
-                    .height(64.dp)
+                    .heightIn(min = 64.dp)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -337,13 +337,11 @@ fun VariationCustomizationScreen(
                             text = stringResource(R.string.static_variation_layer_sticky_title),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 1
                         )
                         Text(
                             text = stringResource(R.string.static_variation_layer_sticky_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
                         )
                     }
                     Switch(
