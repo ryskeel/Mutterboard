@@ -754,7 +754,6 @@ private fun KeyMappingDialog(
                             "move_word_left", "move_word_right",
                             "expand_selection_word_left", "expand_selection_word_right",
                             "page_start", "page_end",
-                            "toggle_minimal_ui",
                             "media_play_pause", "media_previous", "media_next"
                         )
                         LazyVerticalGrid(

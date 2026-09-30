@@ -6152,7 +6152,7 @@ object SettingsManager {
             STATUS_BAR_BUTTON_MICROPHONE,
             STATUS_BAR_BUTTON_LANGUAGE,
             STATUS_BAR_BUTTON_HAMBURGER,
-            STATUS_BAR_BUTTON_MINIMAL_UI,
+            // No Pastierina toggle: Mutterboard pins the bar to Pastierina.
             STATUS_BAR_BUTTON_SOFTWARE_KEYBOARD_MODE,
             STATUS_BAR_BUTTON_SETTINGS,
             STATUS_BAR_BUTTON_SYMBOLS,
