@@ -488,7 +488,10 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   already knew and made things worse. On a simulated user, words they type
   after that word 91% -> 97% fixed, everything else unchanged. Undoing a
   correction forgets the pair it was learned as, or a wrong fix left in would
-  make itself likelier.
+  make itself likelier. **Switched off (`personalWeight` 0) the same night**: on
+  the phone, "lef" -> let was learned three times as "They let" and then
+  outvoted "left" in the late re-check. Before turning it back on, stop
+  learning pairs from words the corrector wrote and cap the lift.
 - **All of these numbers are measured on Tatoeba**, the same kind of text the
   table is built from, so Ry's own typing will score lower.
 - **Ry's own typing is logged, so it can be the scorecard** (2026-09-27).

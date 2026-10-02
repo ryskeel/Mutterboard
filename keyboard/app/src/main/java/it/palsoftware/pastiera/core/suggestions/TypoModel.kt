@@ -127,7 +127,10 @@ class TypoModel(
         // are the evidence, and Tatoeba's already counted. 0.25 on a simulated
         // user (ContextScorecardTest): words they type there 91% -> 97% fixed,
         // other words unchanged. 0.5 started costing the other words.
-        val personalWeight: Double = 0.25,
+        // OFF (2026-10-01): on the phone the keyboard's own wrong fixes were
+        // learned as habits ("They let" x3 from "lef") and then outvoted the
+        // right word. Needs: no learning from corrected words, and a cap.
+        val personalWeight: Double = 0.0,
     )
 
     data class Correction(val word: String, val score: Double, val runnerUpScore: Double?)
