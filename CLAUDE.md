@@ -445,6 +445,24 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   are thin, so the next word is judged against the family's pooled pairs
   ('d gets its own family there). Clean words changed stayed 0.6/1000; the
   catch rate is not measured, only Ry's sentence.
+- **Spelling by ear is its own scorecard** (2026-10-01). `SpellingScorecardTest`
+  runs Wikipedia's list of common misspellings ("nutrician", "definately"),
+  split into a half to tune on and a held-out half: 61% -> 79% held out.
+  Four changes did it: a vowel for a vowel is cheap from seven letters
+  (`vowelForVowel`); the long-word confidence floor is 0, because a rare word
+  one key away ("sandpoint" -> standpoint) never cleared the old fixed bar;
+  `SoundAlikeIndex` groups words by a coarse sound key and is only consulted
+  when nothing a slip away will do, so it cannot steal a slip's fix; and two
+  guards pay for the looseness. A known stem plus a regular ending
+  ("payphones", "fizzing") needs more confidence to rewrite, and a capital
+  mid-sentence is a name. Together those halved the real words it rewrote on
+  held-out text (76 -> 41 of 664), at the cost of under a point of slip fixes.
+  The sweep (`SCORECARD_SWEEP=1`, `SWEEP_DIFF=1`) prints all of it on one line
+  per tuning, plus every real word it changed.
+- **The sound-alike index is built off-thread, once per dictionary.** It reads
+  all ~50k words, and the word bar makes a new `TypoModel` on every keystroke,
+  so it lives in `TypoModel`'s companion keyed by repository. Until it is
+  built there are no sound-alikes; tests call `buildSoundAlikes()` first.
 - **All of these numbers are measured on Tatoeba**, the same kind of text the
   table is built from, so Ry's own typing will score lower.
 - **Ry's own typing is logged, so it can be the scorecard** (2026-09-27).

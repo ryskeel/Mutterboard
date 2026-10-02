@@ -38,6 +38,14 @@ object EnglishFixture {
         File("keyboard/app/src/test/resources/tatoeba_en_heldout.txt")
     ).first { it.exists() }.readLines().filter { it.isNotBlank() }
 
+    /** Wikipedia's common misspellings, typed -> intended, both lowercase-typed. */
+    fun misspellings(): List<Pair<String, String>> = listOf(
+        File("src/test/resources/wikipedia_misspellings.txt"),
+        File("keyboard/app/src/test/resources/wikipedia_misspellings.txt")
+    ).first { it.exists() }.readLines()
+        .filter { it.isNotBlank() && !it.startsWith("#") }
+        .map { line -> line.split("->").let { it[0].trim().lowercase() to it[1].trim() } }
+
     private val token = Regex("[A-Za-z]+(?:'[A-Za-z]+)*")
     fun tokens(sentence: String): List<String> = token.findAll(sentence.replace('\u2019', '\'')).map { it.value }.toList()
 }

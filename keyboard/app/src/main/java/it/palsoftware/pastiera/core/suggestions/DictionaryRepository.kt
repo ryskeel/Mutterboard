@@ -38,6 +38,8 @@ interface DictionaryRepository {
     fun topByNormalized(normalized: String, limit: Int = 5): List<DictionaryEntry>
     fun topCommonEntries(limit: Int = 16): List<DictionaryEntry>
     fun isKnownWord(word: String): Boolean
+    /** Every normalized word, for indexes built on top of the dictionary. */
+    fun normalizedTerms(): List<String> = emptyList()
     fun ensureLoadScheduled(background: () -> Unit)
 }
 
@@ -282,6 +284,11 @@ class AndroidDictionaryRepository(
         if (!isReady) return false
         val normalized = normalize(word)
         return normalizedIndex[normalized]?.isNotEmpty() == true
+    }
+
+    override fun normalizedTerms(): List<String> {
+        if (!isReady) return emptyList()
+        return normalizedIndex.keys.toList()
     }
 
     override fun topCommonEntries(limit: Int): List<DictionaryEntry> {
