@@ -74,7 +74,9 @@ class TypoModel(
         val minThreshold: Double = 0.0,
         // Weight on how well a candidate follows the previous word. Settles the
         // close calls frequency cannot: "the tem" is team, "for tem" is them.
-        val contextWeight: Double = 0.5,
+        // 0.75 with the word two back at 0.25 (2026-10-01): wrong corrections
+        // 4.9% -> 4.2% on the context scorecard, fixes unchanged.
+        val contextWeight: Double = 0.75,
         // Share of a word's commonness taken from the everyday table rather
         // than the prose dictionary, where "wired" outranks "weird".
         val everydayWeight: Double = 0.75,
@@ -111,6 +113,11 @@ class TypoModel(
         // five letters: "abut", "cid", "teem" are typos far more often.
         val knownWordThreshold: Double = 4.0,
         val knownWordMinLength: Int = 5,
+        // Weight on the word two back, on top of the previous word's score.
+        val twoWordWeight: Double = 0.25,
+        // Weight on how well the word after follows a candidate, when the
+        // correction is judged again once the next word is typed.
+        val nextWordWeight: Double = 0.5,
     )
 
     data class Correction(val word: String, val score: Double, val runnerUpScore: Double?)
@@ -136,7 +143,11 @@ class TypoModel(
      * [previousWord] is the word before this one, or null at the start of a
      * sentence; see [BigramModel.SENTENCE_START].
      */
-    fun correct(typed: String, previousWord: String? = null): Correction? {
+    /**
+     * [next] is the word typed after this one, for judging a correction again
+     * one word late; null at the space bar, where it is not known yet.
+     */
+    fun correct(typed: String, previousWord: String? = null, twoBack: String? = null, next: String? = null): Correction? {
         if (!repository.isReady) return null
         // Normalizing drops digits, so "4th" would be judged as "th" and fixed
         // to "the". A word with a number in it is never a typo of a dictionary word.
@@ -164,17 +175,19 @@ class TypoModel(
         val nearby = repository.symSpellLookup(input, maxSuggestions = 64)
             .filter { it.distance > 0 }
             .map { it.term }
-        best(typed, input, previousWord, nearby, soundAlike = false, bar)?.let { return it }
+        best(typed, input, previousWord, twoBack, next, nearby, soundAlike = false, bar)?.let { return it }
         // Only when nothing a slip away will do: a sound-alike beat the slip
         // the user actually made ("placee" became something other than place).
         val alike = soundAlikes(input).filter { it != input }
-        return best(typed, input, previousWord, alike, soundAlike = true, bar)
+        return best(typed, input, previousWord, twoBack, next, alike, soundAlike = true, bar)
     }
 
     private fun best(
         typed: String,
         input: String,
         previousWord: String?,
+        twoBack: String?,
+        next: String?,
         terms: List<String>,
         soundAlike: Boolean,
         bar: Double
@@ -196,7 +209,12 @@ class TypoModel(
                 }
                 if (cost >= tuning.maxCost) return@mapNotNull null
                 var score = logPrior(entry, context) - cost
-                val fit = if (context != null) tuning.contextWeight * context.contextScore(previousWord, entry.word) else 0.0
+                var fit = if (context != null) {
+                    tuning.contextWeight * context.contextScore(twoBack, previousWord, entry.word, tuning.twoWordWeight)
+                } else {
+                    0.0
+                }
+                if (context != null && next != null) fit += tuning.nextWordWeight * context.contextScore(entry.word, next)
                 // A lowercase word turning into a capitalised one is usually a
                 // name the user was not typing.
                 if (typed.firstOrNull()?.isLowerCase() == true && entry.word.firstOrNull()?.isUpperCase() == true) {

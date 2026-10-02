@@ -83,6 +83,22 @@ class BigramModel private constructor(
     }
 
     /**
+     * [contextScore] with the word before [previous] too: how much likelier
+     * [candidate] is after "twoBack previous" than after [previous] alone,
+     * added on. "I want" says "to" where "want" alone is less sure. Only the
+     * commonest two-word contexts were kept, so most return the one-word score.
+     */
+    fun contextScore(twoBack: String?, previous: String?, candidate: String, weight: Double): Double {
+        val one = contextScore(previous, candidate)
+        if (previous == null || weight <= 0.0) return one
+        val context = contexts[key(twoBack) + " " + key(previous)] ?: return one
+        val id = ids[candidate.lowercase(Locale.ROOT)]
+        val pair = id?.let { context.count(it) } ?: 0
+        val expected = context.total * likelihood(previous, candidate)
+        return one + weight * ln((pair + 1.0) / (expected + 1.0))
+    }
+
+    /**
      * Estimated probability of [word] right after [previous], smoothed toward
      * how common the word is overall. For choosing between two spellings of
      * the same keystrokes ("ill" or "I'll"), where only the ratio matters.

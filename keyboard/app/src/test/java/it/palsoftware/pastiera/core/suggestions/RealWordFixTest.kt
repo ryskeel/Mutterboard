@@ -51,6 +51,25 @@ class RealWordFixTest {
     }
 
     @Test
+    fun typoCorrectionIsJudgedAgainByTheNextWord() {
+        val controller = controller()
+        val connection = FakeInputConnection(context, "they lef")
+        val tracker = CurrentWordTracker(onWordChanged = {}, onWordReset = {})
+        fun type(word: String) {
+            tracker.setWord(word)
+            controller.handleBoundary(KeyEvent.KEYCODE_SPACE, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE), tracker, connection)
+        }
+        type("lef")
+        assertEquals("they let ", connection.text)
+        connection.commitText("a", 1)
+        type("a")
+        assertEquals("they left a ", connection.text)
+        // Backspace puts back the space bar's choice, the step being undone.
+        assertTrue(controller.handleBackspaceUndo(KeyEvent.KEYCODE_DEL, connection))
+        assertEquals("they let a ", connection.text)
+    }
+
+    @Test
     fun slippedContractionEndingIsFixed() {
         val controller = controller()
         assertEquals("quick or there's gonna ", space(controller, "quick or there'd gonna", "gonna").text)

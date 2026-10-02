@@ -471,6 +471,16 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   It is a list of words to leave alone, never to correct to or suggest: it
   has no frequencies. Larger levels cost slip fixes for no gain; shorter
   words are left out because "abut", "cid", "teem" are usually typos.
+- **A typo correction is judged again by the next word** (2026-10-01).
+  `reconsiderTypo` revisits only the space bar's own corrections ("they lef"
+  -> let, then "a" makes it left); a word the space bar left alone stays the
+  user's. Context scorecard: wrong corrections 4.0% -> 2.6%, fixes 91.2% ->
+  92.6%; it saves 46 typos for every 9 it breaks. Letting it also fix words
+  the space bar left alone adds a point of fixes and is not done: those are
+  where names live. Backspace straight after puts back the space bar's word.
+- **The word two back counts a little** (`twoWordWeight` 0.25, previous word
+  `contextWeight` up to 0.75): wrong corrections 4.9% -> 4.2%. Left context
+  is near its ceiling on Tatoeba; the next word is where the gain was.
 - **All of these numbers are measured on Tatoeba**, the same kind of text the
   table is built from, so Ry's own typing will score lower.
 - **Ry's own typing is logged, so it can be the scorecard** (2026-09-27).
