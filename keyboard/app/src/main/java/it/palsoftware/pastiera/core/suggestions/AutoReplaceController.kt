@@ -237,6 +237,7 @@ class AutoReplaceController(
         boundaryCharOverride: Char? = null
     ): ReplaceResult {
         lastRetroFix = null
+        typoModel?.warmUp()
         val result = handleWordBoundary(keyCode, event, tracker, inputConnection, boundaryCharOverride)
         if (inputConnection != null && settingsProvider().autoReplaceOnSpaceEnter) {
             fixWordBeforeLast(inputConnection)

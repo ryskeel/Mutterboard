@@ -1,6 +1,7 @@
 package it.palsoftware.pastiera.core.suggestions
 
 import java.util.Locale
+import android.util.Log
 import java.util.Collections
 import java.util.WeakHashMap
 import kotlin.concurrent.thread
@@ -138,6 +139,15 @@ class TypoModel(
     private fun soundAlikes(input: String): List<String> {
         if (tuning.soundAlike < 0 || locale.language != "en" || input.length < SoundAlikeIndex.MIN_LENGTH) return emptyList()
         return soundIndexFor(repository)?.lookup(input).orEmpty()
+    }
+
+    /**
+     * Starts the sound-alike index in the background if it is not there yet.
+     * Called on every space press: correct() only sees misspellings, so
+     * waiting for it meant the first one always went unfixed.
+     */
+    fun warmUp() {
+        if (repository.isReady && tuning.soundAlike >= 0 && locale.language == "en") soundIndexFor(repository)
     }
 
     /** Builds the sound-alike index on the calling thread. Tests call it so a run is not timing-dependent. */
@@ -375,6 +385,7 @@ class TypoModel(
         private const val NATURAL_FREQUENCY_PER_LOG_UNIT = 13.0
         private const val VOWELS = "aeiou"
         private const val SPELLING_CAP = 16.0
+        private const val TAG = "TypoModel"
         private const val PERSONAL_SMOOTHING = 5.0
 
         // One per dictionary, not per model: the word bar makes a TypoModel on
@@ -392,10 +403,13 @@ class TypoModel(
             }
             thread(isDaemon = true, name = "SoundAlikeIndex") {
                 try {
+                    val started = System.currentTimeMillis()
                     val index = SoundAlikeIndex(repository.normalizedTerms())
                     synchronized(soundIndexes) { soundIndexes[repository] = index }
-                } catch (e: ConcurrentModificationException) {
-                    // A user word landed mid-read; the next lookup tries again.
+                    Log.i(TAG, "Sound-alike index built in ${System.currentTimeMillis() - started}ms")
+                } catch (e: Exception) {
+                    // Usually a user word landing mid-read; the next lookup tries again.
+                    Log.w(TAG, "Sound-alike index failed: $e")
                     synchronized(soundIndexes) { soundIndexBuilds.remove(repository) }
                 }
             }
