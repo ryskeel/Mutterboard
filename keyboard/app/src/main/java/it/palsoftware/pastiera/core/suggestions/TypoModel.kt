@@ -31,6 +31,9 @@ class TypoModel(
     // Null while the list loads, and for languages without one. Before
     // bigrams so the trailing-lambda calls keep meaning the table.
     private val knownWords: () -> KnownWords? = { null },
+    // What the user has typed after a word (lowercased word -> times), from
+    // the keyboard's own learned pairs. Null previous means a sentence start.
+    private val personalPairs: (String?) -> Map<String, Int> = { emptyMap() },
     // Null while the bundled table loads, and for languages without one.
     private val bigrams: () -> BigramModel? = { null }
 ) {
@@ -118,6 +121,12 @@ class TypoModel(
         // Weight on how well the word after follows a candidate, when the
         // correction is judged again once the next word is typed.
         val nextWordWeight: Double = 0.5,
+        // Weight on how much more often the user types this word after the
+        // previous one than Tatoeba does. Only ever a reward: their habits
+        // are the evidence, and Tatoeba's already counted. 0.25 on a simulated
+        // user (ContextScorecardTest): words they type there 91% -> 97% fixed,
+        // other words unchanged. 0.5 started costing the other words.
+        val personalWeight: Double = 0.25,
     )
 
     data class Correction(val word: String, val score: Double, val runnerUpScore: Double?)
@@ -135,6 +144,21 @@ class TypoModel(
     internal fun buildSoundAlikes() {
         val index = SoundAlikeIndex(repository.normalizedTerms())
         synchronized(soundIndexes) { soundIndexes[repository] = index }
+    }
+
+    /**
+     * ln of how much likelier the user's own pairs make [word] after
+     * [previous] than the bundled table does, floored at 0. Their counts are
+     * smoothed toward the table's estimate, so a pair typed once barely moves
+     * it and one typed every day does.
+     */
+    private fun personalLift(personal: Map<String, Int>, previous: String?, word: String, table: BigramModel?): Double {
+        val expected = table?.likelihood(previous, word) ?: return 0.0
+        val count = personal[word.lowercase(locale)] ?: 0
+        if (count == 0) return 0.0
+        val total = personal.values.sum()
+        val own = (count + PERSONAL_SMOOTHING * expected) / (total + PERSONAL_SMOOTHING)
+        return maxOf(0.0, ln(own / expected))
     }
 
     private class Scored(val word: String, val rank: Double, val confidence: Double)
@@ -194,6 +218,7 @@ class TypoModel(
     ): Correction? {
         if (terms.isEmpty()) return null
         val context = if (tuning.contextWeight > 0.0) bigrams() else null
+        val personal = if (tuning.personalWeight > 0.0) personalPairs(previousWord) else emptyMap()
         val scored = terms.asSequence()
             .mapNotNull { term ->
                 val spellings = repository.topByNormalized(term, limit = 4)
@@ -215,6 +240,7 @@ class TypoModel(
                     0.0
                 }
                 if (context != null && next != null) fit += tuning.nextWordWeight * context.contextScore(entry.word, next)
+                if (personal.isNotEmpty()) fit += tuning.personalWeight * personalLift(personal, previousWord, entry.word, context)
                 // A lowercase word turning into a capitalised one is usually a
                 // name the user was not typing.
                 if (typed.firstOrNull()?.isLowerCase() == true && entry.word.firstOrNull()?.isUpperCase() == true) {
@@ -349,6 +375,7 @@ class TypoModel(
         private const val NATURAL_FREQUENCY_PER_LOG_UNIT = 13.0
         private const val VOWELS = "aeiou"
         private const val SPELLING_CAP = 16.0
+        private const val PERSONAL_SMOOTHING = 5.0
 
         // One per dictionary, not per model: the word bar makes a TypoModel on
         // every keystroke. Building reads all ~50k words, too slow for the space

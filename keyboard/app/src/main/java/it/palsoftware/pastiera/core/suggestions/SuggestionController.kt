@@ -61,6 +61,20 @@ class SuggestionController(
     )
     private var autoReplaceController = createAutoReplaceController()
     private val nextWordPredictor = nextWordPredictorOverride ?: NextWordPredictor(UserNGramStore(appContext))
+
+    private data class LearnedPair(val previous: String?, val word: String, val sentenceStart: Boolean)
+    private var lastLearned: LearnedPair? = null
+
+    // Mutterboard: what the user has typed after [previous], for TypoModel.
+    // The same learned pairs the bar predicts from; one indexed query.
+    private fun personalPairs(previous: String?): Map<String, Int> {
+        val learned = if (previous == null) {
+            nextWordPredictor.predictSentenceStart(currentLocale, PERSONAL_PAIR_LIMIT)
+        } else {
+            nextWordPredictor.predict(currentLocale, previous, PERSONAL_PAIR_LIMIT)
+        }
+        return learned.associate { it.candidate.lowercase(currentLocale) to it.score.toInt() }
+    }
     private val extraSuggestionEngines = mutableMapOf<String, SuggestionLanguageEngine>()
 
     private data class SuggestionLanguageEngine(
@@ -112,7 +126,7 @@ class SuggestionController(
             typoModel = if (currentLocale.language == "en") {
                 BigramModel.shared(appContext.assets) // start the load now, not on the first space
                 KnownWords.shared(appContext.assets)
-                TypoModel(dictionaryRepository, currentLocale, knownWords = { KnownWords.shared(appContext.assets) }) { BigramModel.shared(appContext.assets) }
+                TypoModel(dictionaryRepository, currentLocale, knownWords = { KnownWords.shared(appContext.assets) }, personalPairs = ::personalPairs) { BigramModel.shared(appContext.assets) }
             } else {
                 null
             },
@@ -263,7 +277,7 @@ class SuggestionController(
                     primaryRepository,
                     localeSnapshot,
                     { BigramModel.shared(appContext.assets) },
-                    TypoModel(primaryRepository, localeSnapshot, knownWords = { KnownWords.shared(appContext.assets) }) { BigramModel.shared(appContext.assets) }
+                    TypoModel(primaryRepository, localeSnapshot, knownWords = { KnownWords.shared(appContext.assets) }, personalPairs = ::personalPairs) { BigramModel.shared(appContext.assets) }
                 ).suggest(wordSnapshot, previousSnapshot, settings.maxSuggestions)
                 val seen = ranked.mapTo(HashSet()) { it.candidate.lowercase(localeSnapshot) }
                 // Scores below the ranker's, so the merge's sort keeps the order.
@@ -586,6 +600,14 @@ class SuggestionController(
             // undo (v1.24.0) put a stray backspace's "impor" into the user
             // dictionary, where it then outranked "import" in the bar.
             pendingAddUserWord = autoReplaceController.consumeLastUndoOriginalWord()
+            // Mutterboard: the correction just undone was learned as a habit
+            // at its space press; autocorrect now reads those habits, so a
+            // wrong fix left in would make itself likelier next time.
+            lastLearned?.let { learned ->
+                learned.previous?.let { nextWordPredictor.forget(currentLocale, it, learned.word) }
+                if (learned.sentenceStart) nextWordPredictor.forgetSentenceStart(currentLocale, learned.word)
+            }
+            lastLearned = null
         }
         return undone
     }
@@ -628,6 +650,7 @@ class SuggestionController(
             previousCompletedWord?.let { previous ->
                 nextWordPredictor.learn(currentLocale, previous, cleanWord)
             }
+            lastLearned = LearnedPair(previousCompletedWord, cleanWord, sentenceStartPending)
         }
 
         when {
@@ -1029,5 +1052,7 @@ class SuggestionController(
     companion object {
         private const val CURSOR_WORD_CONTEXT_CHARS = 128
         private const val PRIMARY_SUGGESTION_BOOST = 0.35
+        // Enough of a word's learned continuations to total them; more is noise.
+        private const val PERSONAL_PAIR_LIMIT = 200
     }
 }

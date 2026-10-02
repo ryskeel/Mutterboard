@@ -481,6 +481,14 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
 - **The word two back counts a little** (`twoWordWeight` 0.25, previous word
   `contextWeight` up to 0.75): wrong corrections 4.9% -> 4.2%. Left context
   is near its ceiling on Tatoeba; the next word is where the gain was.
+- **Ry's own word pairs steer corrections** (2026-10-01). The pairs the
+  keyboard already learns for next-word prediction (`UserNGramStore`, on the
+  phone) feed `TypoModel.personalPairs`. Only the excess over the table counts
+  (`personalLift`): Ry's pairs added straight on double-counted what Tatoeba
+  already knew and made things worse. On a simulated user, words they type
+  after that word 91% -> 97% fixed, everything else unchanged. Undoing a
+  correction forgets the pair it was learned as, or a wrong fix left in would
+  make itself likelier.
 - **All of these numbers are measured on Tatoeba**, the same kind of text the
   table is built from, so Ry's own typing will score lower.
 - **Ry's own typing is logged, so it can be the scorecard** (2026-09-27).
@@ -490,6 +498,26 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   kind. Start any autocorrect work from its undone list, not from a
   screenshot, and turn what it shows into scorecard cases. Only a backspace
   straight after counts; a word fixed by hand later is invisible to it.
+
+## Next for autocorrect: a small on-device language model (planned 2026-10-01)
+
+Not started. The corrector's word scores come from counting word pairs, which
+sees one word either side. Gboard's edge is a neural model that reads the
+whole sentence. The plan Ry agreed to:
+
+- **Train our own, small** (roughly 5-15 MB), not an off-the-shelf model:
+  SmolLM-class models are ~100 MB and likely too slow on the Titan II for
+  every space press. Run it through TensorFlow Lite or ONNX Runtime.
+- **It only reranks close calls.** The current corrector stays the base and
+  decides what the candidates are; the model reorders them when the top two
+  are near each other. It cannot make things worse than today, and the
+  scorecards say whether it earns its megabytes.
+- **Training text is the hard part.** It ships with a GPL app, so it needs a
+  clean licence: Wikipedia (CC BY-SA) plus Tatoeba. That teaches grammar, but
+  formal grammar; Ry's typing is far too little to train on and is used
+  through `personalPairs` instead. Casual sources (OpenSubtitles, Reddit,
+  DailyDialog) were ruled out on licence.
+- **Training needs a GPU** for a few hours; Ry would rent one.
 
 ## The refiners are the heart of this app
 

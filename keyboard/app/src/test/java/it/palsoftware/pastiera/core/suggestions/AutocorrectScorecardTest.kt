@@ -75,7 +75,7 @@ class AutocorrectScorecardTest {
             .distinctBy { it.second }
         val lines = StringBuilder("known words: ${known.size}. fixed%/wrong%, unknowns: ${unknowns.size} real words missing from the dictionary\n")
         for ((label, tuning) in sweepTunings) {
-            val model = TypoModel(repository, Locale.ENGLISH, tuning, { known }, { bigrams }).also { it.buildSoundAlikes() }
+            val model = TypoModel(repository, Locale.ENGLISH, tuning, { known }) { bigrams }.also { it.buildSoundAlikes() }
             fun rate(subset: List<Case>): String {
                 var fixed = 0; var wrong = 0
                 for (c in subset) {
@@ -94,7 +94,7 @@ class AutocorrectScorecardTest {
                 rate(spelling), unknownChanged.size, changed.size, changed.joinToString(",")))
             lines.append("    ${unknownChanged.take(40).joinToString(" ")}\n")
             if (System.getenv("SWEEP_DIFF") != null) {
-                val base = TypoModel(repository, Locale.ENGLISH, sweepTunings.first().second, { known }, { bigrams }).also { it.buildSoundAlikes() }
+                val base = TypoModel(repository, Locale.ENGLISH, sweepTunings.first().second, { known }) { bigrams }.also { it.buildSoundAlikes() }
                 val lost = (cases + spelling).filter { base.correct(it.typed)?.word.equals(it.intended, true) && !model.correct(it.typed)?.word.equals(it.intended, true) }
                 lines.append("    lost: ${lost.take(60).joinToString(" ") { it.typed + ">" + it.intended }}\n")
             }

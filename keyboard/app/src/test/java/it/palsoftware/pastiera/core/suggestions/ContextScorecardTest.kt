@@ -173,6 +173,55 @@ class ContextScorecardTest {
         return out.toString()
     }
 
+    /**
+     * The user's own pairs, simulated: 2,000 held-out sentences the cases do
+     * not come from stand in for a few weeks of their typing. Tatoeba's
+     * habits are the table's habits, so this shows the weight does no harm
+     * more than how much a real person's typing helps; CorrectionAudit is
+     * where that shows.
+     */
+    private fun personal(repository: DictionaryRepository, bigrams: BigramModel, known: KnownWords, cases: List<Case>): String {
+        val pairs = HashMap<String, HashMap<String, Int>>()
+        for (sentence in EnglishFixture.heldOutSentences().drop(4000).take(2000)) {
+            val tokens = EnglishFixture.tokens(sentence).map { it.lowercase(Locale.ROOT) }
+            tokens.forEachIndexed { i, w ->
+                val key = if (i == 0) "<s>" else tokens[i - 1]
+                pairs.getOrPut(key) { HashMap() }.merge(w, 1, Int::plus)
+            }
+        }
+        val lookup: (String?) -> Map<String, Int> = { pairs[it?.lowercase(Locale.ROOT) ?: "<s>"].orEmpty() }
+        // A person whose habits are not Tatoeba's: the slip's intended word is
+        // one they have typed after that previous word a few times before.
+        val habits = HashMap<String, HashMap<String, Int>>()
+        cases.filterIndexed { i, _ -> i % 2 == 0 }.forEach { c ->
+            habits.getOrPut(c.previous?.lowercase(Locale.ROOT) ?: "<s>") { HashMap() }.merge(c.intended.lowercase(Locale.ROOT), 3, Int::plus)
+        }
+        val habitLookup: (String?) -> Map<String, Int> = { habits[it?.lowercase(Locale.ROOT) ?: "<s>"].orEmpty() }
+        val out = StringBuilder("with the user's own pairs (simulated):\n")
+        val weights = if (System.getenv("SCORECARD_SWEEP") == "1") listOf(0.0, 0.25, 0.5, 1.0) else listOf(0.0, TypoModel.Tuning().personalWeight)
+        for (weight in weights.distinct()) {
+            val model = TypoModel(repository, Locale.ENGLISH, TypoModel.Tuning(personalWeight = weight), { known }, lookup) { bigrams }
+                .also { it.buildSoundAlikes() }
+            val results = cases.map { model.correct(it.typed, it.previous, it.twoBack)?.word }
+            val n = cases.size.toDouble()
+            val f = cases.indices.count { results[it] == cases[it].intended }
+            val w = cases.indices.count { results[it] != null && results[it] != cases[it].intended }
+            out.append("  weight %.2f: fixed %.1f%%  wrong %.1f%%\n".format(weight, f * 100 / n, w * 100 / n))
+            // Only the even cases have a habit; the odd ones check it does not leak.
+            val habitual = TypoModel(repository, Locale.ENGLISH, TypoModel.Tuning(personalWeight = weight), { known }, habitLookup) { bigrams }
+                .also { it.buildSoundAlikes() }
+            for (parity in 0..1) {
+                val subset = cases.filterIndexed { i, _ -> i % 2 == parity }
+                val r = subset.map { habitual.correct(it.typed, it.previous, it.twoBack)?.word }
+                val m = subset.size.toDouble()
+                out.append("    %s: fixed %.1f%%  wrong %.1f%%\n".format(if (parity == 0) "words they type there" else "other words        ",
+                    subset.indices.count { r[it] == subset[it].intended } * 100 / m,
+                    subset.indices.count { r[it] != null && r[it] != subset[it].intended } * 100 / m))
+            }
+        }
+        return out.toString()
+    }
+
     private data class Case(val previous: String?, val typed: String, val intended: String, val twoBack: String? = null, val next: String? = null)
 
     @Test
@@ -237,6 +286,7 @@ class ContextScorecardTest {
             if (tuning == tunings.last()) report.append("  wrong: ${wrongExamples.joinToString("  ")}\n")
         }
         report.append(nextWord(repository, bigrams, known, cases))
+        report.append(personal(repository, bigrams, known, cases))
 
         // Next-word prediction: is the word the writer actually used among the
         // three the bar would offer, given only the word before it?
