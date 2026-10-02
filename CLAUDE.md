@@ -513,8 +513,10 @@ on the floor"). In order, what is open:
    today, so every unnoticed wrong fix becomes a "habit"), and the lift needs
    a cap so a handful of counts cannot outvote a clear answer. The "They let"
    pairs learned during testing are still in the phone's `user_ngrams.db`.
-2. **The keyboard is dead for ~5 s after it starts**: the `.dict` load took
-   5,224 ms on the Titan II after an install. Pastiera's code, so not new, but
+2. **No autocorrect or suggestions for ~5 s after the keyboard's process
+   starts** (install, update, reboot, or Android killing it; not on opening
+   the keyboard). Keys still type. The `.dict` load took 5,224 ms on the
+   Titan II after an install. Pastiera's code, so not new, but
    it is not measured whether KnownWords / the bigram table / the sound index
    loading at the same moment make it worse. Ry noticed it and did not like
    it.
