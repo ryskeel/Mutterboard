@@ -348,16 +348,26 @@ class AutoReplaceController(
         val model = typoModel ?: return false
         if (autoTypoFixes.isEmpty()) return false
         val before = inputConnection.getTextBeforeCursor(96, 0)?.toString() ?: return false
-        val match = RETRO_RUN.find(before) ?: return false
+        val match = RETRO_RUN.find(before)
+        if (match == null) {
+            Log.d("AutoReplaceController", "Typo reconsider: no word run in '${before.takeLast(24)}' (pending $autoTypoFixes)")
+            return false
+        }
         val (lead, middle, last) = match.destructured
-        val fix = autoTypoFixes.lastOrNull { it.second == middle } ?: return false
+        val fix = autoTypoFixes.lastOrNull { it.second == middle }
+        if (fix == null) {
+            Log.d("AutoReplaceController", "Typo reconsider: '$middle' is not a pending fix ($autoTypoFixes)")
+            return false
+        }
         autoTypoFixes.remove(fix)
         val typed = fix.first
         if (typed.lowercase() in rejectedWords) return false
         val trimmed = lead.trimEnd()
         val previous = if (trimmed.isEmpty() || trimmed.last() in ".!?\n") null else PREVIOUS_WORD.find(trimmed)?.value
         val twoBack = previous?.let { twoBackFrom(trimmed.removeSuffix(it)) }
-        val better = model.correct(typed, previous, twoBack, last)?.word ?: return false
+        val again = model.correct(typed, previous, twoBack, last)
+        Log.d("AutoReplaceController", "Typo reconsider '$typed' ($previous _ $last): $again")
+        val better = again?.word ?: return false
         val replacement = applyCasing(better, typed)
         if (replacement == middle) return false
         val tail = " $last "

@@ -20,6 +20,10 @@ class SymSpell(
     // delete -> list of terms that produced this delete
     private val deletes: MutableMap<String, MutableList<String>> = mutableMapOf()
 
+    // Mutterboard: the three are synchronized. The dictionary adds user words
+    // on a background thread just after loading, while a space press reads on
+    // the main one; a lookup mid-add crashed the keyboard (CME, 2026-10-01).
+    @Synchronized
     fun addWord(term: String, frequency: Int) {
         if (term.isEmpty()) return
         val existing = dictionary[term]
@@ -39,6 +43,7 @@ class SymSpell(
      * Populate from precomputed deletes and term frequencies.
      * Expects deletes keyed by normalized delete string -> list of terms.
      */
+    @Synchronized
     fun loadSerialized(
         terms: Map<String, Int>,
         deletesMap: Map<String, List<String>>
@@ -51,6 +56,7 @@ class SymSpell(
         }
     }
 
+    @Synchronized
     fun lookup(input: String, maxSuggestions: Int = 8): List<SuggestItem> {
         if (input.isEmpty()) return emptyList()
         val suggestions = mutableListOf<SuggestItem>()
