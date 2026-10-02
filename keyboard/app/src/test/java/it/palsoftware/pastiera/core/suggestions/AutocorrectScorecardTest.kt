@@ -43,35 +43,69 @@ class AutocorrectScorecardTest {
 
     private fun englishRepository(context: Context) = EnglishFixture.repository(context)
 
-    /** Grid over the tuning knobs; prints one line per combination. Opt-in: SCORECARD_SWEEP=1 */
+    /**
+     * One line per tuning in [sweepTunings], slips and spelling side by side.
+     * Spelling is scored on SpellingScorecardTest's "tune" half only.
+     * Opt-in: SCORECARD_SWEEP=1. Report: build/autocorrect-sweep.txt
+     * SWEEP_DIFF=1 also lists, per tuning, the fixes the first one made and it lost.
+     */
     @Test
     fun sweep() {
         if (System.getenv("SCORECARD_SWEEP") != "1") return
         val context = RuntimeEnvironment.getApplication()
         val repository = englishRepository(context)
+        val bigrams = EnglishFixture.bigrams()
+        val known = EnglishFixture.knownWords()
         val cases = handWritten + generateTypos(loadEnglish(), repository)
-        val lines = StringBuilder("fixed%/wrong%\n")
-        for (maxCost in listOf(7.0))
-        for (thr in listOf(3.25, 3.0, 2.75))
-        for (first in listOf(2.0, 1.5, 1.0)) {
-            val model = TypoModel(repository, Locale.ENGLISH, TypoModel.Tuning(maxCost = maxCost, firstLetterLong = first, threshold = thr))
+        val spelling = EnglishFixture.misspellings()
+            .filter { (typed, intended) ->
+                intended.all { it in 'a'..'z' } && typed.all { it in 'a'..'z' } &&
+                    repository.isKnownWord(intended) && !repository.isKnownWord(typed) &&
+                    bigrams.everydayWordCount(typed) < 3
+            }
+            .filterIndexed { i, _ -> i % 2 == 0 }
+            .map { Case(it.first, it.second, "spelling") }
+        // Real words the dictionary does not have, as people actually write
+        // them: names, places, rare words. A looser corrector rewrites these.
+        val unknowns = EnglishFixture.heldOutSentences().flatMap { sentence ->
+            val tokens = EnglishFixture.tokens(sentence)
+            tokens.indices.map { i -> tokens.getOrNull(i - 1) to tokens[i] }
+        }
+            .filter { (_, w) -> w.length >= 5 && !repository.isKnownWord(w) && bigrams.everydayWordCount(w.lowercase()) < 3 }
+            .distinctBy { it.second }
+        val lines = StringBuilder("known words: ${known.size}. fixed%/wrong%, unknowns: ${unknowns.size} real words missing from the dictionary\n")
+        for ((label, tuning) in sweepTunings) {
+            val model = TypoModel(repository, Locale.ENGLISH, tuning, { known }) { bigrams }.also { it.buildSoundAlikes() }
             fun rate(subset: List<Case>): String {
                 var fixed = 0; var wrong = 0
                 for (c in subset) {
                     val out = model.correct(c.typed)?.word
-                    if (out == c.intended) fixed++ else if (out != null) wrong++
+                    if (out.equals(c.intended, ignoreCase = true)) fixed++ else if (out != null) wrong++
                 }
-                return "%3d%%/%2d%%".format(fixed * 100 / subset.size.coerceAtLeast(1), wrong * 100 / subset.size.coerceAtLeast(1))
+                val n = subset.size.coerceAtLeast(1).toDouble()
+                return "%4.1f/%4.1f".format(fixed * 100 / n, wrong * 100 / n)
             }
             val changed = leaveAlone.filter { w -> !repository.isKnownWord(w) && model.correct(w) != null }
-            val single = cases.filter { it.kind != "two keys" && it.kind != "first key" }
-            lines.append("thr %.2f firstLong %.1f | single %s  dropped letter %s  first key %s  two keys %s  hand %s  changed %d %s\n".format(
-                thr, first, rate(single), rate(cases.filter { it.kind == "dropped letter" }), rate(cases.filter { it.kind == "first key" }),
+            val unknownChanged = unknowns.mapNotNull { (before, w) -> model.correct(w, before)?.let { "$w>${it.word}" } }
+            val single = cases.filter { it.kind != "two keys" && it.kind != "first key" && it.kind != "hand" }
+            lines.append("%-28s | single %s  first key %s  two keys %s  hand %s  spelling %s  unknowns changed %d  changed %d %s\n".format(
+                label, rate(single), rate(cases.filter { it.kind == "first key" }),
                 rate(cases.filter { it.kind == "two keys" }), rate(cases.filter { it.kind == "hand" }),
-                changed.size, changed.joinToString(",")))
+                rate(spelling), unknownChanged.size, changed.size, changed.joinToString(",")))
+            lines.append("    ${unknownChanged.take(40).joinToString(" ")}\n")
+            if (System.getenv("SWEEP_DIFF") != null) {
+                val base = TypoModel(repository, Locale.ENGLISH, sweepTunings.first().second, { known }) { bigrams }.also { it.buildSoundAlikes() }
+                val lost = (cases + spelling).filter { base.correct(it.typed)?.word.equals(it.intended, true) && !model.correct(it.typed)?.word.equals(it.intended, true) }
+                lines.append("    lost: ${lost.take(60).joinToString(" ") { it.typed + ">" + it.intended }}\n")
+            }
         }
         File("build/autocorrect-sweep.txt").writeText(lines.toString())
     }
+
+    // Add lines here to compare, e.g. "vowel 3.0" to TypoModel.Tuning(vowelForVowel = 3.0).
+    private val sweepTunings: List<Pair<String, TypoModel.Tuning>> = listOf(
+        "shipped" to TypoModel.Tuning(),
+    )
 
     @Test
     fun scorecard() {
@@ -84,7 +118,8 @@ class AutocorrectScorecardTest {
             "shipped defaults" to SuggestionSettings(),
             "fix on space, distance 1" to SuggestionSettings(autoReplaceOnSpaceEnter = true, maxAutoReplaceDistance = 1),
         )
-        val typoModel = TypoModel(repository, Locale.ENGLISH)
+        val known = EnglishFixture.knownWords()
+        val typoModel = TypoModel(repository, Locale.ENGLISH, knownWords = { known }).also { it.buildSoundAlikes() }
 
         val report = StringBuilder("\n=== Autocorrect scorecard (${cases.size} typos, ${leaveAlone.size} words to leave alone) ===\n")
         val runs = scenarios.map { (name, settings) -> Triple(name, settings, null as TypoModel?) } +

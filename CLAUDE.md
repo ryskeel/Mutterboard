@@ -445,6 +445,53 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   are thin, so the next word is judged against the family's pooled pairs
   ('d gets its own family there). Clean words changed stayed 0.6/1000; the
   catch rate is not measured, only Ry's sentence.
+- **Spelling by ear is its own scorecard** (2026-10-01). `SpellingScorecardTest`
+  runs Wikipedia's list of common misspellings ("nutrician", "definately"),
+  split into a half to tune on and a held-out half: 61% -> 79% held out.
+  Four changes did it: a vowel for a vowel is cheap from seven letters
+  (`vowelForVowel`); the long-word confidence floor is 0, because a rare word
+  one key away ("sandpoint" -> standpoint) never cleared the old fixed bar;
+  `SoundAlikeIndex` groups words by a coarse sound key and is only consulted
+  when nothing a slip away will do, so it cannot steal a slip's fix; and two
+  guards pay for the looseness. A known stem plus a regular ending
+  ("payphones", "fizzing") needs more confidence to rewrite, and a capital
+  mid-sentence is a name. Together those halved the real words it rewrote on
+  held-out text (76 -> 41 of 664), at the cost of under a point of slip fixes.
+  The sweep (`SCORECARD_SWEEP=1`, `SWEEP_DIFF=1`) prints all of it on one line
+  per tuning, plus every real word it changed.
+- **The sound-alike index is built off-thread, once per dictionary.** It reads
+  all ~50k words, and the word bar makes a new `TypoModel` on every keystroke,
+  so it lives in `TypoModel`'s companion keyed by repository. Until it is
+  built there are no sound-alikes; tests call `buildSoundAlikes()` first.
+- **A bigger word list says what not to touch** (2026-10-01). The dictionary
+  has ~50k words, so "sprig", "swaddle" and "glisten" read as typos.
+  `en_known_words.txt` is SCOWL level 60 minus the dictionary (~80k words,
+  `scripts/build-english-wordlist.py`); a word in it of five letters or more
+  needs 4 more confidence to rewrite. Real words rewritten 41 -> 19 of 664.
+  It is a list of words to leave alone, never to correct to or suggest: it
+  has no frequencies. Larger levels cost slip fixes for no gain; shorter
+  words are left out because "abut", "cid", "teem" are usually typos.
+- **A typo correction is judged again by the next word** (2026-10-01).
+  `reconsiderTypo` revisits only the space bar's own corrections ("they lef"
+  -> let, then "a" makes it left); a word the space bar left alone stays the
+  user's. Context scorecard: wrong corrections 4.0% -> 2.6%, fixes 91.2% ->
+  92.6%; it saves 46 typos for every 9 it breaks. Letting it also fix words
+  the space bar left alone adds a point of fixes and is not done: those are
+  where names live. Backspace straight after puts back the space bar's word.
+- **The word two back counts a little** (`twoWordWeight` 0.25, previous word
+  `contextWeight` up to 0.75): wrong corrections 4.9% -> 4.2%. Left context
+  is near its ceiling on Tatoeba; the next word is where the gain was.
+- **Ry's own word pairs steer corrections** (2026-10-01). The pairs the
+  keyboard already learns for next-word prediction (`UserNGramStore`, on the
+  phone) feed `TypoModel.personalPairs`. Only the excess over the table counts
+  (`personalLift`): Ry's pairs added straight on double-counted what Tatoeba
+  already knew and made things worse. On a simulated user, words they type
+  after that word 91% -> 97% fixed, everything else unchanged. Undoing a
+  correction forgets the pair it was learned as, or a wrong fix left in would
+  make itself likelier. **Switched off (`personalWeight` 0) the same night**: on
+  the phone, "lef" -> let was learned three times as "They let" and then
+  outvoted "left" in the late re-check. Before turning it back on, stop
+  learning pairs from words the corrector wrote and cap the lift.
 - **All of these numbers are measured on Tatoeba**, the same kind of text the
   table is built from, so Ry's own typing will score lower.
 - **Ry's own typing is logged, so it can be the scorecard** (2026-09-27).
@@ -454,6 +501,55 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   kind. Start any autocorrect work from its undone list, not from a
   screenshot, and turn what it shows into scorecard cases. Only a backspace
   straight after counts; a word fixed by hand later is invisible to it.
+
+## Where autocorrect work stopped (2026-10-01)
+
+Merged to `main`, on the phone, and Ry's spot check passed ("They left a bag
+on the floor"). In order, what is open:
+
+1. **Personal pairs are switched off** (`personalWeight` 0). Turning them
+   back on needs two things first: pairs must not be learned from words the
+   corrector wrote (`handleCompletedWordBoundary` learns `result.replacement`
+   today, so every unnoticed wrong fix becomes a "habit"), and the lift needs
+   a cap so a handful of counts cannot outvote a clear answer. The "They let"
+   pairs learned during testing are still in the phone's `user_ngrams.db`.
+2. **The keyboard is dead for ~5 s after it starts**: the `.dict` load took
+   5,224 ms on the Titan II after an install. Pastiera's code, so not new, but
+   it is not measured whether KnownWords / the bigram table / the sound index
+   loading at the same moment make it worse. Ry noticed it and did not like
+   it.
+3. **The Claude app reports text late.** `getTextBeforeCursor` inside a batch
+   edit returns the text before the edit there, which is why the audit log's
+   "previous" column holds the typed word itself for recent lines, and how
+   the double-space bug put its period in the wrong place. Anything that
+   reads the field straight after writing to it is suspect in that app.
+4. The small on-device model, below.
+
+**Test on the computer before the phone.** Replay a sentence through
+`AutoReplaceController` with the real dictionary (see
+`RealWordFixTest.typoCorrectionIsJudgedAgainByTheNextWord`), with known words,
+bigrams and anything else the phone wires in. Every phone round-trip that
+night found something the harness could have, and cost Ry's patience.
+
+## Next for autocorrect: a small on-device language model (planned 2026-10-01)
+
+Not started. The corrector's word scores come from counting word pairs, which
+sees one word either side. Gboard's edge is a neural model that reads the
+whole sentence. The plan Ry agreed to:
+
+- **Train our own, small** (roughly 5-15 MB), not an off-the-shelf model:
+  SmolLM-class models are ~100 MB and likely too slow on the Titan II for
+  every space press. Run it through TensorFlow Lite or ONNX Runtime.
+- **It only reranks close calls.** The current corrector stays the base and
+  decides what the candidates are; the model reorders them when the top two
+  are near each other. It cannot make things worse than today, and the
+  scorecards say whether it earns its megabytes.
+- **Training text is the hard part.** It ships with a GPL app, so it needs a
+  clean licence: Wikipedia (CC BY-SA) plus Tatoeba. That teaches grammar, but
+  formal grammar; Ry's typing is far too little to train on and is used
+  through `personalPairs` instead. Casual sources (OpenSubtitles, Reddit,
+  DailyDialog) were ruled out on licence.
+- **Training needs a GPU** for a few hours; Ry would rent one.
 
 ## The refiners are the heart of this app
 

@@ -1,6 +1,10 @@
 package it.palsoftware.pastiera.core.suggestions
 
 import java.util.Locale
+import android.util.Log
+import java.util.Collections
+import java.util.WeakHashMap
+import kotlin.concurrent.thread
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
@@ -25,6 +29,12 @@ class TypoModel(
     private val repository: DictionaryRepository,
     private val locale: Locale,
     internal val tuning: Tuning = Tuning(),
+    // Null while the list loads, and for languages without one. Before
+    // bigrams so the trailing-lambda calls keep meaning the table.
+    private val knownWords: () -> KnownWords? = { null },
+    // What the user has typed after a word (lowercased word -> times), from
+    // the keyboard's own learned pairs. Null previous means a sentence start.
+    private val personalPairs: (String?) -> Map<String, Int> = { emptyMap() },
     // Null while the bundled table loads, and for languages without one.
     private val bigrams: () -> BigramModel? = { null }
 ) {
@@ -62,16 +72,65 @@ class TypoModel(
         // Taken off the threshold per letter past four: a long string the
         // dictionary does not know is almost always a typo ("typong").
         val perLetterRelief: Double = 0.5,
-        val minThreshold: Double = 1.0,
+        // Was 1.0, which left "sandpoint" alone: "standpoint" is one missed
+        // key away and nothing else is close, but it is rare enough that its
+        // score never cleared a fixed bar. Spelling scorecard 70% -> 77%.
+        val minThreshold: Double = 0.0,
         // Weight on how well a candidate follows the previous word. Settles the
         // close calls frequency cannot: "the tem" is team, "for tem" is them.
-        val contextWeight: Double = 0.5,
+        // 0.75 with the word two back at 0.25 (2026-10-01): wrong corrections
+        // 4.9% -> 4.2% on the context scorecard, fixes unchanged.
+        val contextWeight: Double = 0.75,
         // Share of a word's commonness taken from the everyday table rather
         // than the prose dictionary, where "wired" outranks "weird".
         val everydayWeight: Double = 0.75,
         // Seen this many times in the everyday table, a word is a word: 3 costs
         // a point of fixes on held-out text and saves a point of wrong ones.
         val everydayKnownCount: Int = 3,
+        // One vowel written for another ("seperate", "definately"): a
+        // spelling mistake, not a finger slip, and far commoner than a key
+        // across the board.
+        // From seven letters: shorter, it turned more slips into the wrong
+        // word. Spelling scorecard 61% -> 71%, slips unchanged.
+        val vowelForVowel: Double = 2.5,
+        val vowelMinLength: Int = 7,
+        // A known word plus a regular ending is a word ("payphones",
+        // "fizzing"): the dictionary lists few inflections. Stems rarer than
+        // this frequency do not count, so a slip that happens to end in "ing"
+        // on top of an obscure stem is still fixed. 0 turns the check off.
+        val inflectionStemFrequency: Int = 60,
+        // How much surer the corrector must be to rewrite one. Not a veto: a
+        // veto lost "comming" (com + ing) and "caled" (cal + ed).
+        val inflectionThreshold: Double = 2.0,
+        // A capital in the middle of a sentence is a name the user chose to
+        // capitalise ("Higgs", "Thebes"), not a slip of a common word.
+        val midSentenceCapitalThreshold: Double = 4.0,
+        // A long word that sounds like the typed one but is too many edits
+        // away for the lookup ("nutrician" for nutrition) costs this, plus a
+        // share of its spelling distance so the closer of two sound-alikes
+        // wins. Negative turns sound-alikes off.
+        val soundAlike: Double = 2.0,
+        val soundAlikeSlope: Double = 0.25,
+        // A word in the bigger list (KnownWords: SCOWL level 60, ~80k words
+        // the dictionary lacks) needs this much more confidence to rewrite.
+        // Real words rewritten on held-out text 41 -> 19 of 664. Not below
+        // five letters: "abut", "cid", "teem" are typos far more often.
+        val knownWordThreshold: Double = 4.0,
+        val knownWordMinLength: Int = 5,
+        // Weight on the word two back, on top of the previous word's score.
+        val twoWordWeight: Double = 0.25,
+        // Weight on how well the word after follows a candidate, when the
+        // correction is judged again once the next word is typed.
+        val nextWordWeight: Double = 0.5,
+        // Weight on how much more often the user types this word after the
+        // previous one than Tatoeba does. Only ever a reward: their habits
+        // are the evidence, and Tatoeba's already counted. 0.25 on a simulated
+        // user (ContextScorecardTest): words they type there 91% -> 97% fixed,
+        // other words unchanged. 0.5 started costing the other words.
+        // OFF (2026-10-01): on the phone the keyboard's own wrong fixes were
+        // learned as habits ("They let" x3 from "lef") and then outvoted the
+        // right word. Needs: no learning from corrected words, and a cap.
+        val personalWeight: Double = 0.0,
     )
 
     data class Correction(val word: String, val score: Double, val runnerUpScore: Double?)
@@ -80,13 +139,52 @@ class TypoModel(
     // correction confident enough; a poor fit never vetoes one. Letting it veto
     // cost a fifth of all fixes on the context scorecard, because a pair the
     // table has not seen reads as a poor fit.
+    private fun soundAlikes(input: String): List<String> {
+        if (tuning.soundAlike < 0 || locale.language != "en" || input.length < SoundAlikeIndex.MIN_LENGTH) return emptyList()
+        return soundIndexFor(repository)?.lookup(input).orEmpty()
+    }
+
+    /**
+     * Starts the sound-alike index in the background if it is not there yet.
+     * Called on every space press: correct() only sees misspellings, so
+     * waiting for it meant the first one always went unfixed.
+     */
+    fun warmUp() {
+        if (repository.isReady && tuning.soundAlike >= 0 && locale.language == "en") soundIndexFor(repository)
+    }
+
+    /** Builds the sound-alike index on the calling thread. Tests call it so a run is not timing-dependent. */
+    internal fun buildSoundAlikes() {
+        val index = SoundAlikeIndex(repository.normalizedTerms())
+        synchronized(soundIndexes) { soundIndexes[repository] = index }
+    }
+
+    /**
+     * ln of how much likelier the user's own pairs make [word] after
+     * [previous] than the bundled table does, floored at 0. Their counts are
+     * smoothed toward the table's estimate, so a pair typed once barely moves
+     * it and one typed every day does.
+     */
+    private fun personalLift(personal: Map<String, Int>, previous: String?, word: String, table: BigramModel?): Double {
+        val expected = table?.likelihood(previous, word) ?: return 0.0
+        val count = personal[word.lowercase(locale)] ?: 0
+        if (count == 0) return 0.0
+        val total = personal.values.sum()
+        val own = (count + PERSONAL_SMOOTHING * expected) / (total + PERSONAL_SMOOTHING)
+        return maxOf(0.0, ln(own / expected))
+    }
+
     private class Scored(val word: String, val rank: Double, val confidence: Double)
 
     /**
      * [previousWord] is the word before this one, or null at the start of a
      * sentence; see [BigramModel.SENTENCE_START].
      */
-    fun correct(typed: String, previousWord: String? = null): Correction? {
+    /**
+     * [next] is the word typed after this one, for judging a correction again
+     * one word late; null at the space bar, where it is not known yet.
+     */
+    fun correct(typed: String, previousWord: String? = null, twoBack: String? = null, next: String? = null): Correction? {
         if (!repository.isReady) return null
         // Normalizing drops digits, so "4th" would be judged as "th" and fixed
         // to "the". A word with a number in it is never a typo of a dictionary word.
@@ -99,20 +197,63 @@ class TypoModel(
         if (tuning.everydayKnownCount > 0 &&
             (bigrams()?.everydayWordCount(input) ?: 0) >= tuning.everydayKnownCount
         ) return null
-        val context = if (tuning.contextWeight > 0.0) bigrams() else null
-        val scored = repository.symSpellLookup(input, maxSuggestions = 64)
-            .asSequence()
+        val threshold = if (input.length == 2) {
+            tuning.twoLetterThreshold
+        } else if (input.length <= 3) {
+            tuning.shortWordThreshold
+        } else {
+            (tuning.threshold - tuning.perLetterRelief * (input.length - 4)).coerceAtLeast(tuning.minThreshold)
+        }
+        var bar = threshold
+        if (isInflection(input)) bar += tuning.inflectionThreshold
+        if (input.length >= tuning.knownWordMinLength && knownWords()?.contains(input) == true) bar += tuning.knownWordThreshold
+        if (previousWord != null && typed.first().isUpperCase()) bar += tuning.midSentenceCapitalThreshold
+
+        val nearby = repository.symSpellLookup(input, maxSuggestions = 64)
             .filter { it.distance > 0 }
-            .mapNotNull { item ->
-                val spellings = repository.topByNormalized(item.term, limit = 4)
+            .map { it.term }
+        best(typed, input, previousWord, twoBack, next, nearby, soundAlike = false, bar)?.let { return it }
+        // Only when nothing a slip away will do: a sound-alike beat the slip
+        // the user actually made ("placee" became something other than place).
+        val alike = soundAlikes(input).filter { it != input }
+        return best(typed, input, previousWord, twoBack, next, alike, soundAlike = true, bar)
+    }
+
+    private fun best(
+        typed: String,
+        input: String,
+        previousWord: String?,
+        twoBack: String?,
+        next: String?,
+        terms: List<String>,
+        soundAlike: Boolean,
+        bar: Double
+    ): Correction? {
+        if (terms.isEmpty()) return null
+        val context = if (tuning.contextWeight > 0.0) bigrams() else null
+        val personal = if (tuning.personalWeight > 0.0) personalPairs(previousWord) else emptyMap()
+        val scored = terms.asSequence()
+            .mapNotNull { term ->
+                val spellings = repository.topByNormalized(term, limit = 4)
                 // "born" and "Born" share a key; a lowercase slip means the lowercase word.
                 val entry = spellings.firstOrNull { it.word.firstOrNull()?.isLowerCase() == true }
                     ?: spellings.firstOrNull()
                     ?: return@mapNotNull null
-                val cost = channelCost(input, item.term)
+                val spelled = channelCost(input, term)
+                val cost = if (soundAlike) {
+                    minOf(spelled, tuning.soundAlike + tuning.soundAlikeSlope * minOf(spelled, SPELLING_CAP))
+                } else {
+                    spelled
+                }
                 if (cost >= tuning.maxCost) return@mapNotNull null
                 var score = logPrior(entry, context) - cost
-                val fit = if (context != null) tuning.contextWeight * context.contextScore(previousWord, entry.word) else 0.0
+                var fit = if (context != null) {
+                    tuning.contextWeight * context.contextScore(twoBack, previousWord, entry.word, tuning.twoWordWeight)
+                } else {
+                    0.0
+                }
+                if (context != null && next != null) fit += tuning.nextWordWeight * context.contextScore(entry.word, next)
+                if (personal.isNotEmpty()) fit += tuning.personalWeight * personalLift(personal, previousWord, entry.word, context)
                 // A lowercase word turning into a capitalised one is usually a
                 // name the user was not typing.
                 if (typed.firstOrNull()?.isLowerCase() == true && entry.word.firstOrNull()?.isUpperCase() == true) {
@@ -126,15 +267,31 @@ class TypoModel(
             .toList()
 
         val best = scored.firstOrNull() ?: return null
-        val threshold = if (input.length == 2) {
-            tuning.twoLetterThreshold
-        } else if (input.length <= 3) {
-            tuning.shortWordThreshold
-        } else {
-            (tuning.threshold - tuning.perLetterRelief * (input.length - 4)).coerceAtLeast(tuning.minThreshold)
-        }
-        if (best.confidence < threshold) return null
+        if (best.confidence < bar) return null
         return Correction(best.word, best.rank, scored.getOrNull(1)?.rank)
+    }
+
+    private fun isInflection(input: String): Boolean {
+        if (tuning.inflectionStemFrequency <= 0 || locale.language != "en" || input.length < 5) return false
+        fun known(stem: String) = stem.length >= 3 &&
+            (repository.bestEntryForNormalized(stem)?.frequency ?: 0) >= tuning.inflectionStemFrequency
+        for (ending in INFLECTIONS) {
+            if (!input.endsWith(ending)) continue
+            val stem = input.dropLast(ending.length)
+            val ok = when (ending) {
+                // "moved", "braver", "bravest": only after a silent e.
+                "d", "r", "st" -> stem.endsWith("e") && known(stem)
+                // "dayss" and "laterr" are a key held too long.
+                "s" -> !stem.endsWith("s") && known(stem)
+                "ies", "ied", "ier", "iest", "ily" -> known(stem + "y")
+                // "relegated", "fizzing", "stopped": the e drops and a final
+                // consonant may double; "receiveed" keeps an e it cannot.
+                else -> !stem.endsWith("e") && (known(stem) || known(stem + "e") ||
+                    (stem.length >= 4 && stem.last() == stem[stem.length - 2] && stem.last() !in VOWELS && known(stem.dropLast(1))))
+            }
+            if (ok) return true
+        }
+        return false
     }
 
     // The bundled dictionaries store frequency on a log scale: across English,
@@ -170,7 +327,7 @@ class TypoModel(
             for (j in 1..m) {
                 val a = typed[i - 1]
                 val b = intended[j - 1]
-                var best = d[i - 1][j - 1] + if (a == b) 0.0 else substituteCost(a, b)
+                var best = d[i - 1][j - 1] + if (a == b) 0.0 else substituteCost(a, b, spelling = n >= tuning.vowelMinLength)
                 best = minOf(best, d[i - 1][j] + extraKeyCost(typed, i - 1))
                 best = minOf(best, d[i][j - 1] + missedKeyCost(intended, j - 1))
                 if (i > 1 && j > 1 && a == intended[j - 2] && typed[i - 2] == b) {
@@ -193,8 +350,11 @@ class TypoModel(
         return cost
     }
 
-    private fun substituteCost(typed: Char, intended: Char): Double =
-        if (isNeighbour(typed, intended)) tuning.neighbourKey else tuning.farKey
+    private fun substituteCost(typed: Char, intended: Char, spelling: Boolean): Double = when {
+        isNeighbour(typed, intended) -> tuning.neighbourKey
+        spelling && typed in VOWELS && intended in VOWELS -> minOf(tuning.vowelForVowel, tuning.farKey)
+        else -> tuning.farKey
+    }
 
     // A key pressed that the word does not have: cheap when it sits beside or
     // repeats a key the finger was pressing anyway.
@@ -226,6 +386,40 @@ class TypoModel(
         private const val THE_PROBABILITY = 0.05
         private const val THE_FREQUENCY = 222.0
         private const val NATURAL_FREQUENCY_PER_LOG_UNIT = 13.0
+        private const val VOWELS = "aeiou"
+        private const val SPELLING_CAP = 16.0
+        private const val TAG = "TypoModel"
+        private const val PERSONAL_SMOOTHING = 5.0
+
+        // One per dictionary, not per model: the word bar makes a TypoModel on
+        // every keystroke. Building reads all ~50k words, too slow for the space
+        // press that first needs it, so it happens off-thread and there are no
+        // sound-alikes until it is done. A repository is replaced, not
+        // reloaded, when the language changes, so the weak key retires it.
+        private val soundIndexes = WeakHashMap<DictionaryRepository, SoundAlikeIndex>()
+        private val soundIndexBuilds = Collections.newSetFromMap(WeakHashMap<DictionaryRepository, Boolean>())
+
+        private fun soundIndexFor(repository: DictionaryRepository): SoundAlikeIndex? {
+            synchronized(soundIndexes) {
+                soundIndexes[repository]?.let { return it }
+                if (!soundIndexBuilds.add(repository)) return null
+            }
+            thread(isDaemon = true, name = "SoundAlikeIndex") {
+                try {
+                    val started = System.currentTimeMillis()
+                    val index = SoundAlikeIndex(repository.normalizedTerms())
+                    synchronized(soundIndexes) { soundIndexes[repository] = index }
+                    Log.i(TAG, "Sound-alike index built in ${System.currentTimeMillis() - started}ms")
+                } catch (e: Exception) {
+                    // Usually a user word landing mid-read; the next lookup tries again.
+                    Log.w(TAG, "Sound-alike index failed: $e")
+                    synchronized(soundIndexes) { soundIndexBuilds.remove(repository) }
+                }
+            }
+            return null
+        }
+        // Longest first, so "ies" is tried before "s".
+        private val INFLECTIONS = listOf("iest", "ing", "ies", "ied", "ier", "ily", "est", "es", "ed", "er", "ly", "st", "s", "d", "r")
 
 
 

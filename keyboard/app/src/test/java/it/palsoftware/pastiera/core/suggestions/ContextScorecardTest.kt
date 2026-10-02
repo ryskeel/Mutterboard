@@ -27,7 +27,7 @@ class ContextScorecardTest {
      * changed per thousand, in clean text.
      */
     private fun realWords(repository: DictionaryRepository, bigrams: BigramModel): String {
-        val typo = TypoModel(repository, Locale.ENGLISH) { bigrams }
+        val typo = TypoModel(repository, Locale.ENGLISH, knownWords = { EnglishFixture.knownWords() }) { bigrams }.also { it.buildSoundAlikes() }
         val random = Random(20260926)
         val sentences = EnglishFixture.heldOutSentences().take(4000)
         data class Slip(val before: String?, val typed: String, val after: String, val intended: String)
@@ -138,12 +138,97 @@ class ContextScorecardTest {
         return out.toString()
     }
 
-    private data class Case(val previous: String?, val typed: String, val intended: String)
+    /**
+     * The same typos judged again once the next word is typed. "only" is a
+     * correction taken back or changed; "also" lets the late look fix a word
+     * the space bar left alone.
+     */
+    private fun nextWord(repository: DictionaryRepository, bigrams: BigramModel, known: KnownWords, cases: List<Case>): String {
+        val out = StringBuilder("judged again with the next word (${cases.count { it.next != null }} typos with one):\n")
+        val shipped = TypoModel.Tuning()
+        val weights = if (System.getenv("SCORECARD_SWEEP") == "1") listOf(0.25, 0.5, 0.75, 1.0) else listOf(shipped.nextWordWeight)
+        val space = TypoModel(repository, Locale.ENGLISH, shipped, { known }) { bigrams }.also { it.buildSoundAlikes() }
+        val withNext = cases.filter { it.next != null }
+        val atSpace = withNext.map { space.correct(it.typed, it.previous, it.twoBack)?.word }
+        fun line(label: String, results: List<String?>) {
+            val n = withNext.size.toDouble()
+            val f = withNext.indices.count { results[it] == withNext[it].intended }
+            val w = withNext.indices.count { results[it] != null && results[it] != withNext[it].intended }
+            out.append("  %-28s fixed %.1f%%  wrong %.1f%%\n".format(label, f * 100 / n, w * 100 / n))
+        }
+        line("space bar only", atSpace)
+        for (weight in weights) {
+            val late = TypoModel(repository, Locale.ENGLISH, shipped.copy(nextWordWeight = weight), { known }) { bigrams }.also { it.buildSoundAlikes() }
+            val again = withNext.map { late.correct(it.typed, it.previous, it.twoBack, it.next)?.word }
+            line("weight $weight, only", atSpace.indices.map { if (atSpace[it] != null) again[it] ?: atSpace[it] else null })
+            line("weight $weight, also", atSpace.indices.map { again[it] ?: atSpace[it] })
+            if (weight == shipped.nextWordWeight) {
+                val saved = withNext.indices.filter { atSpace[it] != null && atSpace[it] != withNext[it].intended && again[it] == withNext[it].intended }
+                val broke = withNext.indices.filter { atSpace[it] == withNext[it].intended && again[it] != null && again[it] != withNext[it].intended }
+                fun show(i: Int) = withNext[i].let { "${it.previous ?: "^"} ${it.typed} ${it.next}: ${atSpace[i]}->${again[i]}" }
+                out.append("    saved ${saved.size}: ${saved.take(8).joinToString("  ") { show(it) }}\n")
+                out.append("    broke ${broke.size}: ${broke.take(8).joinToString("  ") { show(it) }}\n")
+            }
+        }
+        return out.toString()
+    }
+
+    /**
+     * The user's own pairs, simulated: 2,000 held-out sentences the cases do
+     * not come from stand in for a few weeks of their typing. Tatoeba's
+     * habits are the table's habits, so this shows the weight does no harm
+     * more than how much a real person's typing helps; CorrectionAudit is
+     * where that shows.
+     */
+    private fun personal(repository: DictionaryRepository, bigrams: BigramModel, known: KnownWords, cases: List<Case>): String {
+        val pairs = HashMap<String, HashMap<String, Int>>()
+        for (sentence in EnglishFixture.heldOutSentences().drop(4000).take(2000)) {
+            val tokens = EnglishFixture.tokens(sentence).map { it.lowercase(Locale.ROOT) }
+            tokens.forEachIndexed { i, w ->
+                val key = if (i == 0) "<s>" else tokens[i - 1]
+                pairs.getOrPut(key) { HashMap() }.merge(w, 1, Int::plus)
+            }
+        }
+        val lookup: (String?) -> Map<String, Int> = { pairs[it?.lowercase(Locale.ROOT) ?: "<s>"].orEmpty() }
+        // A person whose habits are not Tatoeba's: the slip's intended word is
+        // one they have typed after that previous word a few times before.
+        val habits = HashMap<String, HashMap<String, Int>>()
+        cases.filterIndexed { i, _ -> i % 2 == 0 }.forEach { c ->
+            habits.getOrPut(c.previous?.lowercase(Locale.ROOT) ?: "<s>") { HashMap() }.merge(c.intended.lowercase(Locale.ROOT), 3, Int::plus)
+        }
+        val habitLookup: (String?) -> Map<String, Int> = { habits[it?.lowercase(Locale.ROOT) ?: "<s>"].orEmpty() }
+        val out = StringBuilder("with the user's own pairs (simulated):\n")
+        val weights = if (System.getenv("SCORECARD_SWEEP") == "1") listOf(0.0, 0.25, 0.5, 1.0) else listOf(0.0, TypoModel.Tuning().personalWeight)
+        for (weight in weights.distinct()) {
+            val model = TypoModel(repository, Locale.ENGLISH, TypoModel.Tuning(personalWeight = weight), { known }, lookup) { bigrams }
+                .also { it.buildSoundAlikes() }
+            val results = cases.map { model.correct(it.typed, it.previous, it.twoBack)?.word }
+            val n = cases.size.toDouble()
+            val f = cases.indices.count { results[it] == cases[it].intended }
+            val w = cases.indices.count { results[it] != null && results[it] != cases[it].intended }
+            out.append("  weight %.2f: fixed %.1f%%  wrong %.1f%%\n".format(weight, f * 100 / n, w * 100 / n))
+            // Only the even cases have a habit; the odd ones check it does not leak.
+            val habitual = TypoModel(repository, Locale.ENGLISH, TypoModel.Tuning(personalWeight = weight), { known }, habitLookup) { bigrams }
+                .also { it.buildSoundAlikes() }
+            for (parity in 0..1) {
+                val subset = cases.filterIndexed { i, _ -> i % 2 == parity }
+                val r = subset.map { habitual.correct(it.typed, it.previous, it.twoBack)?.word }
+                val m = subset.size.toDouble()
+                out.append("    %s: fixed %.1f%%  wrong %.1f%%\n".format(if (parity == 0) "words they type there" else "other words        ",
+                    subset.indices.count { r[it] == subset[it].intended } * 100 / m,
+                    subset.indices.count { r[it] != null && r[it] != subset[it].intended } * 100 / m))
+            }
+        }
+        return out.toString()
+    }
+
+    private data class Case(val previous: String?, val typed: String, val intended: String, val twoBack: String? = null, val next: String? = null)
 
     @Test
     fun scorecard() {
         val repository = EnglishFixture.repository(RuntimeEnvironment.getApplication())
         val bigrams = EnglishFixture.bigrams()
+        val known = EnglishFixture.knownWords()
         val sentences = EnglishFixture.heldOutSentences().take(4000)
         val random = Random(20260925)
 
@@ -157,13 +242,13 @@ class ContextScorecardTest {
             val i = candidates[random.nextInt(candidates.size)]
             val (typo, _) = TypoGenerator.any(tokens[i], random) ?: return@mapNotNull null
             if (repository.isKnownWord(typo)) return@mapNotNull null
-            Case(if (i == 0) null else tokens[i - 1], typo, tokens[i])
+            Case(if (i == 0) null else tokens[i - 1], typo, tokens[i], if (i < 2) null else tokens[i - 2], tokens.getOrNull(i + 1))
         }
 
         val report = StringBuilder("\n=== Context scorecard (${cases.size} typos in held-out sentences) ===\n")
         val shipped = TypoModel.Tuning()
         val tunings = if (System.getenv("SCORECARD_SWEEP") == "1") {
-            listOf(0.0, 0.25, 0.5, 0.75, 0.9).map { shipped.copy(everydayWeight = it) }
+            listOf(0.0, 0.25, 0.5).flatMap { t -> listOf(0.5, 0.75, 1.0).map { c -> shipped.copy(twoWordWeight = t, contextWeight = c) } }
         } else {
             listOf(shipped.copy(contextWeight = 0.0), shipped)
         }
@@ -171,21 +256,22 @@ class ContextScorecardTest {
         val twoLetter = cases.filter { it.typed.length == 2 }
         for (tuning in tunings) {
             val weight = tuning.contextWeight
-            val model = TypoModel(repository, Locale.ENGLISH, tuning) { bigrams }
+            val model = TypoModel(repository, Locale.ENGLISH, tuning, { known }) { bigrams }.also { it.buildSoundAlikes() }
             fun rate(subset: List<Case>): String {
                 var f = 0; var w = 0
                 for (c in subset) {
-                    val out = model.correct(c.typed, c.previous)?.word
+                    val out = model.correct(c.typed, c.previous, c.twoBack)?.word
                     if (out == c.intended) f++ else if (out != null) w++
                 }
-                return "%d%%/%d%%".format(f * 100 / subset.size.coerceAtLeast(1), w * 100 / subset.size.coerceAtLeast(1))
+                val n = subset.size.coerceAtLeast(1).toDouble()
+                return "%.1f%%/%.1f%%".format(f * 100 / n, w * 100 / n)
             }
-            report.append("everyday weight %.2f: all %s, first-letter drops %s, two-letter %s\n".format(
-                tuning.everydayWeight, rate(cases), rate(firstDropped), rate(twoLetter)))
+            report.append("everyday %.2f context %.2f two-word %.2f: all %s, first-letter drops %s, two-letter %s\n".format(
+                tuning.everydayWeight, tuning.contextWeight, tuning.twoWordWeight, rate(cases), rate(firstDropped), rate(twoLetter)))
             var fixed = 0; var wrong = 0
             val wrongExamples = mutableListOf<String>()
             for (c in cases) {
-                val out = model.correct(c.typed, c.previous)?.word
+                val out = model.correct(c.typed, c.previous, c.twoBack)?.word
                 when (out) {
                     c.intended -> fixed++
                     null -> {}
@@ -199,6 +285,8 @@ class ContextScorecardTest {
                 weight, fixed * 100 / cases.size, wrong * 100 / cases.size))
             if (tuning == tunings.last()) report.append("  wrong: ${wrongExamples.joinToString("  ")}\n")
         }
+        report.append(nextWord(repository, bigrams, known, cases))
+        report.append(personal(repository, bigrams, known, cases))
 
         // Next-word prediction: is the word the writer actually used among the
         // three the bar would offer, given only the word before it?

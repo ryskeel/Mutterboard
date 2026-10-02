@@ -32,11 +32,24 @@ object EnglishFixture {
     fun bigrams(): BigramModel =
         assetFile("dictionaries/en_bigrams.tsv").bufferedReader().use { BigramModel.parse(it) }
 
+    /** The bundled list, or another one named by KNOWN_WORDS (the sweep compares SCOWL sizes). */
+    fun knownWords(): KnownWords =
+        (System.getenv("KNOWN_WORDS")?.let { File(it) } ?: assetFile("dictionaries/en_known_words.txt"))
+            .inputStream().use { KnownWords.parse(it) }
+
     /** Held-out Tatoeba sentences the bigram table never saw. */
     fun heldOutSentences(): List<String> = listOf(
         File("src/test/resources/tatoeba_en_heldout.txt"),
         File("keyboard/app/src/test/resources/tatoeba_en_heldout.txt")
     ).first { it.exists() }.readLines().filter { it.isNotBlank() }
+
+    /** Wikipedia's common misspellings, typed -> intended, both lowercase-typed. */
+    fun misspellings(): List<Pair<String, String>> = listOf(
+        File("src/test/resources/wikipedia_misspellings.txt"),
+        File("keyboard/app/src/test/resources/wikipedia_misspellings.txt")
+    ).first { it.exists() }.readLines()
+        .filter { it.isNotBlank() && !it.startsWith("#") }
+        .map { line -> line.split("->").let { it[0].trim().lowercase() to it[1].trim() } }
 
     private val token = Regex("[A-Za-z]+(?:'[A-Za-z]+)*")
     fun tokens(sentence: String): List<String> = token.findAll(sentence.replace('\u2019', '\'')).map { it.value }.toList()
