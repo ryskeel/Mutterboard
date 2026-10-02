@@ -55,6 +55,7 @@ class AutocorrectScorecardTest {
         val context = RuntimeEnvironment.getApplication()
         val repository = englishRepository(context)
         val bigrams = EnglishFixture.bigrams()
+        val known = EnglishFixture.knownWords()
         val cases = handWritten + generateTypos(loadEnglish(), repository)
         val spelling = EnglishFixture.misspellings()
             .filter { (typed, intended) ->
@@ -72,9 +73,9 @@ class AutocorrectScorecardTest {
         }
             .filter { (_, w) -> w.length >= 5 && !repository.isKnownWord(w) && bigrams.everydayWordCount(w.lowercase()) < 3 }
             .distinctBy { it.second }
-        val lines = StringBuilder("fixed%/wrong%, unknowns: ${unknowns.size} real words missing from the dictionary\n")
+        val lines = StringBuilder("known words: ${known.size}. fixed%/wrong%, unknowns: ${unknowns.size} real words missing from the dictionary\n")
         for ((label, tuning) in sweepTunings) {
-            val model = TypoModel(repository, Locale.ENGLISH, tuning) { bigrams }.also { it.buildSoundAlikes() }
+            val model = TypoModel(repository, Locale.ENGLISH, tuning, { known }, { bigrams }).also { it.buildSoundAlikes() }
             fun rate(subset: List<Case>): String {
                 var fixed = 0; var wrong = 0
                 for (c in subset) {
@@ -93,7 +94,7 @@ class AutocorrectScorecardTest {
                 rate(spelling), unknownChanged.size, changed.size, changed.joinToString(",")))
             lines.append("    ${unknownChanged.take(40).joinToString(" ")}\n")
             if (System.getenv("SWEEP_DIFF") != null) {
-                val base = TypoModel(repository, Locale.ENGLISH, sweepTunings.first().second) { bigrams }.also { it.buildSoundAlikes() }
+                val base = TypoModel(repository, Locale.ENGLISH, sweepTunings.first().second, { known }, { bigrams }).also { it.buildSoundAlikes() }
                 val lost = (cases + spelling).filter { base.correct(it.typed)?.word.equals(it.intended, true) && !model.correct(it.typed)?.word.equals(it.intended, true) }
                 lines.append("    lost: ${lost.take(60).joinToString(" ") { it.typed + ">" + it.intended }}\n")
             }
@@ -117,7 +118,8 @@ class AutocorrectScorecardTest {
             "shipped defaults" to SuggestionSettings(),
             "fix on space, distance 1" to SuggestionSettings(autoReplaceOnSpaceEnter = true, maxAutoReplaceDistance = 1),
         )
-        val typoModel = TypoModel(repository, Locale.ENGLISH).also { it.buildSoundAlikes() }
+        val known = EnglishFixture.knownWords()
+        val typoModel = TypoModel(repository, Locale.ENGLISH, knownWords = { known }).also { it.buildSoundAlikes() }
 
         val report = StringBuilder("\n=== Autocorrect scorecard (${cases.size} typos, ${leaveAlone.size} words to leave alone) ===\n")
         val runs = scenarios.map { (name, settings) -> Triple(name, settings, null as TypoModel?) } +

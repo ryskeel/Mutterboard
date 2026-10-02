@@ -34,7 +34,8 @@ class SpellingScorecardTest {
     fun scorecard() {
         val repository = EnglishFixture.repository(RuntimeEnvironment.getApplication())
         val bigrams = EnglishFixture.bigrams()
-        val model = TypoModel(repository, Locale.ENGLISH) { bigrams }.also { it.buildSoundAlikes() }
+        val known = EnglishFixture.knownWords()
+        val model = TypoModel(repository, Locale.ENGLISH, knownWords = { known }) { bigrams }.also { it.buildSoundAlikes() }
 
         val cases = misspellings().filter { c ->
             c.intended.all { it in 'a'..'z' } && c.typed.all { it in 'a'..'z' } &&

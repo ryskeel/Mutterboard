@@ -27,7 +27,7 @@ class ContextScorecardTest {
      * changed per thousand, in clean text.
      */
     private fun realWords(repository: DictionaryRepository, bigrams: BigramModel): String {
-        val typo = TypoModel(repository, Locale.ENGLISH) { bigrams }.also { it.buildSoundAlikes() }
+        val typo = TypoModel(repository, Locale.ENGLISH, knownWords = { EnglishFixture.knownWords() }) { bigrams }.also { it.buildSoundAlikes() }
         val random = Random(20260926)
         val sentences = EnglishFixture.heldOutSentences().take(4000)
         data class Slip(val before: String?, val typed: String, val after: String, val intended: String)
@@ -144,6 +144,7 @@ class ContextScorecardTest {
     fun scorecard() {
         val repository = EnglishFixture.repository(RuntimeEnvironment.getApplication())
         val bigrams = EnglishFixture.bigrams()
+        val known = EnglishFixture.knownWords()
         val sentences = EnglishFixture.heldOutSentences().take(4000)
         val random = Random(20260925)
 
@@ -171,7 +172,7 @@ class ContextScorecardTest {
         val twoLetter = cases.filter { it.typed.length == 2 }
         for (tuning in tunings) {
             val weight = tuning.contextWeight
-            val model = TypoModel(repository, Locale.ENGLISH, tuning) { bigrams }.also { it.buildSoundAlikes() }
+            val model = TypoModel(repository, Locale.ENGLISH, tuning, { known }) { bigrams }.also { it.buildSoundAlikes() }
             fun rate(subset: List<Case>): String {
                 var f = 0; var w = 0
                 for (c in subset) {

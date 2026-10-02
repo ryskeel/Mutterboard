@@ -111,7 +111,8 @@ class SuggestionController(
             // languages keep Pastiera's corrector until they are measured too.
             typoModel = if (currentLocale.language == "en") {
                 BigramModel.shared(appContext.assets) // start the load now, not on the first space
-                TypoModel(dictionaryRepository, currentLocale) { BigramModel.shared(appContext.assets) }
+                KnownWords.shared(appContext.assets)
+                TypoModel(dictionaryRepository, currentLocale, knownWords = { KnownWords.shared(appContext.assets) }) { BigramModel.shared(appContext.assets) }
             } else {
                 null
             },
@@ -262,7 +263,7 @@ class SuggestionController(
                     primaryRepository,
                     localeSnapshot,
                     { BigramModel.shared(appContext.assets) },
-                    TypoModel(primaryRepository, localeSnapshot) { BigramModel.shared(appContext.assets) }
+                    TypoModel(primaryRepository, localeSnapshot, knownWords = { KnownWords.shared(appContext.assets) }) { BigramModel.shared(appContext.assets) }
                 ).suggest(wordSnapshot, previousSnapshot, settings.maxSuggestions)
                 val seen = ranked.mapTo(HashSet()) { it.candidate.lowercase(localeSnapshot) }
                 // Scores below the ranker's, so the merge's sort keeps the order.

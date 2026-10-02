@@ -463,6 +463,14 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   all ~50k words, and the word bar makes a new `TypoModel` on every keystroke,
   so it lives in `TypoModel`'s companion keyed by repository. Until it is
   built there are no sound-alikes; tests call `buildSoundAlikes()` first.
+- **A bigger word list says what not to touch** (2026-10-01). The dictionary
+  has ~50k words, so "sprig", "swaddle" and "glisten" read as typos.
+  `en_known_words.txt` is SCOWL level 60 minus the dictionary (~80k words,
+  `scripts/build-english-wordlist.py`); a word in it of five letters or more
+  needs 4 more confidence to rewrite. Real words rewritten 41 -> 19 of 664.
+  It is a list of words to leave alone, never to correct to or suggest: it
+  has no frequencies. Larger levels cost slip fixes for no gain; shorter
+  words are left out because "abut", "cid", "teem" are usually typos.
 - **All of these numbers are measured on Tatoeba**, the same kind of text the
   table is built from, so Ry's own typing will score lower.
 - **Ry's own typing is logged, so it can be the scorecard** (2026-09-27).

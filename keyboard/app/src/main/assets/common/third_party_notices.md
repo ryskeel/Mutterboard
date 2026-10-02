@@ -93,6 +93,32 @@ The downloadable Greek base dictionary distributed through the companion `pastie
 repository is derived from the top frequency-ranked, letter-only entries in the eellak
 Greek spelling dictionary with Pastiera-specific filtering, truncation, and normalization.
 
+## SCOWL
+
+- Project: SCOWL (Spell Checker Oriented Word Lists), version 2020.12.07
+- Source: http://wordlist.aspell.net/
+- License: permissive, reproduced below
+
+`assets/common/dictionaries/en_known_words.txt`, the English words autocorrect
+leaves alone, is every word in SCOWL's English, American and British lists up to
+size 60 that the bundled dictionary lacks, written by
+`scripts/build-english-wordlist.py`.
+
+    Copyright 2000-2018 by Kevin Atkinson
+
+    Permission to use, copy, modify, distribute and sell these word
+    lists, the associated scripts, the output created from the scripts,
+    and its documentation for any purpose is hereby granted without fee,
+    provided that the above copyright notice appears in all copies and
+    that both that copyright notice and this permission notice appear in
+    supporting documentation. Kevin Atkinson makes no representations
+    about the suitability of this array for any purpose. It is provided
+    "as is" without express or implied warranty.
+
+SCOWL also incorporates word lists placed in the public domain or under
+similar terms by their authors (Moby Words II, 12Dicts, ENABLE and others);
+the full notice ships with SCOWL as its `Copyright` file.
+
 ## Tatoeba
 
 - Project: Tatoeba, a collection of sentences and translations

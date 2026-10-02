@@ -32,6 +32,11 @@ object EnglishFixture {
     fun bigrams(): BigramModel =
         assetFile("dictionaries/en_bigrams.tsv").bufferedReader().use { BigramModel.parse(it) }
 
+    /** The bundled list, or another one named by KNOWN_WORDS (the sweep compares SCOWL sizes). */
+    fun knownWords(): KnownWords =
+        (System.getenv("KNOWN_WORDS")?.let { File(it) } ?: assetFile("dictionaries/en_known_words.txt"))
+            .inputStream().use { KnownWords.parse(it) }
+
     /** Held-out Tatoeba sentences the bigram table never saw. */
     fun heldOutSentences(): List<String> = listOf(
         File("src/test/resources/tatoeba_en_heldout.txt"),

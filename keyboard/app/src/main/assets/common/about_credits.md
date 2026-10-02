@@ -54,6 +54,9 @@ Bundled base dictionaries are frequency-list derivatives built mainly from [Leip
 #### eellak GSOC 2019 Greek Morphological Dictionary
 The downloadable Greek base dictionary is derived from the top frequency-ranked entries in the [eellak GSOC 2019 Greek spelling dictionary](https://github.com/eellak/gsoc2019-greek-morpho), with Pastiera-specific filtering and normalization. The project source code is GPLv3; the produced morphological database is documented as CC BY-SA 3.0.
 
+#### SCOWL
+The list of English words Mutterboard's autocorrect leaves alone is built from [SCOWL](http://wordlist.aspell.net/) (Spell Checker Oriented Word Lists), Copyright 2000-2018 Kevin Atkinson.
+
 #### Tatoeba
 Mutterboard's English next-word predictions and autocorrect context are counted from sentences contributed to [Tatoeba](https://tatoeba.org).
 

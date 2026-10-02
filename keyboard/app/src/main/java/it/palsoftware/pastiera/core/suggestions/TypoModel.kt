@@ -28,6 +28,9 @@ class TypoModel(
     private val repository: DictionaryRepository,
     private val locale: Locale,
     internal val tuning: Tuning = Tuning(),
+    // Null while the list loads, and for languages without one. Before
+    // bigrams so the trailing-lambda calls keep meaning the table.
+    private val knownWords: () -> KnownWords? = { null },
     // Null while the bundled table loads, and for languages without one.
     private val bigrams: () -> BigramModel? = { null }
 ) {
@@ -102,6 +105,12 @@ class TypoModel(
         // wins. Negative turns sound-alikes off.
         val soundAlike: Double = 2.0,
         val soundAlikeSlope: Double = 0.25,
+        // A word in the bigger list (KnownWords: SCOWL level 60, ~80k words
+        // the dictionary lacks) needs this much more confidence to rewrite.
+        // Real words rewritten on held-out text 41 -> 19 of 664. Not below
+        // five letters: "abut", "cid", "teem" are typos far more often.
+        val knownWordThreshold: Double = 4.0,
+        val knownWordMinLength: Int = 5,
     )
 
     data class Correction(val word: String, val score: Double, val runnerUpScore: Double?)
@@ -149,6 +158,7 @@ class TypoModel(
         }
         var bar = threshold
         if (isInflection(input)) bar += tuning.inflectionThreshold
+        if (input.length >= tuning.knownWordMinLength && knownWords()?.contains(input) == true) bar += tuning.knownWordThreshold
         if (previousWord != null && typed.first().isUpperCase()) bar += tuning.midSentenceCapitalThreshold
 
         val nearby = repository.symSpellLookup(input, maxSuggestions = 64)
