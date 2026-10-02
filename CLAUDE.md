@@ -502,6 +502,35 @@ Shipped in v1.24.0 and v1.25.0; Ry tested it and called it done on
   screenshot, and turn what it shows into scorecard cases. Only a backspace
   straight after counts; a word fixed by hand later is invisible to it.
 
+## Where autocorrect work stopped (2026-10-01)
+
+Merged to `main`, on the phone, and Ry's spot check passed ("They left a bag
+on the floor"). In order, what is open:
+
+1. **Personal pairs are switched off** (`personalWeight` 0). Turning them
+   back on needs two things first: pairs must not be learned from words the
+   corrector wrote (`handleCompletedWordBoundary` learns `result.replacement`
+   today, so every unnoticed wrong fix becomes a "habit"), and the lift needs
+   a cap so a handful of counts cannot outvote a clear answer. The "They let"
+   pairs learned during testing are still in the phone's `user_ngrams.db`.
+2. **The keyboard is dead for ~5 s after it starts**: the `.dict` load took
+   5,224 ms on the Titan II after an install. Pastiera's code, so not new, but
+   it is not measured whether KnownWords / the bigram table / the sound index
+   loading at the same moment make it worse. Ry noticed it and did not like
+   it.
+3. **The Claude app reports text late.** `getTextBeforeCursor` inside a batch
+   edit returns the text before the edit there, which is why the audit log's
+   "previous" column holds the typed word itself for recent lines, and how
+   the double-space bug put its period in the wrong place. Anything that
+   reads the field straight after writing to it is suspect in that app.
+4. The small on-device model, below.
+
+**Test on the computer before the phone.** Replay a sentence through
+`AutoReplaceController` with the real dictionary (see
+`RealWordFixTest.typoCorrectionIsJudgedAgainByTheNextWord`), with known words,
+bigrams and anything else the phone wires in. Every phone round-trip that
+night found something the harness could have, and cost Ry's patience.
+
 ## Next for autocorrect: a small on-device language model (planned 2026-10-01)
 
 Not started. The corrector's word scores come from counting word pairs, which
