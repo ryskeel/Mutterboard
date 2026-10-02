@@ -66,6 +66,25 @@ class TextInputControllerTest {
     }
 
     @Test
+    fun doubleSpaceToPeriod_aWordTypedBetweenTheSpacesCancelsIt() {
+        SettingsManager.setDoubleSpaceToPeriod(context, true)
+        // The text as a field that reports it late would: still "they let "
+        // when the space after "a" arrives. That put "let. A" on the phone.
+        val inputConnection = FakeInputConnection(context, "they let ")
+        fun press(keyCode: Int) = controller.handleDoubleSpaceToPeriod(
+            keyCode = keyCode,
+            inputConnection = inputConnection,
+            shouldDisableDoubleSpaceToPeriod = false,
+            shouldDisableAutoCapitalize = true,
+            onStatusBarUpdate = {}
+        )
+        press(KeyEvent.KEYCODE_SPACE)
+        press(KeyEvent.KEYCODE_A)
+        assertFalse(press(KeyEvent.KEYCODE_SPACE))
+        assertEquals("they let ", inputConnection.text)
+    }
+
+    @Test
     fun doubleSpaceToPeriod_settingDisabled_keepsVirtualKeyboardSpaces() {
         SettingsManager.setDoubleSpaceToPeriod(context, false)
         val inputConnection = FakeInputConnection(context, "hello")

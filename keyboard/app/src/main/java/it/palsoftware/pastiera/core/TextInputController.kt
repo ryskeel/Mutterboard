@@ -41,6 +41,13 @@ class TextInputController(
         // delegated to AutoCapitalizeHelper so it can be tracked as a
         // smart auto-capitalization (and cleared when context changes).
         if (keyCode != KeyEvent.KEYCODE_SPACE || shouldDisableDoubleSpaceToPeriod) {
+            // Mutterboard: a double space is two presses in a row. Upstream
+            // only checked the clock, so a word typed inside half a second
+            // ("a", "bag") between two spaces put a period after it; on a
+            // field that reports its text late, before it (2026-10-01).
+            if (keyCode != KeyEvent.KEYCODE_SPACE && !KeyEvent.isModifierKey(keyCode)) {
+                lastSpacePressTime = 0
+            }
             if (lastSpacePressTime > 0) {
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastSpacePressTime >= doubleTapThreshold) {
