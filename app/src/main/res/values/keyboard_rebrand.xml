@@ -39,7 +39,7 @@
     <string name="launcher_shortcuts_screen_title">QuickLauncher</string>
     <string name="quick_launcher_title">QuickLauncher</string>
     <string name="quick_launcher_respect_keyboard_layout_description">When enabled, search input follows the current keyboard layout instead of Android’s raw QWERTY key output.</string>
-    <string name="quick_launcher_provider_description">Choose whether the shortcut opens QuickLauncher search or Niagara Launcher search. Niagara falls back to QuickLauncher if unavailable.</string>
+    <string name="quick_launcher_provider_description">Choose whether the shortcut opens QuickLauncher search, Niagara Launcher search or Keyboard Launcher Pro. Either launcher falls back to QuickLauncher if unavailable.</string>
     <string name="quick_launcher_provider_pastiera">QuickLauncher</string>
     <string name="sym_shortcuts_compatibility_description">SYM key shortcuts require a keyboard that exposes SYM as a modifier to Android. They cannot currently work with keyboards whose firmware converts SYM combinations into final characters or navigation events before Mutterboard receives them. This includes the Clicks Power Keyboard’s current SYM behaviour.</string>
     <string name="notification_nav_mode_channel_name">Nav Mode</string>

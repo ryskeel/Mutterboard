@@ -3548,6 +3548,7 @@ object SettingsManager {
     private const val DEFAULT_QUICK_LAUNCHER_STATIC_TOP_HIGHLIGHT_COLOR = 0x7A4285F4
     const val QUICK_LAUNCHER_BEHAVIOR_PASTIERA = "pastiera"
     const val QUICK_LAUNCHER_BEHAVIOR_NIAGARA = "niagara"
+    const val QUICK_LAUNCHER_BEHAVIOR_KEYBOARD_LAUNCHER_PRO = "keyboard_launcher_pro"
     const val QUICK_LAUNCHER_ANIMATION_DURATION_MIN_MS = 0
     const val QUICK_LAUNCHER_ANIMATION_DURATION_MAX_MS = 320
     
@@ -4205,6 +4206,7 @@ object SettingsManager {
     private fun normalizeQuickLauncherBehavior(behavior: String): String {
         return when (behavior.trim().lowercase()) {
             QUICK_LAUNCHER_BEHAVIOR_NIAGARA -> QUICK_LAUNCHER_BEHAVIOR_NIAGARA
+            QUICK_LAUNCHER_BEHAVIOR_KEYBOARD_LAUNCHER_PRO -> QUICK_LAUNCHER_BEHAVIOR_KEYBOARD_LAUNCHER_PRO
             else -> QUICK_LAUNCHER_BEHAVIOR_PASTIERA
         }
     }

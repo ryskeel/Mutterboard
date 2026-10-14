@@ -810,7 +810,8 @@ private fun StarterLauncherBehaviorScreen(
     var behaviorMenuExpanded by remember { mutableStateOf(false) }
     val behaviorOptions = listOf(
         SettingsManager.QUICK_LAUNCHER_BEHAVIOR_PASTIERA,
-        SettingsManager.QUICK_LAUNCHER_BEHAVIOR_NIAGARA
+        SettingsManager.QUICK_LAUNCHER_BEHAVIOR_NIAGARA,
+        SettingsManager.QUICK_LAUNCHER_BEHAVIOR_KEYBOARD_LAUNCHER_PRO
     )
 
     StarterLauncherSubScreen(
@@ -983,6 +984,8 @@ private fun quickLauncherBehaviorLabel(behavior: String): String {
     return when (behavior) {
         SettingsManager.QUICK_LAUNCHER_BEHAVIOR_NIAGARA ->
             stringResource(R.string.quick_launcher_provider_niagara)
+        SettingsManager.QUICK_LAUNCHER_BEHAVIOR_KEYBOARD_LAUNCHER_PRO ->
+            stringResource(R.string.quick_launcher_provider_keyboard_launcher_pro)
         else -> stringResource(R.string.quick_launcher_provider_pastiera)
     }
 }
