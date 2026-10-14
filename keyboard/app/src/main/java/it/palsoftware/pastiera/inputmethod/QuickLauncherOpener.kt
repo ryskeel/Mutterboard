@@ -10,14 +10,11 @@ object QuickLauncherOpener {
     private const val TAG = "QuickLauncherOpener"
     private const val NIAGARA_PACKAGE = "bitpit.launcher"
     private val NIAGARA_SEARCH_URI: Uri = Uri.parse("niagara://search")
-    private const val KEYBOARD_LAUNCHER_PRO_PACKAGE = "com.illuminati.keyboardlauncher"
 
     fun open(context: Context): Boolean {
         return when (SettingsManager.getQuickLauncherBehavior(context)) {
             SettingsManager.QUICK_LAUNCHER_BEHAVIOR_NIAGARA ->
                 openNiagaraSearch(context) || openPastieraQuickLauncher(context)
-            SettingsManager.QUICK_LAUNCHER_BEHAVIOR_KEYBOARD_LAUNCHER_PRO ->
-                openKeyboardLauncherPro(context) || openPastieraQuickLauncher(context)
             else -> openPastieraQuickLauncher(context)
         }
     }
@@ -45,28 +42,6 @@ object QuickLauncherOpener {
             true
         } catch (error: Exception) {
             Log.w(TAG, "Error opening Niagara search; falling back to Pastiera QuickLauncher", error)
-            false
-        }
-    }
-
-    // No search link is known for Keyboard Launcher Pro the way niagara:// is,
-    // but a keyboard-first launcher opens with its search box ready, so opening
-    // the app stands in for the search. A home launcher may hide its LAUNCHER
-    // entry, hence the HOME fallback.
-    private fun openKeyboardLauncherPro(context: Context): Boolean {
-        val pm = context.packageManager
-        val intent = pm.getLaunchIntentForPackage(KEYBOARD_LAUNCHER_PRO_PACKAGE)
-            ?: Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-                setPackage(KEYBOARD_LAUNCHER_PRO_PACKAGE)
-            }.takeIf { it.resolveActivity(pm) != null }
-            ?: return false
-        return try {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-            true
-        } catch (error: Exception) {
-            Log.w(TAG, "Error opening Keyboard Launcher Pro; falling back to Pastiera QuickLauncher", error)
             false
         }
     }
