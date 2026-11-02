@@ -48,6 +48,7 @@ import it.palsoftware.pastiera.core.suggestions.SuggestionController
 import it.palsoftware.pastiera.core.suggestions.SuggestionKind
 import it.palsoftware.pastiera.core.suggestions.SuggestionResult
 import it.palsoftware.pastiera.core.suggestions.SuggestionSettings
+import it.palsoftware.pastiera.core.suggestions.WordEmoji
 import it.palsoftware.pastiera.data.layout.LayoutMappingRepository
 import it.palsoftware.pastiera.data.layout.LayoutFileStore
 import it.palsoftware.pastiera.data.layout.LayoutMapping
@@ -1261,7 +1262,19 @@ class PhysicalKeyboardInputMethodService : InputMethodService(), ClicksAccessibi
         scheduleStatusBarTextUpdate()
     }
 
+    // Mutterboard: the swipes read this list too, so the emoji is here rather
+    // than painted on at the bar, and a swipe on the right takes what it shows.
     private fun visibleSuggestionStrings(): List<String> {
+        val words = visibleWordSuggestions()
+        val typed = suggestionController.currentWord()
+        if (typed.isEmpty() || inputContextState.shouldDisableSuggestions) return words
+        if (getLocaleFromSubtype().language != "en") return words
+        val emoji = WordEmoji.shared(assets)?.forWord(typed) ?: return words
+        val typedIsAddCandidate = suggestionController.pendingAddWord().equals(typed, ignoreCase = true)
+        return WordEmoji.placeInBar(words, typed, emoji, typedIsAddCandidate)
+    }
+
+    private fun visibleWordSuggestions(): List<String> {
         if (latestSuggestionResults.isEmpty()) return emptyList()
 
         val hasWordStartSuggestion = latestSuggestionResults.any {

@@ -553,6 +553,24 @@ whole sentence. The plan Ry agreed to:
   DailyDialog) were ruled out on licence.
 - **Training needs a GPU** for a few hours; Ry would rent one.
 
+## Emoji in the bar (2026-11-01)
+
+Typing a word with an emoji puts it in the right slot ("party" -> 🎉); taking it
+replaces the word, like any suggestion. English only, exact words only.
+
+- **The table is hand-shaped on purpose.** `en_emoji.tsv` comes from
+  `scripts/build-emoji-words.py`, not from the picker's search. Search's order
+  gives "party" a tongue-out face, and its keywords misfire on ordinary typing
+  ("one" is the one-piece swimsuit, "home" is a wrench). The 7,000 commonest
+  words get an emoji only from the script's PICKED list; keywords fill in rarer
+  words. To change what a word shows, edit the script and rerun it.
+- **The emoji goes in `visibleSuggestionStrings`, not in the bar**, because the
+  trackpad swipes read that list too. A swipe on the right has to take what the
+  right slot shows.
+- **`WordEmojiTest` watches how often it fires** on held-out text: 5.3% of words
+  now. Each hit moves the second word to the left slot and drops the third, so
+  this number is the cost of the feature.
+
 ## The refiners are the heart of this app
 
 The dictation quality is the product, and it comes from the system prompts in

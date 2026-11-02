@@ -529,6 +529,8 @@ class SuggestionController(
 
     fun currentSuggestions(): List<SuggestionResult> = latestSuggestions.get()
 
+    fun currentWord(): String = tracker.currentWord
+
     fun userDictionarySnapshot(): List<UserDictionaryStore.UserEntry> = userDictionaryStore.getSnapshot()
 
     fun dismissSuggestion(candidate: String, hardDeleteUserWord: Boolean = false) {
