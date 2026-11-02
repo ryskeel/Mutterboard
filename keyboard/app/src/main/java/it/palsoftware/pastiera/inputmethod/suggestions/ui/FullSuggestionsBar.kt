@@ -763,6 +763,9 @@ class FullSuggestionsBar(
                             clickListener.onClick(view)
                         }
                         setOnLongClickListener {
+                            // Mutterboard: the hide and delete actions are for
+                            // dictionary words; on an emoji they would do nothing.
+                            if (suggestion.none { it.isLetterOrDigit() }) return@setOnLongClickListener false
                             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             actionCandidate = suggestion
                             actionSlots = slots
