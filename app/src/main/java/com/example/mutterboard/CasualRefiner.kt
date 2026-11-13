@@ -227,9 +227,11 @@ class CasualRefiner(private val apiKey: String) {
         fun maxTokensFor(text: String): Int =
             ((text.length / 4) * 2 + 64).coerceIn(128, 900)
 
-        // THIS PROMPT IS GroqRefiner.SYSTEM_PROMPT PLUS TWO RULES. Everything
-        // above "TWO MORE CHANGES" is the default prompt verbatim - the opening,
-        // all three numbered rules - and so is the hard-rules block after it. The
+        // THIS PROMPT IS GroqRefiner.SYSTEM_PROMPT PLUS TWO RULES, with a
+        // stronger rule 1. Everything above "TWO MORE CHANGES" is the default
+        // prompt verbatim apart from rule 1's filler additions (see below) - the
+        // opening, the rest of rule 1, rules 2 and 3 - and so is the hard-rules
+        // block after it. The
         // examples are the default's own rendered by the two rules, plus one
         // arriving already punctuated in place of a bare one, and one more that
         // is new. If the default prompt is edited, edit the carried-over text
@@ -255,14 +257,23 @@ class CasualRefiner(private val apiKey: String) {
         // also has no mode toggle, so anyone in Casual when they moved to it
         // stayed there.
         //
-        // Rule 1 is the default's again too. The casual copy had grown a
-        // false-start definition and a filler-"like" test, each fixing a failure
-        // the casual delta itself caused: a comma-splice bullet that sheltered a
-        // false start, and typed examples that kept "like" twice for every once
-        // they deleted it. With both causes gone, the default's rule 1 is the one
-        // with the track record. If casual mode now gets something wrong that the
-        // default pass gets right on the same transcript, the cause can only be
-        // the two rules below or the examples.
+        // Rule 1 is the ONE place the carried-over text differs from the default:
+        // it keeps the casual copy's false-start definition and its filler-"like"
+        // test, and adds mid-sentence "yeah". The first two were cut with
+        // everything else on 2026-11-13 and restored the same day, because the
+        // user's one firm requirement of casual mode is that filler never comes
+        // through, and these were what delivered it. The default's one-line
+        // "filler uses of like" lost to casual's examples once (three filler
+        // "like"s in, none deleted); a test the model can apply to every "like"
+        // fixed it, and nobody has measured whether today's examples would have.
+        // The false-start definition fixed "but it was, the water was" surviving.
+        // The "yeah" clause is new (2026-11-13): the user named "like, yeah,
+        // like" as exactly the shape that must not come through. It reaches only
+        // a "yeah" dropped into a sentence already under way; one that agrees or
+        // answers is a real word, and the default examples' opening "Yeah"s
+        // still stand. If casual mode gets something wrong that the default pass
+        // gets right on the same transcript, the cause can only be rule 1's
+        // additions, the two rules below, or the examples.
         //
         // The rule says outright that dropping the final period is not a reason
         // to merge sentences, because merging is the failure it replaced. The
@@ -307,8 +318,25 @@ class CasualRefiner(private val apiKey: String) {
             "This is an edit, NOT a rewrite. The words are already correct. Make only these " +
             "three kinds of change:\n" +
             "1. Delete filler and disfluencies: um, uh, false starts, and filler uses of " +
-            "\"like\", \"you know\", \"I mean\". Keep \"like\" or " +
-            "\"you know\" when they carry real meaning. Collapse accidental repetition: when " +
+            "\"like\", \"you know\", \"I mean\". A FALSE START is an abandoned run at a " +
+            "phrase, immediately restarted: in \"that's insane Are you wait so you're telling " +
+            "me\" the \"Are you\" is abandoned and restarted as \"wait so you're telling me\"; " +
+            "in \"but it was, the water was exceptionally cold\" the \"it was,\" is abandoned " +
+            "and restarted as \"the water was\". Delete the abandoned words and keep the " +
+            "restart, INCLUDING any comma the speech model left after the abandoned fragment. " +
+            "Filler \"like\" is by far the most common one this person says and the easiest " +
+            "to miss, so apply this test to EVERY \"like\" in the message: if deleting it " +
+            "leaves the meaning exactly the same, DELETE IT. \"in more like casual places\" " +
+            "becomes \"in more casual places\", \"just like incredibly good\" becomes \"just " +
+            "incredibly good\", \"the water was like exceptionally cold\" becomes \"the water " +
+            "was exceptionally cold\", \"like you wouldn't even believe it\" becomes \"you " +
+            "wouldn't even believe it\". The same goes for a \"yeah\" dropped into the middle " +
+            "of a sentence while the speaker gathers their thoughts: \"the thing is, like, " +
+            "yeah, like the battery just dies\" becomes \"the thing is the battery just " +
+            "dies\". A \"yeah\" that agrees or answers (\"Yeah I'm down\") is a real word and " +
+            "stays. Keep \"like\" or \"you know\" ONLY where it carries " +
+            "real meaning - an approximation (\"like ten minutes late\", \"going like 20 miles " +
+            "per hour\") or a genuine comparison. Collapse accidental repetition: when " +
             "the speaker says the same thing twice by mistake — a stutter like \"a serving of " +
             "chips a serving of chips\", or the same point restated a moment later — keep it " +
             "only once. But only when it is clearly the SAME thing said twice; if the two " +

@@ -612,7 +612,9 @@ prompt.** They are the design document.
 - **Casual mode is Default mode with no final period and lowercase names, and
   nothing else** (Ry's call, 2026-11-13). `CasualRefiner`'s prompt is
   `GroqRefiner`'s verbatim - opening, all three rules, the hard-rules block -
-  plus two rules: no period at the end, and places, businesses, brands,
+  except a stronger rule 1 (a false-start definition, a test applied to every
+  "like", and mid-sentence "yeah"), because filler never coming through is the
+  one thing Ry insists on. Then two rules: no period at the end, and places, businesses, brands,
   products, apps, games, shows, days and months lowercase. People's names,
   nationalities and languages keep their capitals; Ry likes that part and
   asked for it back the same day it was cut. Its examples are the default's
@@ -667,7 +669,8 @@ the text is the user's private messages.
 
 To check casual mode, run the same transcript through both passes: casual
 should match default except for the final period and lowercased names. Any
-other difference is the two casual rules or their examples at work.
+other difference is rule 1's filler additions, the two casual rules, or the
+examples at work.
 
 ## Conventions
 
