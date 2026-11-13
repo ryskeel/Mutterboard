@@ -606,24 +606,30 @@ prompt.** They are the design document.
 
 - **Whisper's output is already punctuated and capitalized.** It usually returns
   document-style prose; on fast speech it returns bare unpunctuated text. Any
-  prompt work has to handle both. Casual mode is mostly *subtraction*. Note the
-  bare path is hard to test on demand - Whisper punctuated every attempt across
+  prompt work has to handle both. Note the bare path is hard to test on demand - Whisper punctuated every attempt across
   a session of deliberately fast speech.
 
-- **Casual mode's prompt is derived from the user's real hand-TYPED messages.**
-  Never add an example taken from dictated output — it has already happened once
-  and produced a rule that was a transcription artifact rather than a habit. If
-  you need a new example, ask the user to type how they would have written it.
-
-- **`CasualRefiner`'s prompt IS `GroqRefiner`'s prompt plus a short delta.** The
-  opening paragraph, the numbered rules and the whole hard-rules block are
-  carried over; the additions are the five CASUAL HAND bullets and the examples.
-  Keep it that way, and when you edit the default prompt, edit the carried-over
-  copy to match. An earlier version diverged into a two-and-a-half-times-longer
-  two-pass typesetting procedure. Every rule in it was justified by a real
-  failure and the result was still worse: it read like 2012-era voice dictation,
-  and rule 1 stopped deleting filler even though its wording never changed.
+- **Casual mode is Default mode without the final period, and nothing else**
+  (Ry's call, 2026-11-13). `CasualRefiner`'s prompt is `GroqRefiner`'s verbatim
+  - opening, all three rules, the hard-rules block - plus one rule, and its
+  examples are the default's with the last period taken off, plus two that
+  arrive already punctuated. When you edit the default prompt, edit the
+  carried-over copy to match. Twice casual mode tried to render the user's own
+  texting hand, and twice it read worse than Default: first a
+  two-and-a-half-times-longer typesetting procedure that read like 2012-era
+  voice dictation and stopped deleting filler, then five bullets and fifteen of
+  Ry's typed messages, whose comma deletions turned connected speech into
+  forty-word run-ons. The old prompt and its reasoning are in git history.
   **Length in this prompt is spent out of rule 1's budget.**
+
+- **Never add a prompt example taken from dictated output**, including the
+  refiner's own. It happened once and produced a rule that was a transcription
+  artifact rather than a habit. Write a synthetic one, or ask Ry to type how he
+  would have written it.
+
+- **The physical keyboard has no Default/Casual toggle.** `KeyboardDictation`
+  draws its own strip and never shows `ModeToggleView`, so it uses whatever mode
+  was last picked on the overlay or the dictation keyboard.
 
 - **A rule that ADDS or CHANGES must be carved out of every hard rule that
   forbids it, not just the nearest one.** Rule 3 (the spelling instruction)
@@ -656,10 +662,9 @@ refiner** — several apparent refiner bugs turned out to be Whisper mishearing,
 truncating, or already having made the "mistake". Logging is debug-only because
 the text is the user's private messages.
 
-To judge whether casual output sounds like the user, measure it rather than
-eyeball it: sentence-length distribution and commas-per-100-words against their
-own typed messages. Averages matched long before the output stopped reading
-like a machine; the defect was in the tail.
+To check casual mode, run the same transcript through both passes: casual
+should match default except for the final period. Any other difference is the
+one casual rule or its examples at work.
 
 ## Conventions
 

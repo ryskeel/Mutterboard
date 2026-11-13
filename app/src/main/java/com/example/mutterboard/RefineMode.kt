@@ -5,7 +5,7 @@ package com.example.mutterboard
  *
  * [DEFAULT] is the original [GroqRefiner] output — correctly punctuated,
  * correctly capitalized prose. [CASUAL] routes to [CasualRefiner] instead, which
- * makes the same edit but renders it in the way the user actually texts.
+ * makes the same edit and leaves the period off the end, the way a text reads.
  *
  * Toggled from the keyboard itself and persisted, mirroring [Engine].
  */

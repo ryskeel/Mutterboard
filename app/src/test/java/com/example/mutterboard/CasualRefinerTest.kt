@@ -49,9 +49,9 @@ class CasualRefinerTest {
 
     @Test
     fun acceptsLowercasedPlaceAndBrandNames() {
-        // Casual mode takes a place, business or brand name back down to
-        // lowercase while leaving a person's name alone. The tokenizer
-        // lowercases everything anyway, so this must be invisible to the guard.
+        // Casual mode once lowercased place, business and brand names, and the
+        // model can still do it unprompted. The tokenizer lowercases everything
+        // anyway, so this must be invisible to the guard.
         val raw = "Katie went to Best Buy yesterday but couldn't find anything."
         val edited = "Katie went to best buy yesterday but couldn't find anything"
         assertFalse(refiner.isInvented(raw, edited))
@@ -59,10 +59,8 @@ class CasualRefinerTest {
 
     @Test
     fun acceptsLongSentenceLeftUnbroken() {
-        // Casual mode leaves a single long sentence strung together with
-        // "and"/"but" alone rather than chopping it into correct short ones. (It
-        // does still close off separate thoughts with a period — the loose
-        // punctuation is within a sentence, not between them.)
+        // Sentence breaks are punctuation, not words, so where the model puts
+        // them (or fails to) must never trip the guard either way.
         val raw = "um im sure you already know this but the way to make it so you " +
             "can fully customize the outer display and add whatever apps you want " +
             "to it is with a third party app called good lock"
