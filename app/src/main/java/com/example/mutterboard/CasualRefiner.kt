@@ -13,15 +13,15 @@ import java.io.IOException
  * [RefineMode.CASUAL] from the keyboard.
  *
  * Same job, same model, same guards, and the SAME PROMPT as [GroqRefiner] with
- * one rule added: the message does not end with a period, because a text
- * message doesn't. Every other sentence break, comma and capital is the default
- * pass's, so casual output reads exactly like default output minus that one
- * period.
+ * two rules added: the message does not end with a period, and names of places
+ * and things (not people, nationalities or languages) are lowercase, because
+ * that is how a text message reads. Every sentence break and comma is the
+ * default pass's.
  *
  * Two earlier versions went further, rendering the edit in the user's own
- * texting hand: fewer commas, places and brands lowercased, examples taken from
- * their typed messages. Both read worse than the default pass - the first like
- * early-2010s voice dictation, the second as run-on sentences. See the note
+ * texting hand: fewer commas, examples taken from their typed messages. Both
+ * read worse than the default pass - the first like early-2010s voice
+ * dictation, the second as run-on sentences. See the note
  * above [CASUAL_SYSTEM_PROMPT] before growing this prompt again.
  *
  * This class deliberately DUPLICATES the guard helpers rather than sharing them
@@ -227,14 +227,15 @@ class CasualRefiner(private val apiKey: String) {
         fun maxTokensFor(text: String): Int =
             ((text.length / 4) * 2 + 64).coerceIn(128, 900)
 
-        // THIS PROMPT IS GroqRefiner.SYSTEM_PROMPT PLUS ONE RULE. Everything
-        // above "ONE MORE CHANGE" is the default prompt verbatim - the opening,
+        // THIS PROMPT IS GroqRefiner.SYSTEM_PROMPT PLUS TWO RULES. Everything
+        // above "TWO MORE CHANGES" is the default prompt verbatim - the opening,
         // all three numbered rules - and so is the hard-rules block after it. The
-        // examples are the default's own with their final periods taken off, plus
-        // one arriving already punctuated in place of a bare one, and one more
-        // that is new. If the default prompt is edited, edit the carried-over text
-        // here to match. Casual mode is the default edit without the period at the
-        // end, which is what a text message looks like, and nothing else.
+        // examples are the default's own rendered by the two rules, plus one
+        // arriving already punctuated in place of a bare one, and one more that
+        // is new. If the default prompt is edited, edit the carried-over text
+        // here to match. Casual mode is the default edit with no period at the
+        // end and lowercase names of places and things, which is what a text
+        // message looks like, and nothing else.
         //
         // That is the user's call (2026-11-13), after weeks of casual output
         // arriving as one unbroken run-on: forty-odd words of connected speech
@@ -248,9 +249,8 @@ class CasualRefiner(private val apiKey: String) {
         // speech ("and then you can... so I've been... and so it's...") is the
         // shape Whisper can punctuate with commas before "and" and "so"
         // rather than with periods, so the deletion rules could strip the only
-        // punctuation it had, leaving rule 2 nothing to keep. The lowercased
-        // places and brands and the exclamation marks the examples taught went
-        // with them. Not proven: that the move to qwen3.8-27b in September made
+        // punctuation it had, leaving rule 2 nothing to keep. The exclamation
+        // marks the typed examples taught went with them. Not proven: that the move to qwen3.8-27b in September made
         // the model apply the deletions more literally. The physical keyboard
         // also has no mode toggle, so anyone in Casual when they moved to it
         // stayed there.
@@ -262,7 +262,7 @@ class CasualRefiner(private val apiKey: String) {
         // they deleted it. With both causes gone, the default's rule 1 is the one
         // with the track record. If casual mode now gets something wrong that the
         // default pass gets right on the same transcript, the cause can only be
-        // the one rule below or the examples.
+        // the two rules below or the examples.
         //
         // The rule says outright that dropping the final period is not a reason
         // to merge sentences, because merging is the failure it replaced. The
@@ -274,13 +274,30 @@ class CasualRefiner(private val apiKey: String) {
         // Input by the final period alone; the day-out example is a run-on chained
         // with commas, the shape that went wrong, broken back into sentences.
         //
+        // The lowercase rule is the old one, as the user approved it. It was
+        // retired with the comma rules and came straight back the same day: the
+        // user likes it, and it makes the message read more like them without
+        // touching sentence structure. Places, businesses, brands, products,
+        // days and months lose their capital; people's names, nationalities and
+        // languages keep it, because "this mexican restaurant" read wrong to
+        // them - a demonym belongs with people's names, not with the store and
+        // city names the rule is aimed at. Apps, games and shows were named when
+        // it came back, after a game title kept its capitals in a casual message
+        // and "product" had plainly not covered it. It contradicts the user's
+        // typed messages, which capitalize places; they chose the rule knowingly.
+        // Two examples pin it, one per input shape: the Townsend Wye (bare, and a
+        // respelled place, so it pins the interaction with rule 3 too) and the
+        // day out (typeset, so the speech model's capitals have to come DOWN
+        // while Sam and Mexican keep theirs). Fixing casing is already a
+        // hard-rule permission, so unlike rule 3 it needed no carve-out.
+        //
         // NEVER add an example taken from dictated output, including output this
         // refiner produced. One sample once turned out to have been dictated
         // rather than typed, and its unpunctuated tail, a transcription artifact,
         // was read as a habit. Synthetic examples or the user's own typing only.
         //
-        // The retired bullets and the typed examples are in git history before
-        // 2026-11-13, with a long comment explaining the failure behind each one.
+        // The retired bullets (comma deletions, the comma splice, the stretched
+        // word) and the typed examples are in git history before 2026-11-13, with a long comment explaining the failure behind each one.
         // Read it before bringing any of them back, and bring them back one at a
         // time: length in this prompt is spent out of rule 1's budget.
         private const val CASUAL_SYSTEM_PROMPT =
@@ -335,14 +352,22 @@ class CasualRefiner(private val apiKey: String) {
             "all stay exactly as said.\n\n" +
 
             // The delta. Everything above this point is GroqRefiner's prompt.
-            "ONE MORE CHANGE, and the only way this edit differs from a normal one: the " +
-            "message must NOT end with a period. Do 1, 2 and 3 exactly as written, then " +
-            "delete the period at the very end of the message, so the last sentence simply " +
-            "stops. Every other period stays exactly where rule 2 put it: a message with " +
+            "TWO MORE CHANGES, and the only ways this edit differs from a normal one. Do 1, " +
+            "2 and 3 exactly as written, then:\n" +
+            "- The message must NOT end with a period. Delete the period at the very end of " +
+            "the message, so the last sentence simply stops. Every other period stays " +
+            "exactly where rule 2 put it: a message with " +
             "several thoughts is still several sentences, each closed with a period except " +
             "the last. Dropping the final period is NOT a reason to drop any other " +
             "punctuation or to join sentences together. A final \"?\" or \"!\" stays, and a " +
-            "question still always ends with a question mark.\n\n" +
+            "question still always ends with a question mark.\n" +
+            "- LOWERCASE a proper noun naming a place, a business, a brand, a product, an " +
+            "app, a game, a show, a day or a month, even when the transcript capitalized it: " +
+            "\"Katie went to best buy on saturday but couldn't find anything\". A PERSON's " +
+            "name always keeps its capital, and so does a NATIONALITY or a LANGUAGE — \"a " +
+            "Mexican restaurant\", \"my Italian neighbor\", \"she speaks Spanish\" — those " +
+            "follow people's names, not places. \"I\" and \"I'm\" are always capital, and the " +
+            "first word of every sentence keeps its capital.\n\n" +
 
             "Hard rules:\n" +
             "- Every word you KEEP must stay exactly as the user said it, in the same order, " +
@@ -378,7 +403,8 @@ class CasualRefiner(private val apiKey: String) {
             "Examples (each shows an Input and its edited Output). Some Inputs arrive bare, " +
             "the way a fast-spoken transcript does; others arrive already punctuated by the " +
             "speech-to-text model, which is the usual case. Either way the Output is broken " +
-            "into proper sentences, and the only period missing is the last one:\n\n" +
+            "into proper sentences, the only period missing is the last one, and names of " +
+            "places and things are lowercase:\n\n" +
 
             "Input: um yeah i was thinking we could just like push this to the cloud tonight " +
             "and uh see if it actually works\n" +
@@ -410,12 +436,14 @@ class CasualRefiner(private val apiKey: String) {
             "home and started making dinner. But I realized I forgot the garlic, so I had to " +
             "run back out to grab it real quick\n\n" +
 
-            "Input: Yeah, so we got there around noon, and it was already packed, so we just " +
-            "walked around for a while, and then we found this little taco place, and " +
-            "honestly that was the best part of the whole day.\n" +
-            "Output: Yeah, so we got there around noon, and it was already packed. So we just " +
-            "walked around for a while. And then we found this little taco place, and " +
-            "honestly that was the best part of the whole day\n\n" +
+            "Input: Yeah, so we got downtown around noon on Saturday, and Main Street was " +
+            "already packed, so we just walked around for a while, and then Sam found this " +
+            "little Mexican place called El Gallo, and honestly that was the best part of the " +
+            "whole day.\n" +
+            "Output: Yeah, so we got downtown around noon on saturday, and main street was " +
+            "already packed. So we just walked around for a while. And then Sam found this " +
+            "little Mexican place called el gallo, and honestly that was the best part of the " +
+            "whole day\n\n" +
 
             "Input: alright i think that covers everything for now let me know what you think " +
             "when you get a chance thanks for watching\n" +
@@ -429,7 +457,7 @@ class CasualRefiner(private val apiKey: String) {
 
             "Input: we went out to this place called the townsend y like spelled w y e and it was " +
             "packed but honestly still worth it\n" +
-            "Output: We went out to this place called the Townsend Wye. It was packed but " +
+            "Output: We went out to this place called the townsend wye. It was packed but " +
             "honestly still worth it\n\n" +
 
             "Input: we could probably hike until two and then head back yeah so hike until two " +

@@ -49,9 +49,9 @@ class CasualRefinerTest {
 
     @Test
     fun acceptsLowercasedPlaceAndBrandNames() {
-        // Casual mode once lowercased place, business and brand names, and the
-        // model can still do it unprompted. The tokenizer lowercases everything
-        // anyway, so this must be invisible to the guard.
+        // Casual mode takes a place, business or brand name back down to
+        // lowercase while leaving a person's name alone. The tokenizer
+        // lowercases everything anyway, so this must be invisible to the guard.
         val raw = "Katie went to Best Buy yesterday but couldn't find anything."
         val edited = "Katie went to best buy yesterday but couldn't find anything"
         assertFalse(refiner.isInvented(raw, edited))

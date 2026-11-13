@@ -609,11 +609,14 @@ prompt.** They are the design document.
   prompt work has to handle both. Note the bare path is hard to test on demand - Whisper punctuated every attempt across
   a session of deliberately fast speech.
 
-- **Casual mode is Default mode without the final period, and nothing else**
-  (Ry's call, 2026-11-13). `CasualRefiner`'s prompt is `GroqRefiner`'s verbatim
-  - opening, all three rules, the hard-rules block - plus one rule, and its
-  examples are the default's with the last period taken off, plus two that
-  arrive already punctuated. When you edit the default prompt, edit the
+- **Casual mode is Default mode with no final period and lowercase names, and
+  nothing else** (Ry's call, 2026-11-13). `CasualRefiner`'s prompt is
+  `GroqRefiner`'s verbatim - opening, all three rules, the hard-rules block -
+  plus two rules: no period at the end, and places, businesses, brands,
+  products, apps, games, shows, days and months lowercase. People's names,
+  nationalities and languages keep their capitals; Ry likes that part and
+  asked for it back the same day it was cut. Its examples are the default's
+  rendered by those rules, plus two that arrive already punctuated. When you edit the default prompt, edit the
   carried-over copy to match. Twice casual mode tried to render the user's own
   texting hand, and twice it read worse than Default: first a
   two-and-a-half-times-longer typesetting procedure that read like 2012-era
@@ -663,8 +666,8 @@ truncating, or already having made the "mistake". Logging is debug-only because
 the text is the user's private messages.
 
 To check casual mode, run the same transcript through both passes: casual
-should match default except for the final period. Any other difference is the
-one casual rule or its examples at work.
+should match default except for the final period and lowercased names. Any
+other difference is the two casual rules or their examples at work.
 
 ## Conventions
 
