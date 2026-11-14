@@ -65,7 +65,9 @@ class ExternalDictationController(
         })
         dictation = created
         current = created
-        bar().dictationBars.forEach { it.begin(onCancel = { cancel() }) }
+        bar().dictationBars.forEach {
+            it.begin(onCancel = { cancel() }, onModeChanged = { casual -> current?.setCasual(casual) })
+        }
         bar().setMicrophoneButtonActive(true)
         created.start()
         return true
@@ -88,7 +90,7 @@ class ExternalDictationController(
     private fun render(update: ExternalDictation.Update) {
         val wasRecording = recording
         recording = update.phase == ExternalDictation.Phase.RECORDING
-        bar().dictationBars.forEach { it.setPhase(update.phase, update.message) }
+        bar().dictationBars.forEach { it.setPhase(update.phase, update.message, update.casual) }
         // Stop stays a stop only while there is something to stop; from an
         // error it goes back to a mic, which retries.
         bar().setMicrophoneButtonActive(recording)

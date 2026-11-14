@@ -13,10 +13,10 @@ import java.io.IOException
  * [RefineMode.CASUAL] from the keyboard.
  *
  * Same job, same model, same guards, and the SAME PROMPT as [GroqRefiner] with
- * two rules added: the message does not end with a period, and names of places
- * and things (not people, nationalities or languages) are lowercase, because
- * that is how a text message reads. Every sentence break and comma is the
- * default pass's.
+ * one rule added: names of places and things (not people, nationalities or
+ * languages) are lowercase. The message also ends without a period, which
+ * [dropFinalPeriod] does in code. Both because that is how a text message
+ * reads. Every sentence break and comma is meant to be the default pass's.
  *
  * Two earlier versions went further, rendering the edit in the user's own
  * texting hand: fewer commas, examples taken from their typed messages. Both
@@ -112,7 +112,7 @@ class CasualRefiner(private val apiKey: String) {
                     }
                     logDiff(text, refined, verdict)
                 }
-                onResult(if (invented) null else refined)
+                onResult(if (invented) null else refined?.let(::dropFinalPeriod))
             }
         })
     }
@@ -143,6 +143,17 @@ class CasualRefiner(private val apiKey: String) {
     } catch (e: Exception) {
         null
     }
+
+    /**
+     * Casual mode's message ends without a period. Done here rather than asked
+     * of the model: as a prompt rule ("must NOT end with a period") it made the
+     * model shy of periods everywhere, and a long ramble came back as three
+     * sentences where the default pass made six on the same transcript
+     * (2026-11-14). In code it is exact and costs the prompt nothing. Only a
+     * lone period goes; "?", "!" and an ellipsis are meant.
+     */
+    internal fun dropFinalPeriod(s: String): String =
+        if (s.endsWith(".") && !s.endsWith("..")) s.dropLast(1).trimEnd() else s
 
     private fun stripWrappingQuotes(s: String): String {
         if (s.length >= 2) {
@@ -227,17 +238,18 @@ class CasualRefiner(private val apiKey: String) {
         fun maxTokensFor(text: String): Int =
             ((text.length / 4) * 2 + 64).coerceIn(128, 900)
 
-        // THIS PROMPT IS GroqRefiner.SYSTEM_PROMPT PLUS TWO RULES, with a
-        // stronger rule 1. Everything above "TWO MORE CHANGES" is the default
+        // THIS PROMPT IS GroqRefiner.SYSTEM_PROMPT PLUS ONE RULE, with a
+        // stronger rule 1. Everything above "ONE MORE CHANGE" is the default
         // prompt verbatim apart from rule 1's filler additions (see below) - the
         // opening, the rest of rule 1, rules 2 and 3 - and so is the hard-rules
         // block after it. The
-        // examples are the default's own rendered by the two rules, plus one
+        // examples are the default's own rendered by that rule, plus one
         // arriving already punctuated in place of a bare one, and one more that
         // is new. If the default prompt is edited, edit the carried-over text
         // here to match. Casual mode is the default edit with no period at the
         // end and lowercase names of places and things, which is what a text
-        // message looks like, and nothing else.
+        // message looks like, and nothing else. The missing period is
+        // [dropFinalPeriod]'s job, not the prompt's; see below.
         //
         // That is the user's call (2026-11-13), after weeks of casual output
         // arriving as one unbroken run-on: forty-odd words of connected speech
@@ -273,17 +285,20 @@ class CasualRefiner(private val apiKey: String) {
         // answers is a real word, and the default examples' opening "Yeah"s
         // still stand. If casual mode gets something wrong that the default pass
         // gets right on the same transcript, the cause can only be rule 1's
-        // additions, the two rules below, or the examples.
+        // additions, the lowercase rule, or the examples.
         //
-        // The rule says outright that dropping the final period is not a reason
-        // to merge sentences, because merging is the failure it replaced. The
-        // two non-default examples are there because an example only teaches
-        // when its Input and Output disagree about the thing being tested: every
-        // default example arrives bare, with no final period to delete, so on
-        // their own they never show a period being removed or a run-on being
-        // broken up while one is. The running-late example now differs from its
-        // Input by the final period alone; the day-out example is a run-on chained
-        // with commas, the shape that went wrong, broken back into sentences.
+        // The final period used to be a rule here too ("The message must NOT end
+        // with a period", with every example's period removed). Measured on
+        // 2026-11-14 against the default pass on the same transcripts, it was
+        // the cause of the remaining run-ons: on a forty-second ramble the
+        // default made six sentences and casual three, and with the rule taken
+        // out (and the period stripped in code) casual made the default's six
+        // again, with no transcript getting worse. The examples keep their
+        // periods for the same reason. The running-late example arrives
+        // already punctuated, and the day-out example is a run-on chained with
+        // commas, the shape that went wrong, broken back into sentences; an
+        // example only teaches when its Input and Output disagree about the
+        // thing being tested, and every default example arrives bare.
         //
         // The lowercase rule is the old one, as the user approved it. It was
         // retired with the comma rules and came straight back the same day: the
@@ -380,15 +395,8 @@ class CasualRefiner(private val apiKey: String) {
             "all stay exactly as said.\n\n" +
 
             // The delta. Everything above this point is GroqRefiner's prompt.
-            "TWO MORE CHANGES, and the only ways this edit differs from a normal one. Do 1, " +
+            "ONE MORE CHANGE, and the only way this edit differs from a normal one. Do 1, " +
             "2 and 3 exactly as written, then:\n" +
-            "- The message must NOT end with a period. Delete the period at the very end of " +
-            "the message, so the last sentence simply stops. Every other period stays " +
-            "exactly where rule 2 put it: a message with " +
-            "several thoughts is still several sentences, each closed with a period except " +
-            "the last. Dropping the final period is NOT a reason to drop any other " +
-            "punctuation or to join sentences together. A final \"?\" or \"!\" stays, and a " +
-            "question still always ends with a question mark.\n" +
             "- LOWERCASE a proper noun naming a place, a business, a brand, a product, an " +
             "app, a game, a show, a day or a month, even when the transcript capitalized it: " +
             "\"Katie went to best buy on saturday but couldn't find anything\". A PERSON's " +
@@ -431,18 +439,17 @@ class CasualRefiner(private val apiKey: String) {
             "Examples (each shows an Input and its edited Output). Some Inputs arrive bare, " +
             "the way a fast-spoken transcript does; others arrive already punctuated by the " +
             "speech-to-text model, which is the usual case. Either way the Output is broken " +
-            "into proper sentences, the only period missing is the last one, and names of " +
-            "places and things are lowercase:\n\n" +
+            "into proper sentences, and names of places and things are lowercase:\n\n" +
 
             "Input: um yeah i was thinking we could just like push this to the cloud tonight " +
             "and uh see if it actually works\n" +
             "Output: Yeah I was thinking we could just push this to the cloud tonight and see " +
-            "if it actually works\n\n" +
+            "if it actually works.\n\n" +
 
             "Input: can you grab a few things from the store milk eggs bread and uh maybe some " +
             "coffee too\n" +
             "Output: Can you grab a few things from the store. Milk, eggs, bread, and maybe " +
-            "some coffee too\n\n" +
+            "some coffee too.\n\n" +
 
             "Input: um how do you get to the airport from downtown like whats the fastest way\n" +
             "Output: How do you get to the airport from downtown? What's the fastest way?\n\n" +
@@ -450,7 +457,7 @@ class CasualRefiner(private val apiKey: String) {
             "Input: I'm running like ten minutes late, sorry. I got stuck behind this super " +
             "slow truck on the highway.\n" +
             "Output: I'm running like ten minutes late, sorry. I got stuck behind this super " +
-            "slow truck on the highway\n\n" +
+            "slow truck on the highway.\n\n" +
 
             "Input: ok so the build is done and i sent you the link um take a look at the new " +
             "toggle and the divider when you can does that layout work for you\n" +
@@ -462,7 +469,7 @@ class CasualRefiner(private val apiKey: String) {
             "out to grab it real quick\n" +
             "Output: Yeah I went to the store earlier and grabbed a few things. Then I came " +
             "home and started making dinner. But I realized I forgot the garlic, so I had to " +
-            "run back out to grab it real quick\n\n" +
+            "run back out to grab it real quick.\n\n" +
 
             "Input: Yeah, so we got downtown around noon on Saturday, and Main Street was " +
             "already packed, so we just walked around for a while, and then Sam found this " +
@@ -471,27 +478,27 @@ class CasualRefiner(private val apiKey: String) {
             "Output: Yeah, so we got downtown around noon on saturday, and main street was " +
             "already packed. So we just walked around for a while. And then Sam found this " +
             "little Mexican place called el gallo, and honestly that was the best part of the " +
-            "whole day\n\n" +
+            "whole day.\n\n" +
 
             "Input: alright i think that covers everything for now let me know what you think " +
             "when you get a chance thanks for watching\n" +
             "Output: Alright I think that covers everything for now. Let me know what you think " +
-            "when you get a chance\n\n" +
+            "when you get a chance.\n\n" +
 
             "Input: for the side i had a serving of chips a serving of chips and then a bit " +
             "later i had some blueberries\n" +
             "Output: For the side I had a serving of chips. And then a bit later I had some " +
-            "blueberries\n\n" +
+            "blueberries.\n\n" +
 
             "Input: we went out to this place called the townsend y like spelled w y e and it was " +
             "packed but honestly still worth it\n" +
             "Output: We went out to this place called the townsend wye. It was packed but " +
-            "honestly still worth it\n\n" +
+            "honestly still worth it.\n\n" +
 
             "Input: we could probably hike until two and then head back yeah so hike until two " +
             "anyway let me know what you think\n" +
             "Output: We could probably hike until two and then head back. Let me know what you " +
-            "think\n\n" +
+            "think.\n\n" +
 
             "Now edit the user's message and output the full result, from the first word " +
             "to the last."

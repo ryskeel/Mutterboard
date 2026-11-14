@@ -141,7 +141,11 @@ class DictationSession(
         // Which refine pass runs. Re-read every refresh so a flip made from the
         // keyboard's own toggle (which writes the pref directly) survives a
         // keyboard teardown, and so the two never drift apart.
-        refineMode = RefineMode.fromPref(prefs.getString(MutterboardInputMethodService.KEY_REFINE_MODE, RefineMode.DEFAULT.prefValue))
+        refineMode = if (RefineMode.CASUAL_ENABLED) {
+            RefineMode.fromPref(prefs.getString(MutterboardInputMethodService.KEY_REFINE_MODE, RefineMode.DEFAULT.prefValue))
+        } else {
+            RefineMode.DEFAULT
+        }
         // Default (cloud) users shouldn't be dead in the water in airplane mode
         // or a dead zone: with no internet, run the on-device engine instead when
         // its model is downloaded. Re-checked every refresh, so connectivity
@@ -187,7 +191,7 @@ class DictationSession(
                 refiner?.close()
                 refiner = GroqRefiner(key)
                 casualRefiner?.close()
-                casualRefiner = CasualRefiner(key)
+                casualRefiner = if (RefineMode.CASUAL_ENABLED) CasualRefiner(key) else null
             }
             cloudKey = key
         }
@@ -467,7 +471,7 @@ class DictationSession(
         // Append a trailing space so you can keep typing — or dictate again —
         // without manually hitting the space bar first. trimEnd() guards against
         // a double space if the engine already returned trailing whitespace.
-        host.commit(text.trimEnd() + " ")
+        host.commit(dropFinalPeriod(text.trimEnd()) + " ")
         state = State.IDLE
         host.dismiss()
     }
@@ -547,7 +551,7 @@ class DictationSession(
             actionLabel = label,
             actionDescription = description,
             casual = refineMode == RefineMode.CASUAL,
-            showModeToggle = refiner != null || casualRefiner != null,
+            showModeToggle = RefineMode.CASUAL_ENABLED && (refiner != null || casualRefiner != null),
         )
     }
 
@@ -609,7 +613,7 @@ class DictationSession(
      */
     private fun renderMode() {
         val toggle = modeToggle ?: return
-        if (refiner == null && casualRefiner == null) {
+        if (!RefineMode.CASUAL_ENABLED || (refiner == null && casualRefiner == null)) {
             toggle.visibility = View.GONE
             return
         }
@@ -638,6 +642,17 @@ class DictationSession(
     }
 
     companion object {
+        /**
+         * No message ends with a period, whichever engine or refiner produced it,
+         * because a text does not. Done here, after the refiner, so that
+         * [GroqRefiner]'s prompt stays untouched: asked of a model as a prompt rule,
+         * it made casual mode shy of periods everywhere and long dictation came
+         * back as run-ons (2026-11-14). Only a lone period goes; "?", "!" and an
+         * ellipsis are meant.
+         */
+        internal fun dropFinalPeriod(text: String): String =
+            if (text.endsWith(".") && !text.endsWith("..")) text.dropLast(1).trimEnd() else text
+
         private const val TAG = "DictationSession"
         // Tail kept recording after Stop so the last word isn't clipped. Trimmed
         // from 800ms to cut latency; the appended trailing silence in the WAV

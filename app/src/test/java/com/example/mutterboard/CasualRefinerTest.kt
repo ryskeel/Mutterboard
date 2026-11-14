@@ -1,5 +1,6 @@
 package com.example.mutterboard
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -106,5 +107,15 @@ class CasualRefinerTest {
         val edited = "I think it's pretty fun and also surprisingly economical to " +
             "go with the chef's choice experience (assuming they still have it)"
         assertFalse(refiner.isInvented(raw, edited))
+    }
+
+    @Test
+    fun dropsOnlyALoneFinalPeriod() {
+        assertEquals("See you there", refiner.dropFinalPeriod("See you there."))
+        assertEquals("I'm late. See you there", refiner.dropFinalPeriod("I'm late. See you there."))
+        assertEquals("Are you coming?", refiner.dropFinalPeriod("Are you coming?"))
+        assertEquals("No way!", refiner.dropFinalPeriod("No way!"))
+        assertEquals("So anyway...", refiner.dropFinalPeriod("So anyway..."))
+        assertEquals("See you there", refiner.dropFinalPeriod("See you there"))
     }
 }
