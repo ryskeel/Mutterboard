@@ -245,7 +245,8 @@ class StatusBarController(
     // Mutterboard: see mutterboard/voice/DictationBar.
     val dictationBar by lazy {
         it.palsoftware.pastiera.inputmethod.mutterboard.voice.DictationBar(
-            context, { statusBarLayout }, { fullSuggestionsBar?.ensureView() }, { fullSuggestionsBar?.wordsView }
+            context, { statusBarLayout }, { fullSuggestionsBar?.ensureView() }, { fullSuggestionsBar?.wordsView },
+            { ledStatusView.getView() }
         )
     }
 

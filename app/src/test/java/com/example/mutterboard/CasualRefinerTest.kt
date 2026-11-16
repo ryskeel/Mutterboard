@@ -1,5 +1,6 @@
 package com.example.mutterboard
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -59,10 +60,8 @@ class CasualRefinerTest {
 
     @Test
     fun acceptsLongSentenceLeftUnbroken() {
-        // Casual mode leaves a single long sentence strung together with
-        // "and"/"but" alone rather than chopping it into correct short ones. (It
-        // does still close off separate thoughts with a period — the loose
-        // punctuation is within a sentence, not between them.)
+        // Sentence breaks are punctuation, not words, so where the model puts
+        // them (or fails to) must never trip the guard either way.
         val raw = "um im sure you already know this but the way to make it so you " +
             "can fully customize the outer display and add whatever apps you want " +
             "to it is with a third party app called good lock"
@@ -108,5 +107,15 @@ class CasualRefinerTest {
         val edited = "I think it's pretty fun and also surprisingly economical to " +
             "go with the chef's choice experience (assuming they still have it)"
         assertFalse(refiner.isInvented(raw, edited))
+    }
+
+    @Test
+    fun dropsOnlyALoneFinalPeriod() {
+        assertEquals("See you there", refiner.dropFinalPeriod("See you there."))
+        assertEquals("I'm late. See you there", refiner.dropFinalPeriod("I'm late. See you there."))
+        assertEquals("Are you coming?", refiner.dropFinalPeriod("Are you coming?"))
+        assertEquals("No way!", refiner.dropFinalPeriod("No way!"))
+        assertEquals("So anyway...", refiner.dropFinalPeriod("So anyway..."))
+        assertEquals("See you there", refiner.dropFinalPeriod("See you there"))
     }
 }

@@ -31,6 +31,7 @@ class DictationBar(
     private val layout: () -> LinearLayout?,
     private val suggestions: () -> View?,
     private val words: () -> View?,
+    private val indicators: () -> View? = { null },
 ) {
     private var strip: DictationStripView? = null
     private var aura: AuraDrawable? = null
@@ -71,6 +72,7 @@ class DictationBar(
     private fun keepMistVisible() {
         val bar = layout() ?: return
         val aura = aura ?: return
+        hideIndicators()
         if (bar.background !== aura) {
             (bar.background as? ColorDrawable)?.let { backgroundBefore = it }
             bar.background = aura
@@ -92,6 +94,18 @@ class DictationBar(
                 chrome.invalidate()
             }
         }
+    }
+
+    /**
+     * The Shift/Alt/Sym lines along the bottom say what the next key press
+     * will do, and nothing is being typed while dictating, so Ry asked for
+     * them gone. Faded rather than hidden: hiding takes their height out of
+     * the bar, and the bar jumping is what the rest of this class works to
+     * prevent. Pastiera sets their visibility on every refresh but never
+     * their alpha, so this holds once set.
+     */
+    private fun hideIndicators() {
+        indicators()?.takeIf { it.alpha != 0f }?.alpha = 0f
     }
 
     // Flat colour fills only: buttons and suggestion pills draw shapes, which
@@ -136,7 +150,7 @@ class DictationBar(
         }
     }
 
-    fun begin(onCancel: () -> Unit) {
+    fun begin(onCancel: () -> Unit, onModeChanged: (Boolean) -> Unit) {
         trace("begin")
         val bar = layout() ?: return
         val row = suggestions() as? FrameLayout ?: return
@@ -149,6 +163,8 @@ class DictationBar(
         row.addView(strip, 1, strip.layoutParams)
         fitStripToWords()
         strip.onCancel = onCancel
+        strip.modePill.onModeChanged = onModeChanged
+        strip.setMode(null)
         strip.setInk(inkFor((bar.background as? ColorDrawable)?.color ?: backgroundBefore.let { (it as? ColorDrawable)?.color } ?: Color.BLACK))
         strip.setCaption(null)
         strip.setLevel(0f)
@@ -179,9 +195,10 @@ class DictationBar(
         keepMistVisible()
     }
 
-    fun setPhase(phase: ExternalDictation.Phase, caption: String?) {
+    fun setPhase(phase: ExternalDictation.Phase, caption: String?, casual: Boolean?) {
         trace("phase $phase")
         val strip = strip ?: return
+        strip.setMode(casual)
         when (phase) {
             ExternalDictation.Phase.RECORDING -> {
                 strip.setPosture(DictationStripView.Posture.LISTENING)
@@ -212,6 +229,7 @@ class DictationBar(
     fun end() {
         val strip = strip ?: return
         strip.onCancel = null
+        strip.modePill.onModeChanged = null
         strip.visibility = View.GONE
         aura?.let {
             it.stop()
@@ -220,6 +238,7 @@ class DictationBar(
         aura = null
         backgroundBefore = null
         restoreFills()
+        indicators()?.alpha = 1f
         if (holding) {
             layout()?.viewTreeObserver?.removeOnPreDrawListener(holdSuggestionsDown)
             holding = false

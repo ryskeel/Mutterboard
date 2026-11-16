@@ -27,6 +27,8 @@ class KeyboardDictation(
 
     override fun cancel() = session.cancelTapped()
 
+    override fun setCasual(casual: Boolean) = session.modeChanged(casual)
+
     override fun level(): Float = session.micLevel()
 
     override fun onHidden() = session.onHidden()
@@ -47,5 +49,6 @@ class KeyboardDictation(
             else -> ExternalDictation.Phase.NEEDS_ATTENTION
         },
         message = message,
+        casual = casual.takeIf { showModeToggle },
     )
 }

@@ -23,8 +23,12 @@ interface ExternalDictation {
         NEEDS_ATTENTION,
     }
 
-    /** [message] is the caption to show, or null for none. */
-    data class Update(val phase: Phase, val message: String?)
+    /**
+     * [message] is the caption to show, or null for none. [casual] is the
+     * refine mode, or null when nothing refines the transcript (Offline, the
+     * offline fallback, no key), where a mode toggle would be lying.
+     */
+    data class Update(val phase: Phase, val message: String?, val casual: Boolean? = null)
 
     interface Callbacks {
         /** Finished text, trailing space included. Insert it as-is. */
@@ -44,6 +48,9 @@ interface ExternalDictation {
 
     /** Throws the recording away. */
     fun cancel()
+
+    /** The refine-mode toggle was tapped. Applies to the dictation under way. */
+    fun setCasual(casual: Boolean)
 
     /** Live mic level, 0..1. */
     fun level(): Float

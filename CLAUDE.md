@@ -9,10 +9,16 @@ Two transcription engines, chosen in the app: **Default** (cloud — Groq
 Whisper V3 Turbo) and **Offline** (on-device Parakeet). On the cloud path only, a
 second LLM pass then cleans the transcript up before it is committed.
 
-Two refine modes for that pass, toggled from the keyboard itself:
-`GroqRefiner` (Default) and `CasualRefiner` (Casual). The toggle hides itself
-whenever no refiner exists - Offline engine, the automatic offline fallback, or
-no API key - because a toggle naming a mode that isn't running would be lying.
+Two refine modes for that pass: `GroqRefiner` (Default) and `CasualRefiner`
+(Casual). **Casual is switched off since 2026-11-14** (`RefineMode.CASUAL_ENABLED`),
+hidden rather than deleted, and every toggle hides with it; see "Casual mode is
+switched off" below. When it is on, the toggle also hides itself whenever no
+refiner exists - Offline engine, the automatic offline fallback, or no API key -
+because a toggle naming a mode that isn't running would be lying.
+
+**No dictation ends with a period**, from any engine or refiner:
+`DictationSession.dropFinalPeriod` strips a lone one at commit, after the
+refiner, so `GroqRefiner`'s prompt stays untouched.
 
 Both prompts also carry **rule 3**: when the user spells a word out letter by
 letter mid-sentence ("Las Fuentas, spelled L-A-S-F-U-E-N-T-A-S"), those letters
@@ -606,24 +612,59 @@ prompt.** They are the design document.
 
 - **Whisper's output is already punctuated and capitalized.** It usually returns
   document-style prose; on fast speech it returns bare unpunctuated text. Any
-  prompt work has to handle both. Casual mode is mostly *subtraction*. Note the
-  bare path is hard to test on demand - Whisper punctuated every attempt across
+  prompt work has to handle both. Note the bare path is hard to test on demand - Whisper punctuated every attempt across
   a session of deliberately fast speech.
 
-- **Casual mode's prompt is derived from the user's real hand-TYPED messages.**
-  Never add an example taken from dictated output — it has already happened once
-  and produced a rule that was a transcription artifact rather than a habit. If
-  you need a new example, ask the user to type how they would have written it.
+- **Casual mode is switched off, not deleted** (Ry, 2026-11-14, for a few days'
+  testing before a release). Default already broke long rambles into sentences
+  better than Casual, and the final period now goes in code for everything, so
+  Casual's only remaining difference was lowercase names. Measured with the
+  same transcript through both prompts: on a forty-second ramble Default made
+  six sentences and Casual three. Asking the model to drop the final period was
+  half of that (taking the rule out got Casual to six on that transcript), but
+  on Whisper-punctuated rambles Casual still left Whisper's sentences alone
+  where Default split them, and which part of the prompt does that was never
+  isolated. Candidates: the comma-chained day-out example, rule 1's additions,
+  the lowercase rule. What switching it off costs: lowercase place and brand
+  names, and Casual's stronger filler rule (Default let "He was like super into
+  jazz" through where Casual caught it). If filler gets through, port that
+  wording into `GroqRefiner` on its own branch. Turning Casual back on is
+  `CASUAL_ENABLED = true`; the stored mode pref was never touched.
 
-- **`CasualRefiner`'s prompt IS `GroqRefiner`'s prompt plus a short delta.** The
-  opening paragraph, the numbered rules and the whole hard-rules block are
-  carried over; the additions are the five CASUAL HAND bullets and the examples.
-  Keep it that way, and when you edit the default prompt, edit the carried-over
-  copy to match. An earlier version diverged into a two-and-a-half-times-longer
-  two-pass typesetting procedure. Every rule in it was justified by a real
-  failure and the result was still worse: it read like 2012-era voice dictation,
-  and rule 1 stopped deleting filler even though its wording never changed.
+- **Casual mode is Default mode with lowercase names, and nothing else** (Ry's
+  call, 2026-11-13). `CasualRefiner`'s prompt is
+  `GroqRefiner`'s verbatim - opening, all three rules, the hard-rules block -
+  except a stronger rule 1 (a false-start definition, a test applied to every
+  "like", and mid-sentence "yeah"), because filler never coming through is the
+  one thing Ry insists on. Then one rule: places, businesses, brands,
+  products, apps, games, shows, days and months lowercase. People's names,
+  nationalities and languages keep their capitals; Ry likes that part and
+  asked for it back the same day it was cut. Its examples are the default's
+  rendered by those rules, plus two that arrive already punctuated. When you edit the default prompt, edit the
+  carried-over copy to match. Twice casual mode tried to render the user's own
+  texting hand, and twice it read worse than Default: first a
+  two-and-a-half-times-longer typesetting procedure that read like 2012-era
+  voice dictation and stopped deleting filler, then five bullets and fifteen of
+  Ry's typed messages, whose comma deletions turned connected speech into
+  forty-word run-ons. The old prompt and its reasoning are in git history.
   **Length in this prompt is spent out of rule 1's budget.**
+
+- **Never add a prompt example taken from dictated output**, including the
+  refiner's own. It happened once and produced a rule that was a transcription
+  artifact rather than a habit. Write a synthetic one, or ask Ry to type how he
+  would have written it.
+
+- **The physical keyboard's toggle is its own view.** `KeyboardDictation` draws
+  its own strip, so it cannot use `ModeToggleView`: `ModePillView` in the
+  keyboard library sits at the strip's left, fed by
+  `ExternalDictation.Update.casual` (null hides it). Before it existed the
+  physical keyboard silently ran whatever mode was last picked elsewhere.
+  While dictating, the strip also fades the Shift/Alt LEDs (`DictationBar`).
+
+- **Prompt bake-offs share Ry's Groq budget.** The key is free tier: 200k
+  tokens a day, and one refine call is ~2.5k. A comparison run of ~60 calls
+  used all of it on 2026-11-14 and his dictation fell back to raw Whisper.
+  Keep a session under ~30 calls.
 
 - **A rule that ADDS or CHANGES must be carved out of every hard rule that
   forbids it, not just the nearest one.** Rule 3 (the spelling instruction)
@@ -656,10 +697,9 @@ refiner** — several apparent refiner bugs turned out to be Whisper mishearing,
 truncating, or already having made the "mistake". Logging is debug-only because
 the text is the user's private messages.
 
-To judge whether casual output sounds like the user, measure it rather than
-eyeball it: sentence-length distribution and commas-per-100-words against their
-own typed messages. Averages matched long before the output stopped reading
-like a machine; the defect was in the tail.
+To check casual mode, run the same transcript through both passes: casual
+should match default except for lowercased names. Any other difference is
+rule 1's filler additions, the lowercase rule, or the examples at work.
 
 ## Conventions
 

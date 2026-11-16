@@ -35,6 +35,14 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
     var onCancel: (() -> Unit)? = null
     private lateinit var cancel: ImageView
 
+    /**
+     * The refine mode, where the wave's left inset used to be: an empty square
+     * the size of the cancel button, so the wave stayed centred on the bar.
+     * The physical keyboard had no way to change mode at all, so it silently
+     * ran whatever the overlay last picked. Hidden when nothing refines.
+     */
+    val modePill = ModePillView(context).apply { visibility = View.GONE }
+
     private val wave = WaveView(context)
     private val caption = TextView(context).apply {
         setTextColor(Color.WHITE)
@@ -55,8 +63,18 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
             addView(caption, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
         // Inset from the cancel button's side too, so the wave is centred on
-        // the bar rather than on what is left of it.
-        addView(View(context), LayoutParams(heightPx, heightPx))
+        // the bar rather than on what is left of it. The pill, when shown,
+        // takes the slot and the wave gives up its centring.
+        val leftSlot = FrameLayout(context).apply {
+            minimumWidth = heightPx
+            // Held off the menu button: flush against it, the two read as one
+            // control (Ry, on the Titan 2 Elite).
+            addView(modePill, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER_VERTICAL).apply {
+                marginStart = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 12f, resources.displayMetrics).toInt()
+            })
+        }
+        addView(leftSlot, LayoutParams(LayoutParams.WRAP_CONTENT, heightPx))
         // Kept well off the buttons at either end: at 12dp its tips still
         // read as touching them.
         val waveInset = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 28f, resources.displayMetrics).toInt()
@@ -81,9 +99,16 @@ class DictationStripView(context: Context, heightPx: Int) : LinearLayout(context
     }
 
     fun setInk(color: Int) {
+        modePill.ink = color
         caption.setTextColor(color)
         cancel.setColorFilter(color)
         wave.ink = color
+    }
+
+    /** [casual] null hides the pill: nothing refines, so it would be lying. */
+    fun setMode(casual: Boolean?) {
+        modePill.visibility = if (casual == null) View.GONE else View.VISIBLE
+        if (casual != null) modePill.setMode(casual)
     }
 
     fun setLevel(level: Float) {
